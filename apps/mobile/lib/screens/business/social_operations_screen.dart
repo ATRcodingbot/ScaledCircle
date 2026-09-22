@@ -100,20 +100,9 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
           _initialReviewOpened = true;
           WidgetsBinding.instance.addPostFrameCallback((_) async {
             if (!mounted) return;
-            final item = value.plans
-                .expand(
-                  (p) => (p['items'] as List? ?? []).whereType<Map>().map(
-                    (i) => {...i, 'itemId': '${p['id']}_${i['itemKey']}'},
-                  ),
-                )
-                .where(
-                  (i) =>
-                      i['id'] == widget.initialItemId ||
-                      i['itemId'] == widget.initialItemId,
-                )
-                .firstOrNull;
-            if (item == null ||
-                !{'facebook', 'instagram'}.contains(widget.initialProvider)) {
+            // Rolling managed posts need not belong to the original plan list.
+            // The same server preview authority validates the exact item/tenant.
+            if (!{'facebook', 'instagram'}.contains(widget.initialProvider)) {
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(
                   content: Text('This Social draft is no longer available.'),
@@ -135,9 +124,16 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
             } catch (_) {
               if (mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text(
-                      'This Social draft could not be opened. Check your connection and try again.',
+                  SnackBar(
+                    content: const Text(
+                      'This post could not be loaded. Your Social workspace remains available.',
+                    ),
+                    action: SnackBarAction(
+                      label: 'Retry',
+                      onPressed: () {
+                        _initialReviewOpened = false;
+                        _load(quiet: true);
+                      },
                     ),
                   ),
                 );
