@@ -1128,7 +1128,10 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
               if (_socialSection == 'Content') ...[
                 SocialRuntimeStatusCard(
                   onReviewPosts: () => _reviewSavedPlans(workspace),
-                  onNeedsAttention: () => _reviewSavedPlans(workspace, initialGroup: 'Needs Attention'),
+                  onNeedsAttention: () => _reviewSavedPlans(
+                    workspace,
+                    initialGroup: 'Needs Attention',
+                  ),
                   status: _approvalReadback.pending
                       ? {
                           'available': true,
@@ -2218,7 +2221,7 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
               'Reviewed Past Posts',
               pastPosts.isNotEmpty ? pastPosts.length : null,
               Icons.history,
-              unknown: 'History unavailable',
+              unknown: 'Review ratings unavailable',
             ),
           ],
         ),
@@ -2331,13 +2334,29 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
   );
 
   Widget _qualityCard(Map<String, dynamic> assessment) => Card(
-    child: ListTile(
+    child: ExpansionTile(
       leading: CircleAvatar(child: Text('${assessment['score'] ?? '—'}')),
       title: Text(socialQualityLabel(assessment['recommendation'])),
       subtitle: Text(
-        '${socialQualityLabel(assessment['qualityBand'])} · Business approval is required before any replacement, reschedule, or removal.',
+        'Automated content score /100 · ${socialQualityLabel(assessment['qualityBand'])}. Not performance or reviewer confidence.',
       ),
-      trailing: const Chip(label: Text('REVIEW ONLY')),
+      children: [
+        ListTile(
+          title: Text(
+            'Assessed revision ${assessment['contentVersion'] ?? 'Unavailable'}',
+          ),
+          subtitle: Text(
+            '${assessment['assessedAtLabel'] ?? 'Assessment time unavailable'}',
+          ),
+        ),
+        SelectableText('Assessment: ${assessment['id'] ?? 'Unavailable'}'),
+        const Padding(
+          padding: EdgeInsets.all(12),
+          child: Text(
+            'Optional quality guidance. Changing scheduled or published work still requires Business approval.',
+          ),
+        ),
+      ],
     ),
   );
 

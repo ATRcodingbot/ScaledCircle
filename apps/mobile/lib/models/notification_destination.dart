@@ -205,6 +205,14 @@ NotificationDestination? notificationDestination(Map<String, dynamic> data) {
       route: AppRoutes.businessBrandAssets,
     );
   }
+  if (destination == 'weather_alert' && id(link['alertId']) != null) {
+    return NotificationDestination(
+      'route',
+      'View Weather',
+      route:
+          '/business/weather?alert=${Uri.encodeQueryComponent(link['alertId'] as String)}',
+    );
+  }
   if (type == 'weather_opportunity') {
     return const NotificationDestination('weather', 'View Weather');
   }

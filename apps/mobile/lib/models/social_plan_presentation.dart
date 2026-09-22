@@ -56,6 +56,8 @@ String socialQualityLabel(dynamic value) => switch (value) {
   'replace' => 'Prepare a better version',
   'reschedule' => 'Choose a future time',
   'strong' => 'Strong',
+  'good' => 'Good',
+  'weak' => 'Weak',
   'needs_attention' => 'Needs attention',
   _ => 'Not assessed yet',
 };

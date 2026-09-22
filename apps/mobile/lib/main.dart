@@ -1,3 +1,5 @@
+import 'screens/business/weather_alerts_screen.dart';
+import 'screens/business/weather_coverage_settings_screen.dart';
 import 'screens/admin/admin_operations_reader_screen.dart';
 import 'navigation/app_shell_identity.dart';
 import 'widgets/mobile_notification_coordinator.dart';
@@ -250,6 +252,19 @@ class ScaledCircleApp extends StatelessWidget {
               MaterialPageRoute(builder: (_) => const CreateCampaignScreen()),
             ),
           ),
+        ),
+      );
+    }
+    if (route?.path == '/business/weather' ||
+        route?.path == '/business/weather-preferences') {
+      return MaterialPageRoute(
+        settings: settings,
+        builder: (_) => ProtectedRouteGate(
+          routeName: settings.name!,
+          audience: ProtectedRouteAudience.business,
+          builder: (_, _) => route?.path == '/business/weather-preferences'
+              ? const WeatherCoverageSettingsScreen()
+              : WeatherAlertsScreen(alertId: route?.queryParameters['alert']),
         ),
       );
     }

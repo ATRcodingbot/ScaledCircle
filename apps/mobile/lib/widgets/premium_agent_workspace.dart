@@ -267,10 +267,10 @@ class PremiumAgentWorkspace extends StatelessWidget {
                 '${leads.where((p) => (p['draft'] ?? '').toString().isNotEmpty && p['approvalState'] == 'awaiting_approval').length} awaiting review',
           ),
           _action(
-            'Social content',
-            () => onOpen('/business/social-operations?review=content'),
+            'Upcoming Social posts',
+            () => onOpen('/business/social-operations?review=posts'),
             detail:
-                '${social.draftPosts} drafts · ${social.versionsInState('scheduled')} scheduled',
+                'Growth plan snapshot: ${social.draftPosts} draft ideas · ${social.versionsInState('scheduled')} scheduled platform versions. Open Social for its current queue.',
           ),
           _action(
             'Campaign replies and conversations',
@@ -323,9 +323,11 @@ class PremiumAgentWorkspace extends StatelessWidget {
       ]);
     } else if (type == 'lead_generation') {
       children.addAll([
-        _section(context, 'Opportunity Pipeline', [
-          _pipeline(context, model['leads'] as Map?),
-        ]),
+        _section(
+          context,
+          'Saved opportunity pipeline — current loaded records',
+          [_pipeline(context, model['leads'] as Map?)],
+        ),
         _section(context, 'Needs Attention', [
           _action(
             'Review New Prospects',

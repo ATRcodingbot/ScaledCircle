@@ -48,84 +48,7 @@ exports.monitorMarylandWeatherAlerts = onSchedule(
     maxInstances: 1,
   },
   async () => {
-    const legacyUsers = await db.collection("users")
-      .where("weatherCoverageEnabled", "==", true)
-      .get();
-    const preferenceUsers = await db.collection("discoveryPreferences")
-      .where("role", "==", "business")
-      .limit(500)
-      .get();
-    const userIds = new Set([
-      ...legacyUsers.docs.map((snapshot) => snapshot.id),
-      ...preferenceUsers.docs.map((snapshot) => snapshot.id),
-    ]);
-    if (userIds.size === 0) {
-      logger.info("Weather monitor finished: no configured businesses.");
-      return;
-    }
-    const ids = [...userIds];
-    const userSnapshots = await db.getAll(...ids.map((id) => db.collection("users").doc(id)));
-    const preferenceSnapshots = await db.getAll(...ids.map((id) =>
-      db.collection("discoveryPreferences").doc(id)));
-    const subscriptionSnapshots = await db.getAll(...ids.map((id) =>
-      db.collection("businessSubscriptions").doc(id)));
-    const users = [];
-    for (let index = 0; index < userSnapshots.length; index += 1) {
-      const userSnapshot = userSnapshots[index];
-      if (!userSnapshot.exists) continue;
-      const user = userSnapshot.data() || {};
-      const role = text(user.role, 40).toLowerCase();
-      if (role !== "business" && role !== "admin") continue;
-      if (!hasWeatherSubscription(user, subscriptionSnapshots[index].data() || {})) continue;
-      const preferences = preferenceSnapshots[index].data() || null;
-      const countyIds = Array.isArray(user.weatherCoverageCountyIds) ?
-        user.weatherCoverageCountyIds.filter((value) => typeof value === "string") : [];
-      const candidate = {
-        id: userSnapshot.id,
-        email: text(user.email, 320).toLowerCase(),
-        displayName: text(user.displayName, 120) || "there",
-        countyIds: new Set(countyIds),
-        preferences,
-        emailEnabled: user.weatherEmailAlertsEnabled === true,
-      };
-      if (!shouldMonitorWeatherUser(candidate)) continue;
-      users.push(candidate);
-    }
-
-    let alertsSeen = 0;
-    let notificationsCreated = 0;
-    let emailsQueued = 0;
-    for (const county of COUNTIES) {
-      const interestedUsers = users.map((user) => ({
-        ...user,
-        relevance: weatherPreferenceDecision(user, county),
-      })).filter((user) => user.relevance.matched);
-      if (interestedUsers.length === 0) continue;
-      let alerts;
-      try {
-        alerts = await fetchAlerts(county);
-      } catch (error) {
-        logger.error("Scheduled county weather fetch failed.", {
-          county: county.name,
-          error: error instanceof Error ? error.message : String(error),
-        });
-        continue;
-      }
-      for (const alert of alerts) {
-        alertsSeen += 1;
-        for (const user of interestedUsers) {
-          const result = await deliverAlert({user, county, alert});
-          if (result.notificationCreated) notificationsCreated += 1;
-          if (result.emailQueued) emailsQueued += 1;
-        }
-      }
-    }
-    logger.info("Weather monitor finished.", {
-      configuredUsers: users.length,
-      alertsSeen,
-      notificationsCreated,
-      emailsQueued,
-    });
+    return weatherService().monitor();
   },
 );
 
@@ -288,3 +211,25 @@ function text(value, maximumLength = 500) {
   if (value === null || value === undefined) return "";
   return String(value).trim().slice(0, maximumLength);
 }
+
+function weatherService(){return require('./weather_monitor').createService({db,getOwner:uid=>require('firebase-admin/auth').getAuth().getUser(uid)});}
+exports.weatherWorkspaceV1 = require('firebase-functions/v2/https').onCall({region:'us-east1',maxInstances:4},async request=>{
+ const {HttpsError}=require('firebase-functions/v2/https');
+ if(!request.auth?.uid)throw new HttpsError('unauthenticated','Sign in to view your weather coverage.');
+ const input=request.data||{};if(Object.keys(input).some(k=>!['operation','preferences','alertId','businessId'].includes(k)))throw new HttpsError('invalid-argument','Unsupported weather request.');
+ try{
+ const service=weatherService(),actorUid=request.auth.uid,uid=input.businessId||actorUid;
+ if(typeof uid!=='string'||!/^[A-Za-z0-9_-]{1,128}$/.test(uid))throw Error('weather_request_invalid');
+ if(uid!==actorUid){
+   const auth=require('firebase-admin/auth').getAuth();
+   const authority=require('./business_workspace').createWorkspaceService({db,auth,FieldValue,Timestamp:require('firebase-admin/firestore').Timestamp});
+   await authority.actor(actorUid);await authority.authority({uid:actorUid,businessId:uid,permission:'intelligence'});
+   if(input.operation==='save')throw Error('weather_owner_required');
+ }
+
+ if(input.operation==='read')return {...await service.settings(uid),canConfigure:uid===actorUid};
+ if(input.operation==='save')return await service.settings(uid,input.preferences);
+ if(input.operation==='alert')return await service.readAlert(uid,input.alertId);
+ throw Error('weather_request_invalid');
+ }catch(error){throw new HttpsError('failed-precondition',({weather_preferences_changed:'Your preferences changed. Reload before saving.',weather_timezone_required:'Save your Business timezone in Schedule before enabling weather email.',weather_entitlement_required:'Weather access is unavailable for this account.',weather_alert_forbidden:'This weather alert is unavailable for this account.'})[error.message]||'Weather settings are unavailable. Please try again.');}
+});

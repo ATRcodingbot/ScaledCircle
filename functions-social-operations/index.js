@@ -360,13 +360,13 @@ exports.getSocialOperationsWorkspace = onCall(
         now: Date.now(),
       }),
       contentHealth: socialOperations.contentHealthProjection({
-        assessments: qualityAssessments.docs.map((doc) => ({id: doc.id, ...doc.data()})),
+        assessments: qualityAssessments.docs.map((doc) => ({id: doc.id, ...doc.data(), assessedAtLabel:require('./social_lifecycle_presentation').timeLabel(doc.data().assessedAt,workspaceTimeZone)})),
         ratings: pastPostRatings.docs.map((doc) => ({id: doc.id, ...doc.data()})),
       }),
       runtimeStatus,
       contentQualityLearning: socialOperations.qualityLearningComparison({
         businessUid: business.uid,
-        assessments: qualityAssessments.docs.map((doc) => ({id: doc.id, ...doc.data()})),
+        assessments: qualityAssessments.docs.map((doc) => ({id: doc.id, ...doc.data(), assessedAtLabel:require('./social_lifecycle_presentation').timeLabel(doc.data().assessedAt,workspaceTimeZone)})),
         snapshots: performance,
         now: Date.now(),
       }),

@@ -180,6 +180,13 @@ class _GrowthAgentsScreenState extends State<GrowthAgentsScreen> {
           );
   }
 
+  bool _pastEligibility(dynamic value) {
+    final date = value is num
+        ? DateTime.fromMillisecondsSinceEpoch(value.toInt(), isUtc: true)
+        : DateTime.tryParse('$value');
+    return date != null && date.isBefore(DateTime.now());
+  }
+
   Future<void> _research() async {
     final approved = await showDialog<bool>(
       context: context,
@@ -565,7 +572,7 @@ class _GrowthAgentsScreenState extends State<GrowthAgentsScreen> {
         : const {};
     final status = switch (schedule['lastStatus']) {
       'running' => 'Running',
-      'completed' => 'Completed',
+      'completed' => 'Cycle completed — inspect discovery results',
       'held' => 'Held - review access or source availability',
       'not_run' => 'Awaiting first scheduled cycle',
       'not_configured' => 'Not configured',
@@ -607,20 +614,30 @@ class _GrowthAgentsScreenState extends State<GrowthAgentsScreen> {
               _time(cycle['completedAt'] ?? schedule['lastCompletedAt']),
             ),
             _line(
-              'Next scheduled cycle',
+              'Next eligible research time',
               schedule['enabled'] == false
                   ? 'Not scheduled'
-                  : _time(schedule['nextRunAt']),
+                  : '${_time(schedule['nextRunAt'])}${_pastEligibility(schedule['nextRunAt']) ? ' — eligible; awaiting dispatcher or recorded hold' : ''}',
             ),
             _line(
               'New prospects in last completed cycle',
               cycle['newProspectCount'],
             ),
             _line('Duplicates excluded', cycle['duplicatesExcludedCount']),
-            _line('Source checks', cycle['sourceChecks']),
+            _line(
+              'Successful source checks in this cycle',
+              cycle['sourceChecks'],
+            ),
+            _line(
+              'Attempted source checks in this cycle',
+              cycle['sourceChecks'] is num && cycle['failedSourceCount'] is num
+                  ? (cycle['sourceChecks'] as num) +
+                        (cycle['failedSourceCount'] as num)
+                  : 'Unavailable',
+            ),
             _line('Unavailable sources', cycle['failedSourceCount']),
             const Text(
-              'Research only. This access does not authorize messages, calls, advertising spend, or Social publication.',
+              'Eligibility is not an execution appointment; the recurring dispatcher must select this workspace. Cycle totals above are separate from the cumulative opportunity pipeline. A completed run does not prove successful discovery. Research does not authorize outreach.',
             ),
           ],
         ),

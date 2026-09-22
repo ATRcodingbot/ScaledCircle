@@ -347,10 +347,11 @@ function validateDeliveryJob(job) {
   const referralTemplate = require('./referral_email_templates').TEMPLATES.has(template);
   const growthTemplate = template === 'growth_agent_report_v1' && typeof job.businessUid === 'string' && ['important','daily','weekly'].includes(job.preferenceKind);
   const replyTemplate = require('./lead_reply_alert').validJob(job);
+  const weatherTemplate = job.template==='weather_alert_v2' && typeof job.businessUid==='string' && /^[a-f0-9]{64}$/.test(job.eventId||'') && /^[a-f0-9]{64}$/.test(job.eventRevision||'') && !job.html && !job.cc && !job.bcc;
   const allowedTemplate = template.startsWith("welcome_") || template.startsWith("support_") ||
-    template.startsWith("verification_") || template === "business_team_invitation_v1" || landingPageTemplate || billingTemplate || referralTemplate || growthTemplate || replyTemplate;
+    template.startsWith("verification_") || template === "business_team_invitation_v1" || landingPageTemplate || billingTemplate || referralTemplate || growthTemplate || replyTemplate || weatherTemplate;
   const recipientAllowed = destination === SUPPORT_EMAIL || template.startsWith("welcome_") ||
-    template.startsWith("verification_") || template === "business_team_invitation_v1" || landingPageTemplate || billingTemplate || referralTemplate || growthTemplate || replyTemplate;
+    template.startsWith("verification_") || template === "business_team_invitation_v1" || landingPageTemplate || billingTemplate || referralTemplate || growthTemplate || replyTemplate || weatherTemplate;
   const html = job?.html == null ? undefined : String(job.html).slice(0, 60000);
   const htmlAllowed = !html || job.trustedHtml === true;
   if (!validEmail(destination) || sender !== SUPPORT_EMAIL || !allowedTemplate || !recipientAllowed || !htmlAllowed) return false;
@@ -401,7 +402,7 @@ function deliveryHealth({workerAvailable, recipientAvailable = true, applicable 
 }
 
 async function processDeliveryJob({db, reference, jobId, FieldValue, createTransport, logger = console,
-  smtpPassword, leaseId = crypto.randomUUID(), now = Date.now, getOwner = uid=>require('firebase-admin/auth').getAuth().getUser(uid)}) {
+  smtpPassword, leaseId = crypto.randomUUID(), now = Date.now, getOwner = uid=>require('firebase-admin/auth').getAuth().getUser(uid), weatherFetch = fetch}) {
   const snapshot = await reference.get();
   const job = snapshot.data() || {};
   if (!["queued", "retry_requested"].includes(job.status)) return {processed:false, reason:"ineligible_state"};
@@ -424,6 +425,16 @@ async function processDeliveryJob({db, reference, jobId, FieldValue, createTrans
       if(await alerts.permitted(job,{ignoreQuiet:true})){await alerts.defer(job,reference);return {processed:false,reason:'quiet_hours'};}
       await reference.set({status:'suppressed',reason:'owner_alert_authority_changed'},{merge:true});return {processed:false,reason:'owner_alert_authority_changed'};
     }
+  }
+  if(job.template==='weather_alert_v2'){
+    let result;
+    try{result=await require('./weather_monitor').createService({db,getOwner,now,fetchImpl:weatherFetch}).dispatch(job);}
+    catch(_){result={state:'held_provider',reason:'weather_recheck_unavailable',notBefore:now()+5*60000};}
+    if(result.state!=='eligible'){
+      await db.runTransaction(async tx=>{const current=(await tx.get(reference)).data();if(['queued','retry_requested'].includes(current?.status))tx.update(reference,{status:result.state,reason:result.reason,...(result.notBefore?{notBefore:result.notBefore}:{})});});
+      return {processed:false,reason:result.reason};
+    }
+    Object.assign(job,result.content);
   }
   const claimed = await claimQueuedJob({db,reference,FieldValue,leaseId});
   if (!claimed) return {processed:false, reason:"not_claimed"};

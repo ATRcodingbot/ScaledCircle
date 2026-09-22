@@ -1,244 +1,200 @@
-import 'package:flutter_app/navigation/authenticated_app_bar.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-
+import 'package:firebase_auth/firebase_auth.dart';
+import '../../navigation/authenticated_app_bar.dart';
+import '../../services/weather_monitoring_service.dart';
 import '../../services/maryland_weather_service.dart';
-import '../../theme/app_theme.dart';
-import '../../widgets/scaled_circle_brand.dart';
 
 class WeatherCoverageSettingsScreen extends StatefulWidget {
   const WeatherCoverageSettingsScreen({super.key});
-
   @override
-  State<WeatherCoverageSettingsScreen> createState() =>
-      _WeatherCoverageSettingsScreenState();
+  State<WeatherCoverageSettingsScreen> createState() => _WeatherSettingsState();
 }
 
-class _WeatherCoverageSettingsScreenState
-    extends State<WeatherCoverageSettingsScreen> {
-  static const _centralMarylandCountyIds = <String>{
-    'howard',
-    'montgomery',
-    'baltimore',
-    'anne_arundel',
-  };
-
-  final MarylandWeatherService _service = MarylandWeatherService();
-  Set<String> _selectedCountyIds = <String>{};
-  bool _emailAlertsEnabled = true;
-  bool _loading = true;
-  bool _saving = false;
-
+class _WeatherSettingsState extends State<WeatherCoverageSettingsScreen> {
+  final service = WeatherMonitoringService();
+  Map<String, dynamic>? data;
+  String? error;
+  bool saving = false, email = false, quiet = false, urgent = false;
+  int version = 0, start = 1320, end = 480;
+  Set<String> extra = {};
   @override
   void initState() {
     super.initState();
-    _load();
+    load();
   }
 
-  Future<void> _load() async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return;
-    final preferences = await _service.loadCoveragePreferences(user.uid);
-    if (!mounted) return;
-    setState(() {
-      _selectedCountyIds = preferences.configured
-          ? preferences.countyIds
-          : MarylandWeatherService.allCountyIds;
-      _emailAlertsEnabled = preferences.configured
-          ? preferences.emailAlertsEnabled
-          : true;
-      _loading = false;
-    });
-  }
-
-  Future<void> _save() async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null || _saving) return;
-    if (_selectedCountyIds.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Select at least one service area.')),
-      );
-      return;
-    }
-
-    setState(() => _saving = true);
+  Future<void> load() async {
     try {
-      await _service.saveCoveragePreferences(
-        userId: user.uid,
-        countyIds: _selectedCountyIds,
-        emailAlertsEnabled: _emailAlertsEnabled,
-      );
+      final result = await service.call('read');
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Weather coverage saved.')));
-      Navigator.pop(context, true);
-    } on FirebaseException {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Coverage settings could not be saved. Please try again.',
-          ),
-        ),
+      final p = Map<String, dynamic>.from(result['preferences'] as Map);
+      setState(() {
+        data = result;
+        version = (p['version'] as num?)?.toInt() ?? 0;
+        email = p['emailEnabled'] == true;
+        quiet = p['quietHours']?['enabled'] == true;
+        start = (p['quietHours']?['startMinute'] as num?)?.toInt() ?? 1320;
+        end = (p['quietHours']?['endMinute'] as num?)?.toInt() ?? 480;
+        urgent = p['urgentOutsideQuietHours'] == true;
+        extra = Set<String>.from(p['extraCountyIds'] as List? ?? []);
+      });
+    } catch (_) {
+      if (mounted) {
+        setState(
+          () =>
+              error = 'Weather settings could not be loaded. Please try again.',
+        );
+      }
+    }
+  }
+
+  Future<void> save() async {
+    setState(() => saving = true);
+    try {
+      await service.call(
+        'save',
+        preferences: {
+          'expectedVersion': version,
+          'emailEnabled': email,
+          'extraCountyIds': extra.toList(),
+          'quietHours': {
+            'enabled': quiet,
+            'startMinute': start,
+            'endMinute': end,
+          },
+          'urgentOutsideQuietHours': urgent,
+        },
       );
+      if (mounted) Navigator.pop(context, true);
+    } catch (_) {
+      if (mounted) {
+        setState(
+          () => error =
+              'Settings were not saved. Reload if another session changed them; check your saved Schedule timezone.',
+        );
+      }
     } finally {
-      if (mounted) setState(() => _saving = false);
+      if (mounted) setState(() => saving = false);
+    }
+  }
+
+  Future<void> choose(bool opening) async {
+    final minute = opening ? start : end;
+    final t = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay(hour: minute ~/ 60, minute: minute % 60),
+    );
+    if (t != null && mounted) {
+      setState(
+        () => opening
+            ? start = t.hour * 60 + t.minute
+            : end = t.hour * 60 + t.minute,
+      );
     }
   }
 
   @override
-  Widget build(BuildContext context) {
-    final email =
-        FirebaseAuth.instance.currentUser?.email ?? 'your account email';
-    return Scaffold(
-      appBar: AuthenticatedAppBar(title: const ScaledCircleBrand(compact: true)),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : ListView(
-              padding: const EdgeInsets.fromLTRB(20, 24, 20, 48),
-              children: [
-                DashboardHero(
-                  eyebrow: 'Your Maryland service area',
-                  title: 'Make weather intelligence personal.',
-                  description:
-                      'Choose every Maryland county or county-equivalent your '
-                      'business serves. Scaled Circle checks official National '
-                      'Weather Service alerts and only sends matches for your '
-                      'saved coverage.',
-                  primaryActionLabel: 'Save Alert Coverage',
-                  primaryActionIcon: Icons.save_outlined,
-                  onPrimaryAction: () {
-                    if (!_saving) _save();
-                  },
-                  metrics: const [
-                    DashboardPill(
-                      icon: Icons.schedule_outlined,
-                      label: 'Background checks every 5 minutes',
+  Widget build(BuildContext context) => Scaffold(
+    appBar: const AuthenticatedAppBar(title: Text('Weather email preferences')),
+    body: data == null
+        ? Center(
+            child: error == null
+                ? const CircularProgressIndicator()
+                : Text(error!),
+          )
+        : data!['canConfigure'] != true
+        ? const Center(
+            child: Text(
+              'Only the Business owner can change weather email preferences.',
+            ),
+          )
+        : ListView(
+            padding: const EdgeInsets.all(20),
+            children: [
+              const Text(
+                'Follow my saved service areas',
+                style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+              ),
+              const Text(
+                'Coverage follows your saved Business geography. Additional watch areas affect only Weather.',
+              ),
+              for (final area in data!['coverage']?['areas'] as List? ?? [])
+                ListTile(
+                  leading: const Icon(Icons.location_on_outlined),
+                  title: Text('${area['name']}'),
+                ),
+              if ((data!['coverage']?['unresolved'] as List? ?? []).isNotEmpty)
+                const Text(
+                  'Some saved boundaries are unavailable. Review Service Areas; unresolved coverage is not a no-alert result.',
+                ),
+              ExpansionTile(
+                title: Text('Additional watch areas (${extra.length})'),
+                children: [
+                  for (final county in MarylandWeatherService.counties)
+                    CheckboxListTile(
+                      title: Text(county.name),
+                      value: extra.contains(county.id),
+                      onChanged: (v) => setState(
+                        () => v == true
+                            ? extra.add(county.id)
+                            : extra.remove(county.id),
+                      ),
                     ),
-                    DashboardPill(
-                      icon: Icons.filter_alt_outlined,
-                      label: 'Test products filtered',
+                ],
+              ),
+              SwitchListTile(
+                title: const Text('Email official weather alerts'),
+                subtitle: Text(
+                  'To ${FirebaseAuth.instance.currentUser?.email ?? 'the verified owner'}. No connected mailbox or push device is required. Future alerts only.',
+                ),
+                value: email,
+                onChanged: (v) => setState(() => email = v),
+              ),
+              Text(
+                'Timezone: ${data!['timeZone'] ?? 'Save your timezone in Schedule'}',
+              ),
+              SwitchListTile(
+                title: const Text('Weather quiet hours'),
+                value: quiet,
+                onChanged: (v) => setState(() => quiet = v),
+              ),
+              if (quiet)
+                Wrap(
+                  spacing: 12,
+                  children: [
+                    TextButton(
+                      onPressed: () => choose(true),
+                      child: Text(
+                        'Start: ${TimeOfDay(hour: start ~/ 60, minute: start % 60).format(context)}',
+                      ),
+                    ),
+                    TextButton(
+                      onPressed: () => choose(false),
+                      child: Text(
+                        'End: ${TimeOfDay(hour: end ~/ 60, minute: end % 60).format(context)}',
+                      ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 20),
-                Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        Text(
-                          '${_selectedCountyIds.length} of '
-                          '${MarylandWeatherService.counties.length} Maryland '
-                          'areas selected',
-                          style: Theme.of(context).textTheme.titleMedium
-                              ?.copyWith(fontWeight: FontWeight.w900),
-                        ),
-                        const SizedBox(height: 12),
-                        Wrap(
-                          spacing: 8,
-                          runSpacing: 8,
-                          children: [
-                            OutlinedButton.icon(
-                              onPressed: () => setState(() {
-                                _selectedCountyIds =
-                                    MarylandWeatherService.allCountyIds;
-                              }),
-                              icon: const Icon(Icons.public_outlined),
-                              label: const Text('All Maryland'),
-                            ),
-                            OutlinedButton.icon(
-                              onPressed: () => setState(() {
-                                _selectedCountyIds = {
-                                  ..._centralMarylandCountyIds,
-                                };
-                              }),
-                              icon: const Icon(Icons.home_work_outlined),
-                              label: const Text('Central Maryland'),
-                            ),
-                            TextButton(
-                              onPressed: () => setState(
-                                () => _selectedCountyIds = <String>{},
-                              ),
-                              child: const Text('Clear'),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        const Text(
-                          'This selection belongs only to your business account. '
-                          'Changing it does not affect another Maryland business.',
-                          style: TextStyle(color: AppColors.textSecondary),
-                        ),
-                      ],
-                    ),
-                  ),
+              SwitchListTile(
+                title: const Text(
+                  'Allow severe or extreme active warnings during quiet hours',
                 ),
-                const SizedBox(height: 16),
-                Card(
-                  child: Column(
-                    children: MarylandWeatherService.counties.map((county) {
-                      final selected = _selectedCountyIds.contains(county.id);
-                      return CheckboxListTile(
-                        value: selected,
-                        title: Text(
-                          county.name,
-                          style: const TextStyle(fontWeight: FontWeight.w800),
-                        ),
-                        subtitle: const Text('Official NWS alert monitoring'),
-                        secondary: const Icon(Icons.location_on_outlined),
-                        onChanged: (value) {
-                          setState(() {
-                            if (value == true) {
-                              _selectedCountyIds.add(county.id);
-                            } else {
-                              _selectedCountyIds.remove(county.id);
-                            }
-                          });
-                        },
-                      );
-                    }).toList(),
-                  ),
+                subtitle: const Text(
+                  'Optional. Other alerts continue to respect weather quiet hours.',
                 ),
-                const SizedBox(height: 16),
-                Card(
-                  child: SwitchListTile(
-                    value: _emailAlertsEnabled,
-                    onChanged: (value) =>
-                        setState(() => _emailAlertsEnabled = value),
-                    secondary: const Icon(Icons.email_outlined),
-                    title: const Text(
-                      'Email genuine weather alerts',
-                      style: TextStyle(fontWeight: FontWeight.w800),
-                    ),
-                    subtitle: Text(
-                      'Send matching alerts to $email. Test and exercise '
-                      'products are excluded.',
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                const Text(
-                  'Official alert facts and experimental lead estimates are '
-                  'shown separately. Email delivery requires an active Scale '
-                  'subscription or an approved administrator test account.',
-                  style: TextStyle(color: AppColors.textSecondary),
-                ),
-                const SizedBox(height: 24),
-                FilledButton.icon(
-                  onPressed: _saving ? null : _save,
-                  icon: _saving
-                      ? const SizedBox.square(
-                          dimension: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.save_outlined),
-                  label: Text(_saving ? 'Saving...' : 'Save Alert Coverage'),
-                ),
-              ],
-            ),
-    );
-  }
+                value: urgent,
+                onChanged: (v) => setState(() => urgent = v),
+              ),
+              const Text(
+                'ScaledCircle is not your sole source of emergency warnings. Follow official instructions. Expired warnings are not delivered as new emergencies.',
+              ),
+              if (error != null) Text(error!),
+              FilledButton(
+                onPressed: saving ? null : save,
+                child: Text(saving ? 'Saving…' : 'Save weather preferences'),
+              ),
+            ],
+          ),
+  );
 }

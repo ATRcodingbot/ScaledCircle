@@ -1545,85 +1545,11 @@ exports.sendWeatherAlertEmail = onDocumentCreated(
   async (event) => {
     const snapshot = event.data;
     if (!snapshot) return;
-    const queue = snapshot.data() || {};
-    if (queue.status === "sent") return;
+    if (snapshot.data()?.status === 'sent') return;
+    await snapshot.ref.set({status:'suppressed',reason:'legacy_weather_requires_current_event_recheck',updatedAt:FieldValue.serverTimestamp()},{merge:true});
+    return;
 
-    const deliveryId = event.params.deliveryId;
-    const alert = queue.alert && typeof queue.alert === "object" ? queue.alert : {};
-    const countyName = readText(queue.countyName, 120);
-    const destination = readText(queue.email, 320).toLowerCase();
-    if (!destination) {
-      await snapshot.ref.set({
-        status: "failed",
-        error: "A destination email is required.",
-        updatedAt: FieldValue.serverTimestamp(),
-      }, {merge: true});
-      return;
-    }
 
-    try {
-      const transport = nodemailer.createTransport({
-        service: "gmail",
-        auth: {
-          user: SIGNUP_NOTIFICATION_EMAIL,
-          pass: SIGNUP_NOTIFICATION_GMAIL_APP_PASSWORD.value(),
-        },
-      });
-      const eventName = readText(alert.event, 120) || "Weather alert";
-      const officialDescription = readText(alert.officialDescription, 1000);
-      const services = Array.isArray(alert.services) ?
-        alert.services.join(", ") : "Local outreach";
-      const low = Number(alert.leadLiftLowPercent) || 0;
-      const high = Number(alert.leadLiftHighPercent) || 0;
-      const sourceUrl = readText(alert.sourceUrl, 1000);
-      const text = `${eventName} — ${countyName}\n\n` +
-        `Official National Weather Service information:\n${officialDescription}\n\n` +
-        `Experimental Scaled Circle planning estimate: +${low}% to +${high}% ` +
-        `potential lead activity. Suggested services: ${services}.\n\n` +
-        `Review signals: ${publicAppBaseUrl()}/`;
-      const html = `
-        <div style="font-family:Arial,sans-serif;line-height:1.55;color:#0b1725">
-          <h2>${escapeHtml(eventName)} — ${escapeHtml(countyName)}</h2>
-          <h3>Official National Weather Service information</h3>
-          <p>${escapeHtml(officialDescription).replaceAll("\n", "<br>")}</p>
-          ${sourceUrl ? `<p><a href="${escapeHtml(sourceUrl)}">View official alert</a></p>` : ""}
-          <hr>
-          <h3>Experimental planning estimate</h3>
-          <p><strong>+${low}% to +${high}%</strong> potential lead activity.</p>
-          <p>Suggested services: ${escapeHtml(services)}</p>
-          <p><em>This estimate is not a guarantee of leads or work.</em></p>
-          <p><a href="${escapeHtml(publicAppBaseUrl())}/">Open Scaled Circle</a></p>
-        </div>`;
-      const result = await transport.sendMail({
-        from: `Scaled Circle Weather <${SIGNUP_NOTIFICATION_EMAIL}>`,
-        to: destination,
-        subject: `[Scaled Circle Weather] ${eventName} — ${countyName}`,
-        text,
-        html,
-        headers: {"X-Scaled-Circle-Notification": `weather_${deliveryId}`},
-      });
-      await Promise.all([
-        snapshot.ref.set({
-          status: "sent",
-          messageId: result.messageId || "",
-          sentAt: FieldValue.serverTimestamp(),
-          updatedAt: FieldValue.serverTimestamp(),
-        }, {merge: true}),
-        db.collection("weatherAlertDeliveries").doc(deliveryId).set({
-          emailSent: true,
-          emailMessageId: result.messageId || "",
-          emailSentAt: FieldValue.serverTimestamp(),
-          updatedAt: FieldValue.serverTimestamp(),
-        }, {merge: true}),
-      ]);
-    } catch (error) {
-      await snapshot.ref.set({
-        status: "failed",
-        error: readText(error instanceof Error ? error.message : error, 500),
-        updatedAt: FieldValue.serverTimestamp(),
-      }, {merge: true});
-      throw error;
-    }
   },
 );
 
