@@ -409,6 +409,16 @@ function createService({db,authority,provider,providers,key,project,now=Date.now
   async function execute(request) {
     const data=request.data||{};strict(data,['businessId','operation','input']);const op=data.operation||'load',input=data.input||{};
     const a=await authority(request,op);
+    if(op==='designateControlledTest'){
+      strict(input,['providerMessageId','providerThreadId','connectionGeneration','mailbox','receivedAt','reason','confirm']);
+      if(a.actorUid!==a.businessId||a.beta.canManageConnection!==true)fail('permission-denied','The workspace owner must designate controlled traffic.');
+      const {c,secret}=await current(a);
+      if(c.provider!=='google'||!c.permissions?.read||input.connectionGeneration!==c.generation||input.mailbox!==c.email)fail('failed-precondition','Review the exact connected Google mailbox.');
+      const access=credentialAccess(a,c,secret),thread=await adapter(a,'google').thread(access.credentials,id(input.providerThreadId),access.onRefresh);
+      const message=require('./inquiries').messages(thread,c.email,0).find(m=>m.providerMessageId===id(input.providerMessageId));
+      if(!message||message.receivedAt!==input.receivedAt)fail('failed-precondition','The exact incoming provider evidence could not be confirmed.');
+      return require('./controlled_test').create({db,now}).designate(a,input,{mailbox:c.email,generation:c.generation,messageId:message.providerMessageId,threadId:message.providerThreadId,receivedAt:message.receivedAt});
+    }
     if(op==='loadConversation'){
       strict(input,['operationId']);const operationId=id(input.operationId),{c}=await current(a);if(!c.permissions?.read)fail('permission-denied','Read permission is required.');
       const operation=(await sub(a.businessId,'operations',operationId).get()).data();if(operation?.businessId!==a.businessId)fail('permission-denied','Choose this Business conversation.');

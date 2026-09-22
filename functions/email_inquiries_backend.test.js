@@ -115,3 +115,33 @@ test('wrong workspace and revoked pilot access prevent provider reads',async()=>
  await db.doc('agentPermissions/owner_lead_generator/authorizations/business_email_pilot_grant').set({id:'grant',businessId:'owner',status:'active',expiresAt:at+10000,revokedAt:at-1});
  await reader(actor);assert.equal(reads,0);
 });
+
+test('exact owner designation before intake preserves classification/alert and excludes learning',async()=>{
+ const tests=require('../functions-business-email/controlled_test').create({db,now:()=>at});
+ const a={businessId:'owner',actorUid:'owner',beta:{canManageConnection:true}};
+ const e={mailbox:mail.email,generation:'g1',messageId:'m1',threadId:'thread',receivedAt:at-100};
+ await tests.designate(a,{reason:'Founder controlled acceptance',confirm:true},e);
+ await reader(actor);await reader(actor);
+ const op=(await db.collection('businessMailboxes/owner/operations').get()).docs[0];
+ assert.equal(op.data().controlledTest,true);assert.equal(alerts,1);
+ assert.equal((await db.doc('businessMailboxes/owner/replies/m1').get()).data().classification,'substantive');
+ assert.equal(require('../functions-business-email/growth_learning').commercial(op.data()),false);
+ assert.equal((await db.collection('businessOperations/owner/customers').get()).docs[0].data().controlledTest,true);
+});
+test('designation after intake is idempotent, preserves provider evidence and never replays alerts',async()=>{
+ await reader(actor);const op=(await db.collection('businessMailboxes/owner/operations').get()).docs[0],before=op.data();
+ const tests=require('../functions-business-email/controlled_test').create({db,now:()=>at});
+ const a={businessId:'owner',actorUid:'owner',beta:{canManageConnection:true}},e={mailbox:mail.email,generation:'g1',messageId:'m1',threadId:'thread',receivedAt:at-100};
+ await Promise.all([tests.designate(a,{reason:'Controlled acceptance',confirm:true},e),tests.designate(a,{reason:'Controlled acceptance',confirm:true},e)]);
+ await reader(actor);const after=(await op.ref.get()).data();
+ assert.equal(after.controlledTest,true);assert.equal(after.receivedAt,before.receivedAt);assert.equal(after.providerMessageId,before.providerMessageId);assert.equal(after.replyCount,1);assert.equal(alerts,1);
+ assert.equal((await db.collection('businessMailboxes/owner/controlledTests').get()).size,1);
+});
+test('designation is connection/message scoped and an ordinary new conversation from same sender stays commercial',async()=>{
+ const tests=require('../functions-business-email/controlled_test').create({db,now:()=>at});
+ const a={businessId:'owner',actorUid:'owner',beta:{canManageConnection:true}},e={mailbox:mail.email,generation:'g1',messageId:'other-message',threadId:'other-thread',receivedAt:at-100};
+ await tests.designate(a,{reason:'A different controlled message',confirm:true},e);
+ await reader(actor);const op=(await db.collection('businessMailboxes/owner/operations').get()).docs[0];assert.notEqual(op.data().controlledTest,true);
+ await assert.rejects(tests.designate({...a,actorUid:'member'},{reason:'test',confirm:true},e),{code:'permission-denied'});
+ await assert.rejects(tests.designate(a,{reason:'test',confirm:true},{...e,generation:'wrong'}));
+});

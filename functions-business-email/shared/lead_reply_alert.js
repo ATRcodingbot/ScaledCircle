@@ -39,6 +39,18 @@ function createAlerts({db,getOwner,now=Date.now}){
   });
  }
  async function drain(businessId){
+  // Recover a delivery handler failure before it acquired any send lease. Reuse
+  // the original job and receipt; never replay an attempted or uncertain send.
+  const stranded=await root(businessId).collection('ownerAlerts').where('state','==','queued').limit(30).get();
+  for(const d of stranded.docs){
+   const v=d.data();if(v.jobId!=='email_reply_'+v.alertId||now()-(v.queuedAt||now())<600000)continue;
+   const ref=db.doc('outboundEmailJobs/'+v.jobId),snapshot=await ref.get(),job=snapshot.data();
+   if(!job||job.status!=='queued'||job.attempts!==0||job.preclaimRecoveryAt||!await permitted(job,{ignoreQuiet:true}))continue;
+   await db.runTransaction(async tx=>{const fresh=(await tx.get(ref)).data();
+    if(fresh?.status==='queued'&&fresh.attempts===0&&!fresh.preclaimRecoveryAt&&!fresh.leaseId&&!fresh.messageId&&!fresh.providerResult&&!fresh.sentAt)
+     tx.update(ref,{status:'retry_requested',preclaimRecoveryAt:now(),recoveryReason:'unclaimed_owner_alert',recoverySource:'normal_reply_sync'});
+   });
+  }
   const rows=await root(businessId).collection('ownerAlerts').where('state','==','pending').limit(30).get();let queued=0;
   for(const d of rows.docs){if(d.data().notBefore>now())continue;
    const identity=await getOwner(businessId);

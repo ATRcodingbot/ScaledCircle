@@ -1,6 +1,7 @@
 'use strict';
 const coverage=require('./mailbox_coverage');
 const {digest,classifyInbound}=require('./lead_assistance_policy');
+const controlled=require('./controlled_test');
 const address=v=>{const m=String(v||'').trim().match(/^(?:[^<>@\r\n]*<([^<>\s,]+@[^<>\s,]+)>|([^<>\s,]+@[^<>\s,]+))$/);return (m?.[1]||m?.[2]||'').toLowerCase();};
 const body=p=>p?.mimeType==='text/plain'&&p.body?.data?Buffer.from(p.body.data,'base64url').toString('utf8'):(p?.parts||[]).filter(x=>!x.filename).map(body).join('\n');
 function messages(thread,mailbox,since){
@@ -65,16 +66,20 @@ function createInquiries({db,now=Date.now,current,adapter,credentialAccess,alert
      const matches=await tx.get(ops.collection('customers').where('email','==',senders[0]).limit(2));if(matches.size>1)throw Error('inquiry_identity_ambiguous');
      const customer=matches.docs[0],customerId=customer?.id||'email_'+digest(senders[0]);
      const old=await Promise.all(rows.map(m=>tx.get(root.collection('replies').doc(m.providerMessageId))));
+     const designations=await Promise.all(rows.map(m=>tx.get(root.collection('controlledTests').doc(controlled.designationId(c.generation,m.providerMessageId)))));
+     const testFields=m=>{const d=designations[rows.indexOf(m)];return controlled.matches(d?.data(),{businessId:a.businessId,mailbox:c.email,generation:c.generation,messageId:m.providerMessageId,threadId:thread.id})?{controlledTest:true,controlledTestDesignation:d.id}:{};};
+     const operationTest=testFields(useful[0]);
      if(old.some(d=>d.exists&&d.data().operationId!==operationId))throw Error('inquiry_identity_ambiguous');
      const fresh=rows.filter((m,i)=>!old[i].exists&&['substantive','opt_out'].includes(m.classification)),substantive=fresh.filter(m=>m.classification==='substantive');if(!fresh.length)return false;
      const receivedAt=Math.max(...useful.map(m=>m.receivedAt));
      if(!saved.exists)tx.create(opRef,{businessId:a.businessId,operationId,prospectId:'crm_'+customerId,crmCustomerId:customerId,state:'received',
       provider:'google',providerThreadId:thread.id,providerMessageId:useful[0].providerMessageId,connectionGeneration:c.generation,from:c.email,recipient:senders[0],
-      subject:useful[0].subject,body:'',requestedAt:policy.approvedAt,receivedAt,certification:false,replyCount:substantive.length,source:mode==='inbox'?'authorized_inbox_inquiry':'authorized_inquiry_label',lastCheckedAt:now()});
+      subject:useful[0].subject,body:'',requestedAt:policy.approvedAt,receivedAt,certification:false,...operationTest,replyCount:substantive.length,source:mode==='inbox'?'authorized_inbox_inquiry':'authorized_inquiry_label',lastCheckedAt:now()});
      else tx.update(opRef,{replyCount:(saved.data().replyCount||0)+substantive.length,lastCheckedAt:now(),receivedAt});
-     for(const m of fresh)tx.create(root.collection('replies').doc(m.providerMessageId),{...m,businessId:a.businessId,operationId,prospectId:'crm_'+customerId,certification:false,conversationId:digest([a.businessId,operationId]),state:'replied'});
-     if(!customer)tx.create(ops.collection('customers').doc(customerId),{businessId:a.businessId,name:senders[0],email:senders[0],phone:'',company:'',location:'',stage:'new_lead',relationshipType:'inquiry',notes:'',assignedPeople:[],version:1,createdAtMs:now(),updatedAtMs:now(),lastInboundAt:receivedAt,emailOperationIds:[operationId],source:'Authorized new email inquiry'});
+     for(const m of fresh)tx.create(root.collection('replies').doc(m.providerMessageId),{...m,...testFields(m),businessId:a.businessId,operationId,prospectId:'crm_'+customerId,certification:false,conversationId:digest([a.businessId,operationId]),state:'replied'});
+     if(!customer)tx.create(ops.collection('customers').doc(customerId),{businessId:a.businessId,name:senders[0],email:senders[0],phone:'',company:'',location:'',stage:'new_lead',relationshipType:'inquiry',notes:'',assignedPeople:[],version:1,createdAtMs:now(),updatedAtMs:now(),lastInboundAt:receivedAt,emailOperationIds:[operationId],source:'Authorized new email inquiry',...(operationTest.controlledTest?{controlledTest:true,controlledTestOperationIds:[operationId]}:{})});
      else if(substantive.length)tx.update(customer.ref,{lastInboundAt:receivedAt,awaitingReply:false,version:(customer.data().version||0)+1,updatedAtMs:now(),emailOperationIds:[...new Set([...(customer.data().emailOperationIds||[]),operationId])].slice(-50)});
+     if(customer&&substantive.length&&!operationTest.controlledTest&&customer.data().controlledTest)tx.update(customer.ref,{controlledTest:false});
      tx.set(ops,{businessId:a.businessId,revision:(meta?.revision||0)+1,updatedAtMs:now()},{merge:true});
      tx.set(ops.collection('contactAuthority').doc(digest(senders[0])),{businessId:a.businessId,customerId,recipient:senders[0],lastInboundAt:receivedAt,awaitingReply:false,genericFollowupBlocked:true},{merge:true});
      for(const m of fresh.filter(m=>m.classification==='opt_out'))tx.set(root.collection('suppression').doc(digest(m.from)),{businessId:a.businessId,recipient:m.from,active:true,reason:'unsubscribed',source:'matched_provider_inquiry',providerMessageId:m.providerMessageId,updatedAt:now()},{merge:true});

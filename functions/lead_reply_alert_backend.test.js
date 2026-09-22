@@ -45,3 +45,15 @@ test('the real transactional sender delivers one minimal owner alert and rejects
  assert.equal((await invoke()).status,'sent');await invoke();assert.equal(sent,1);
  assert.equal((await reference.get()).data().providerResult,'accepted');
 });
+
+test('controlled operational alert remains eligible; unclaimed packaging failure recovers same job once',async()=>{
+ clock=Date.parse('2026-09-21T15:00:00Z');
+ await db.doc('businessMailboxes/owner/replies/reply').update({receivedAt:clock-1,controlledTest:true});
+ await db.doc('businessMailboxes/owner/operations/op').update({controlledTest:true});
+ await alerts.enqueue('owner','op');clock+=300001;await alerts.drain('owner');
+ const d=(await db.collection('outboundEmailJobs').get()).docs[0];clock+=600001;
+ await Promise.all([alerts.drain('owner'),alerts.drain('owner')]);
+ assert.equal((await d.ref.get()).data().status,'retry_requested');assert.equal((await db.collection('outboundEmailJobs').get()).size,1);
+ assert.equal((await db.collection('businessMailboxes/owner/ownerAlertReceipts').get()).size,1);
+ await d.ref.update({status:'queued',attempts:1});await alerts.drain('owner');assert.equal((await d.ref.get()).data().status,'queued');
+});
