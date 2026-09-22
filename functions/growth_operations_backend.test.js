@@ -121,3 +121,20 @@ test('daily internal rechecks record zero new prospects and real deduplicated ob
  assert.deepEqual((await db.doc('agentRuns/'+first.runId).get()).data(),original);
  assert.equal((await db.collection('agentProspects').get()).size,6);
 });
+
+test('central response through evidence, qualification and CRM keeps processing failure distinct and restart duplicate-safe',async()=>{
+ const preferences=(await db.doc('discoveryPreferences/owner').get()).data();
+ await db.doc('discoveryPreferences/owner').update({areas:preferences.areas.slice(0,1)});
+ let calls=0,mode='invalid';
+ const item={name:'Example Deck Vendor',url:'https://example.com/vendors',quote:'Decks are part of our vendor program.',serviceEvidence:'Decks are part of our vendor program.',areaEvidence:'Serving Anne Arundel County in Maryland.'};
+ const payload=()=>({id:'resp_fixture',status:mode==='incomplete'?'incomplete':'completed',usage:{input_tokens:1000,output_tokens:100},output_text:mode==='invalid'?'PRIVATE MALFORMED OUTPUT':JSON.stringify({candidates:[item]}),output:[{type:'web_search_call',action:{sources:[{url:item.url}]}}]});
+ const research=growth.createService({db,FieldValue,project:'demo-growth-agents',target:'owner',now:()=>clock,sourceCatalog:[],readSource:async()=>{throw Error('must use verified evidence');},publicResearch:{publicProfile:{servicesOffered:['Decks']},executeRequest:async()=>{calls++;return {response:payload()};},readPublicSource:async()=>item.quote+' '+item.areaEvidence}});
+ for(const status of ['research_response_invalid','research_response_incomplete']){
+  const run=await research.run(),saved=(await db.doc('agentRuns/'+run.runId).get()).data();assert(saved.discoveryChecks.every(c=>c.status===status&&c.stage==='response_parsing'));assert.equal(saved.newProspectCount,0);assert.equal((await db.collection('agentCrmProspects').get()).size,0);
+  const before=calls;assert.equal((await research.run()).reused,true);assert.equal(calls,before);assert(!JSON.stringify(saved).includes('PRIVATE MALFORMED OUTPUT'));clock+=86400000;mode='incomplete';
+ }
+ mode='valid';const result=await research.run(),run=(await db.doc('agentRuns/'+result.runId).get()).data();assert.equal(run.newProspectCount,1);assert.equal((await db.collection('agentCrmProspects').get()).size,1);
+ const prospect=(await db.collection('agentProspects').get()).docs[0].data();assert.equal(prospect.explicitNeed,false);assert.equal(prospect.externalMessageSent,false);assert.equal(prospect.publicDiscovery.observedAt,clock);
+ const before=calls;await research.run();assert.equal(calls,before);assert.equal((await db.collection('agentCrmProspects').get()).size,1);
+ clock+=86400000;const repeat=await research.run(),later=(await db.doc('agentRuns/'+repeat.runId).get()).data();assert.equal(later.newProspectCount,0);assert.equal(later.duplicatesExcludedCount,1);assert.equal((await db.collection('agentCrmProspects').get()).size,1);
+});

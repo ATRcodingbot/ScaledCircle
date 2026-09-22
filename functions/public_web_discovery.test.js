@@ -33,3 +33,10 @@ test('unverified geography and prompt injection do not authorize evidence',async
 test('restricted source backs off and is not retried in same cycle',async()=>{const {args}=setup();let calls=0;args.readPublicSource=async()=>{calls++;throw Error('403');};const out=await discovery.discover(args);assert.equal(calls,1);assert.equal(Object.keys(out.state.failures).length,1);});
 test('unknown provider outcome retains money and is never retried automatically',async()=>{const {args,events}=setup();args.search=async()=>{throw Error('timeout');};const out=await discovery.discover(args);assert.equal(out.sources.length,0);assert.equal(events.filter(e=>e[0]==='reconcile'&&e[1].status==='unknown_provider_outcome').length,2);});
 test('private URLs are rejected before retrieval; DNS-pinned fetch excludes private ranges',()=>{for(const url of ['http://example.com','https://127.0.0.1','https://foo.internal','https://x:y@example.com','https://[::1]'])assert.equal(discovery.publicUrl(url),null);const {allowed}=require('../functions-agentic-growth/public_research_source');for(const ip of ['127.0.0.1','169.254.169.254','10.0.0.1','192.168.1.1','172.20.0.1'])assert.equal(allowed(ip),false);assert.equal(allowed('8.8.8.8'),true);});
+
+test('response diagnostics distinguish syntax/schema/incomplete without retaining model content',async()=>{
+ for(const [value,reason]of [[{output_text:''},'empty_output_text'],[{output_text:'PRIVATE SECRET'},'invalid_json_syntax'],[{output_text:'{}'},'candidates_missing'],[{output_text:'{"candidates":null}'},'candidates_not_array'],[{status:'incomplete',incomplete_details:{reason:'max_output_tokens'}},'provider_incomplete']]){
+  const {args}=setup();args.executeRequest=async()=>({response:{...response(),id:'resp_fixture',...value}});
+  const out=await discovery.discover(args);assert(out.checks.every(c=>c.stage==='response_parsing'&&c.diagnostic.reason===reason));assert(!JSON.stringify(out).includes('PRIVATE SECRET'));assert.equal(out.checks[0].diagnostic.providerResponseId,'resp_fixture');
+ }
+});
