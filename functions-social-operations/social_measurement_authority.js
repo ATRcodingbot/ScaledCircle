@@ -15,4 +15,10 @@ async function permitted({db,job,approval,connection,config,environment,authoriz
  }
  return true;
 }
-module.exports={permitted};
+function scopes(granted){
+ const oauth=require('./social_oauth');
+ // Match the existing Meta connection normalization: only its implicit login
+ // grant is excluded. Missing or additional explicit permissions still fail.
+ return oauth.exactScopeSet((Array.isArray(granted)?granted:[]).filter(s=>s!=='public_profile'),oauth.META_PUBLISH_SCOPES);
+}
+module.exports={permitted,scopes};

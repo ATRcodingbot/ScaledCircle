@@ -3663,7 +3663,7 @@ exports.runMetaGrowthMeasurementsV1=onSchedule({schedule:"every 15 minutes",time
     await require('./social_measurement_authority').permitted({db,job,approval,connection,config,
       environment:runtimeEnvironment(),authorizeInternal:metaConnection.authorize,
       authorizeCustomer:require('./social_customer_enrollment').authorized});
-    socialOAuth.exactScopeSet(connection.grantedScopes,socialOAuth.META_PUBLISH_SCOPES);
+    require('./social_measurement_authority').scopes(connection.grantedScopes);
     const session=await loadMetaPublisherCredential(job,connection);
     return require("./social_meta_post_insights").collect({job,receipt,approval,session});
   }});

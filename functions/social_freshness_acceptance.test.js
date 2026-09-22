@@ -5,6 +5,13 @@ const {permitted}=require('../functions-social-operations/social_measurement_aut
 const {timeLabel}=require('../functions-social-operations/social_lifecycle_presentation');
 const {zone}=require('../functions-social-operations/workspace_presentation');
 const now=Date.parse('2026-09-22T12:00:00Z');
+test('measurement scope normalization accepts only the existing implicit login grant',()=>{
+ const {scopes}=require('../functions-social-operations/social_measurement_authority');
+ const required=require('../functions-social-operations/social_oauth').META_PUBLISH_SCOPES;
+ assert.deepEqual(scopes([...required,'public_profile']),[...required].sort());
+ assert.throws(()=>scopes(required.filter(s=>s!=='read_insights')),/scope_mismatch/);
+ assert.throws(()=>scopes([...required,'ads_management']),/scope_mismatch/);
+});
 const snapshot={schemaVersion:'MetaBaselineV1',provider:'facebook',providerAccountId:'123',observedAt:'2026-09-13T12:00:00Z',metrics:{followers:{value:0}}};
 test('historical zero stays historical; unavailable never becomes a fresh zero',()=>{
  const view=project([snapshot],[],{now}).platforms[0];
