@@ -12,8 +12,9 @@ function editVersion({uid,current,input,nextVersionBase=current?.version,now=Dat
   const old=current.variants?.find(v=>v.provider===input.provider);
   if(!old)throw Error('Choose a platform on this post.');
   if(typeof input.copy!=='string'||!input.copy.trim()||input.copy.length>(input.provider==='instagram'?2200:5000))throw Error('Review the post text.');
-  const time=Date.parse(input.scheduledFor);
-  if(!Number.isFinite(time)||time<now+5*60000||time>now+366*86400000)throw Error('Choose a future time at least five minutes from now.');
+  const time=Date.parse(input.scheduledFor ?? current.scheduledFor);
+  // Draft proposals are context, not reservations. Scheduling validates future time.
+  if(!Number.isFinite(time))throw Error('Review the proposed date.');
   for(const key of ['callToAction','destinationUrl'])if(input[key]!=null&&typeof input[key]!=='string')throw Error('Review the destination.');
   const destination=(input.destinationUrl||'').trim();
   if(destination){const u=new URL(destination);if(u.protocol!=='https:'||u.username||u.password)throw Error('Use a secure public destination.');}

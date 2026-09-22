@@ -39,6 +39,15 @@ test('approved own media preserves a Firestore schedule, is isolated, concurrent
  assert.equal((await db.doc('socialContentVersions/'+itemId+'_v2').get()).data().scheduledFor,'2026-10-10T16:00:00.000Z');
  const delivery=(await db.collection('customerSocialMedia').where('businessUid','==',uid).get()).docs;assert.equal(delivery.length,1);
  assert.deepEqual(await service.delivery(delivery[0].id),image);assert.equal(await service.delivery('../private'),null);
+ // Maintained internal owner authority must work without a paid subscription.
+ await db.doc('businessSubscriptions/'+uid).delete();assert.equal(await service.delivery(delivery[0].id),null);
+ await db.doc('users/'+uid).set({role:'admin'});
+ await db.doc('socialProviderConfigs/production_meta').set({provider:'meta',environment:'production',enabled:true,writeScopesEnabled:true,externalPublishingEnabled:false,metaDogfood:{businessUid:uid,pageId:'123',instagramId:'456',pageName:'Approved internal Business',instagramUsername:'internal_business'}});
+ assert.deepEqual(await service.delivery(delivery[0].id),image);
+ await db.doc('socialProviderConfigs/production_meta').update({'metaDogfood.businessUid':'other'});
+ assert.equal(await service.delivery(delivery[0].id),null,'Admin role alone cannot borrow another internal workspace');
+ await db.doc('socialProviderConfigs/production_meta').update({'metaDogfood.businessUid':uid});
+
  const media=(await db.collection(`socialMediaLibraries/${uid}/items`).get()).docs[0].data();
  assert.equal(media.images[0].width,1080);assert.equal(media.images[0].height,720);
  assert.doesNotThrow(()=>meta.assertMediaEnvironment(media,'production'));assert.throws(()=>meta.assertMediaEnvironment(media,'staging'));

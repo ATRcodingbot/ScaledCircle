@@ -21,7 +21,7 @@ test('transactional edit/assessment isolation; one new version; no approval, his
  await Promise.all(Object.entries(writes).map(([p,v])=>db.doc(p).set(v)));
  const editor=createEditor({db,planEntitled:true,now:()=>f.now}),store=createStore({db,planEntitled:true,environment:'production',now:()=>f.now});
  const input={itemId,provider:'facebook',version:1,copy:initial.variants[0].copy+' New draft.',callToAction:'Learn more',destinationUrl:'https://example.com/services',
-  scheduledFor:new Date(f.now+3600000).toISOString(),textOnly:true};
+  scheduledFor:new Date(f.now-3600000).toISOString(),textOnly:true};
  for(const denied of [{...f.entitlement,planId:'scale'},{...f.entitlement,status:'canceled'}]){
   await db.doc('businessSubscriptions/'+uid).set(denied);
   await assert.rejects(editor.save(uid,input),/Managed Growth/);
@@ -33,7 +33,7 @@ test('transactional edit/assessment isolation; one new version; no approval, his
  assert.deepEqual((await db.doc('socialContentVersions/'+itemId+'_v1').get()).data(),initial);
  assert.deepEqual((await db.doc('socialContentPlans/'+planId).get()).data(),writes['socialContentPlans/'+planId]);
  const instagram=await store.preview(uid,{itemId,provider:'instagram'});assert.equal(instagram.version,1);assert.equal(instagram.scheduledFor,initial.scheduledFor);
- assert.equal((await store.preview(uid,{itemId,provider:'facebook'})).version,2);
+ const draft=await store.preview(uid,{itemId,provider:'facebook'});assert.equal(draft.version,2);assert.equal(draft.scheduledFor,input.scheduledFor);assert(draft.reasons.some(r=>r.code==='time'));
  const assessed=await editor.assess(uid,{itemId,provider:'facebook',version:2});assert.equal(assessed.variantAssessments.length,1);
  assert.equal(assessed.provider,'facebook');assert.equal(assessed.providerMutationsEnabled,false);
  const qualityRef=db.doc('socialContentQualityAssessments/'+itemId+'_v2_facebook');

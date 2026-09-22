@@ -11,14 +11,15 @@ class EditorService extends SocialOperationsService {
   bool fail = false;
   String? imageUrl;
   int version = 1;
+  DateTime? proposedTime;
   Map<String, dynamic> post() => {
     'itemId': 'post',
     'provider': 'facebook',
     'version': version,
-    'scheduledFor': DateTime.now()
-        .add(const Duration(days: 2))
-        .toUtc()
-        .toIso8601String(),
+    'scheduledFor':
+        (proposedTime ?? DateTime.now().add(const Duration(days: 2)))
+            .toUtc()
+            .toIso8601String(),
     'ready': imageUrl != null,
     'reasons': [],
     'reviewedPost': {
@@ -85,6 +86,68 @@ class InlineEditorService extends EditorService {
 }
 
 void main() {
+  testWidgets(
+    'past draft proposal saves unchanged without preparation or scheduling',
+    (tester) async {
+      final service = EditorService()
+        ..proposedTime = DateTime.now().subtract(const Duration(days: 1));
+      await tester.pumpWidget(
+        MaterialApp(
+          home: CustomerSocialPostEditor(
+            post: service.post(),
+            service: service,
+            prepareOnOpen: false,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(service.calls, isEmpty);
+      await tester.scrollUntilVisible(
+        find.text('Edit Post'),
+        200,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await Scrollable.ensureVisible(
+        tester.element(find.text('Edit Post')),
+        alignment: 0.5,
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Edit Post'));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(const ValueKey('social-post-copy')),
+        'Updated owner draft with the original past proposal.',
+      );
+      await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(
+        find.text('Save draft changes'),
+        200,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await Scrollable.ensureVisible(
+        tester.element(find.text('Save draft changes')),
+        alignment: 0.5,
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Save draft changes'));
+      await tester.pumpAndSettle();
+      expect(service.calls.single['action'], 'save');
+      expect(
+        service.calls.single['scheduledFor'],
+        service.proposedTime!.toUtc().toIso8601String(),
+      );
+      await tester.scrollUntilVisible(
+        find.textContaining('Choose a new time before scheduling'),
+        -200,
+        scrollable: find.byType(Scrollable).first,
+      );
+      expect(
+        find.textContaining('Choose a new time before scheduling'),
+        findsOneWidget,
+      );
+    },
+  );
+
   for (final corrupt in [false, true]) {
     testWidgets(
       'inline exact creative approval requires decoded verified bytes: corrupt=$corrupt',
@@ -142,7 +205,10 @@ void main() {
           findsNothing,
         );
         if (!corrupt) {
-          await Scrollable.ensureVisible(tester.element(find.text('Approve & Schedule')), alignment: 0.5);
+          await Scrollable.ensureVisible(
+            tester.element(find.text('Approve & Schedule')),
+            alignment: 0.5,
+          );
           await tester.pumpAndSettle();
           await tester.tap(find.text('Approve & Schedule'));
           await tester.pumpAndSettle();
@@ -172,7 +238,9 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(
-      find.text('Image preview unavailable. Reload before approval.'),
+      find.text(
+        'The selected image could not be loaded. Retry its preview; your saved image is unchanged.',
+      ),
       findsOneWidget,
     );
     await tester.scrollUntilVisible(

@@ -49,6 +49,7 @@ class _CustomerSocialPostEditorState extends State<CustomerSocialPostEditor> {
   bool _busy = false, _changed = false, _editing = false;
   bool _authorityConfirmed = false, _revisionConflict = false;
   final Set<String> _loadedPreviewImages = {};
+  final Map<String, int> _previewAttempts = {};
   bool get _imagesVisible =>
       (_post['reviewedPost']?['images'] as List? ?? []).whereType<Map>().every(
         (image) => _loadedPreviewImages.contains(image['url'].toString()),
@@ -205,17 +206,13 @@ class _CustomerSocialPostEditorState extends State<CustomerSocialPostEditor> {
 
   Future<void> _save() async {
     if (_revisionConflict || _post['publicationStatus'] != null) return;
-    if (_time == null) {
-      setState(() => _error = 'Choose a future time.');
-      return;
-    }
     final result = await widget.service.preparePost({
       ..._identity,
       'action': 'save',
       'copy': _copy.text,
       'callToAction': _cta.text,
       'destinationUrl': _destination.text,
-      'scheduledFor': _time!.toUtc().toIso8601String(),
+      if (_time != null) 'scheduledFor': _time!.toUtc().toIso8601String(),
       'textOnly': _textOnly,
     });
     if (mounted) {
@@ -637,6 +634,19 @@ class _CustomerSocialPostEditorState extends State<CustomerSocialPostEditor> {
                 padding: const EdgeInsets.symmetric(vertical: 8),
                 child: Image.network(
                   image['url'].toString(),
+                  key: ValueKey(
+                    '${image['url']}:${_previewAttempts[image['url']] ?? 0}',
+                  ),
+                  loadingBuilder: (context, child, progress) => progress == null
+                      ? child
+                      : const SizedBox(
+                          height: 340,
+                          child: Center(
+                            child: CircularProgressIndicator(
+                              semanticsLabel: 'Loading selected image',
+                            ),
+                          ),
+                        ),
                   width: MediaQuery.sizeOf(
                     context,
                   ).width.clamp(0, 640).toDouble(),
@@ -654,8 +664,25 @@ class _CustomerSocialPostEditorState extends State<CustomerSocialPostEditor> {
                     }
                     return child;
                   },
-                  errorBuilder: (_, error, stack) => const Text(
-                    'Image preview unavailable. Reload before approval.',
+                  errorBuilder: (_, error, stack) => Column(
+                    children: [
+                      const Text(
+                        'The selected image could not be loaded. Retry its preview; your saved image is unchanged.',
+                      ),
+                      TextButton(
+                        onPressed: () async {
+                          final url = image['url'].toString();
+                          await NetworkImage(url).evict();
+                          if (mounted)
+                            setState(() {
+                              _loadedPreviewImages.remove(url);
+                              _previewAttempts[url] =
+                                  (_previewAttempts[url] ?? 0) + 1;
+                            });
+                        },
+                        child: const Text('Retry image preview'),
+                      ),
+                    ],
                   ),
                 ),
               ),
@@ -707,8 +734,13 @@ class _CustomerSocialPostEditorState extends State<CustomerSocialPostEditor> {
               ),
             const SizedBox(height: 12),
             Text(
-              'Proposed time: ${socialCustomerTime(context, _time?.isAfter(DateTime.now()) == true ? _time?.toIso8601String() : _post['proposedFutureTime'], label: !_changed ? (_time?.isAfter(DateTime.now()) == true ? _post['scheduledForLabel'] : _post['proposedFutureTimeLabel']) : null)}',
+              'Proposed time: ${socialCustomerTime(context, _time?.toIso8601String(), label: !_changed ? _post['scheduledForLabel'] : null)}',
             ),
+            if (_post['publicationStatus'] == null &&
+                (_time == null || !_time!.isAfter(DateTime.now())))
+              const Text(
+                'This draft’s proposed time has passed. You can save edits. Choose a new time before scheduling; automatic scheduling uses your authorized cadence.',
+              ),
             TextButton.icon(
               onPressed: _busy ? null : _chooseTime,
               icon: const Icon(Icons.schedule),

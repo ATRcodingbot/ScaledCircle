@@ -13,9 +13,9 @@ test('Facebook text-only edit preserves Instagram, original version, and has no 
  assert.equal(next.variants[0].mediaRequirement,'none');assert.equal(next.version,2);assert.equal(next.approvedAt,null);assert.equal(next.status,'ready_for_review');
  assert.deepEqual(platformVersions({currentVersion:1},current,'facebook',2),{facebook:2,instagram:1});
 });
-test('wrong owner, stale version, insecure URL, past time and text-only Instagram fail closed',()=>{
+test('wrong owner, stale version, insecure URL, invalid time and text-only Instagram fail closed',()=>{
  for(const change of [{uid:'other'},{input:{...input,version:2}},{input:{...input,destinationUrl:'http://example.com'}},
-   {input:{...input,scheduledFor:new Date(now).toISOString()}},{input:{...input,provider:'instagram'}}])
+   {input:{...input,scheduledFor:'not-a-date'}},{input:{...input,provider:'instagram'}}])
    assert.throws(()=>editVersion({uid:'owner',current:example(),input,now,...change}));
 });
 test('quality absence is unknown, not a measured zero',()=>{
@@ -73,4 +73,27 @@ test('Facebook upload preserves high-resolution landscape and portrait originals
  }
  await assert.rejects(derivative(Buffer.from('invalid'),sharp,'facebook'));
  await assert.rejects(derivative(Buffer.from('invalid'),sharp,'youtube'));
+});
+
+ test('expired proposal survives draft edits; scheduling and stale assessment remain blocked',()=>{
+ const current=example();current.scheduledFor=new Date(now-86400000).toISOString();
+ const next=editVersion({uid:'owner',current,input:{...input,scheduledFor:undefined},now});
+ assert.equal(next.scheduledFor,current.scheduledFor);assert.equal(next.approvedAt,null);
+ const {fixture}=require('./social_customer_scheduling.test');const f=fixture();
+ f.version=next;f.item.currentVersion=next.version;f.quality.immutableSourceHash=next.contentHash;
+ const check=require('../functions-social-operations/social_customer_scheduling').readiness;
+ assert(check(f).reasons.some(r=>r.code==='time'));
+ f.version={...next,scheduledFor:new Date(now+3600000).toISOString()};f.quality.immutableSourceHash='old-caption';
+ assert(check(f).reasons.some(r=>r.code==='quality'));
+});
+test('fresh caption assessment binds revision/hash while literal context components can stay unchanged',()=>{
+ const social=require('../functions-social-operations/social_operations');
+ const context={businessName:'ScaledCircle',services:['Product explanation','Business value','Business and Scaler roles'],geography:[]};
+ const original=example();original.variants[0]={...original.variants[0],copy:'ScaledCircle keeps campaign activity and inquiry evidence connected. Explore how the workflow fits your Business.',callToAction:'Learn more',destinationUrl:'https://scaledcircle.com/businesses'};
+ const changed=editVersion({uid:'owner',current:original,input:{...input,copy:'Your next customer conversation needs a clear next step. ScaledCircle gives Maryland businesses one place to organize leads, customer conversations and appointments. Explore how ScaledCircle works. #MarylandBusiness #ScaledCircle'},now});
+ const assess=v=>social.assessScheduledContent({businessUid:'owner',contentItemId:'post',versionRecord:v,businessContext:context,now});
+ const before=assess(original),after=assess(changed);
+ assert.equal(after.immutableSourceHash,changed.contentHash);assert.equal(after.contentVersion,2);assert.equal(after.assessedAt,now);
+ for(const k of ['serviceRelevance','localRelevance','keywordQuality','hashtagQuality'])assert.equal(after.variantAssessments[0].scores[k],before.variantAssessments[0].scores[k],k);
+ assert.equal(after.variantAssessments[0].scores.serviceRelevance,62);assert.equal(after.variantAssessments[0].scores.localRelevance,65);
 });
