@@ -18,7 +18,9 @@ class CustomerSocialPostEditor extends StatefulWidget {
     this.onPrevious,
     this.onNext,
     this.positionLabel,
+    this.prepareOnOpen = true,
   });
+  final bool prepareOnOpen;
   final VoidCallback? onPrevious, onNext;
   final String? positionLabel;
   final Map<String, dynamic> post;
@@ -71,13 +73,16 @@ class _CustomerSocialPostEditorState extends State<CustomerSocialPostEditor> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         _run(
-          (_post['ready'] == true &&
+          !widget.prepareOnOpen ||
+                  (_post['ready'] == true &&
                       _post['creativeNeedsPreparation'] != true) ||
                   _post['publicationStatus'] != null
               ? _refresh
               : _prepare,
           readOnly:
-              _post['ready'] == true || _post['publicationStatus'] != null,
+              !widget.prepareOnOpen ||
+              _post['ready'] == true ||
+              _post['publicationStatus'] != null,
         );
       }
     });

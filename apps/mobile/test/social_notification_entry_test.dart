@@ -23,7 +23,8 @@ class NotificationPostService extends EditorService {
     return {
       ...post(),
       'provider': 'instagram',
-      'publicationStatus': 'scheduled',
+      'automaticMode': true,
+      'automaticState': 'needs_attention',
     };
   }
 }
@@ -50,9 +51,12 @@ void main() {
       service.unavailable = false;
       await tester.tap(find.text('Retry'));
       await tester.pumpAndSettle();
-      expect(service.previews, 3); // Retry plus the editor's current-revision readback.
+      expect(
+        service.previews,
+        3,
+      ); // Retry plus the editor's current-revision readback.
       expect(find.byType(CustomerSocialPostEditor), findsOneWidget);
-      expect(find.text('Scheduled'), findsWidgets);
+      expect(find.text('Needs Attention'), findsWidgets);
       expect(service.calls, isEmpty);
     },
   );

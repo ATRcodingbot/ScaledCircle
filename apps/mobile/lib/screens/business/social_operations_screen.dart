@@ -120,7 +120,7 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
                 ...preview,
                 'itemId': widget.initialItemId,
                 'provider': widget.initialProvider!,
-              });
+              }, prepareOnOpen: false);
             } catch (_) {
               if (mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
@@ -1740,13 +1740,17 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
     );
   }
 
-  Future<void> _preparePost(Map<String, dynamic> post) async {
+  Future<void> _preparePost(
+    Map<String, dynamic> post, {
+    bool prepareOnOpen = true,
+  }) async {
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => CustomerSocialPostEditor(
           post: post,
           service: _service,
           onSchedule: _schedulePost,
+          prepareOnOpen: prepareOnOpen,
         ),
       ),
     );
