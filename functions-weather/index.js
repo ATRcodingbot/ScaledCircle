@@ -45,6 +45,7 @@ exports.monitorMarylandWeatherAlerts = onSchedule(
     timeZone: "America/New_York",
     region: "us-east1",
     timeoutSeconds: 240,
+    memory: "512MiB",
     maxInstances: 1,
   },
   async () => {
