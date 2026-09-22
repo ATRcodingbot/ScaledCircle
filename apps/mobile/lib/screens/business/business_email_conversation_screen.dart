@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'appointment_offer_dialog.dart';
 import '../../services/business_email_service.dart';
 import '../../services/business_operations_service.dart';
 
@@ -143,113 +144,32 @@ class _ConversationState extends State<BusinessEmailConversationScreen> {
       );
       return;
     }
-    final start = TextEditingController(), location = TextEditingController();
-    bool automatic = false;
-    final settings = availability['settings'] as Map;
-    final approved = await showDialog<bool>(
+    final result = await showDialog<Map<String, dynamic>>(
       context: context,
-      builder: (c) => StatefulBuilder(
-        builder: (c, setLocal) => AlertDialog(
-          title: const Text('Offer a tentative appointment'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  'Timezone: ${settings['timeZone']} · ${settings['durationMinutes']} minutes · ${settings['bufferMinutes']} minute buffer\nStaff: ${(settings['assignedPeople'] as List).isEmpty ? 'Assign later' : (settings['assignedPeople'] as List).join(', ')}',
-                ),
-                TextField(
-                  controller: start,
-                  decoration: const InputDecoration(
-                    labelText: 'Exact date/time including UTC offset',
-                    hintText: '2026-09-25T14:00:00-04:00',
-                  ),
-                ),
-                TextField(
-                  controller: location,
-                  decoration: const InputDecoration(
-                    labelText: 'Location / meeting details',
-                  ),
-                ),
-                CheckboxListTile(
-                  value: automatic,
-                  onChanged: (v) => setLocal(() => automatic = v == true),
-                  title: const Text(
-                    'Allow this exact slot to confirm on the customer’s explicit acceptance',
-                  ),
-                  subtitle: const Text(
-                    'Requires your saved bounded booking policy. Availability is checked again.',
-                  ),
-                ),
-                const Text(
-                  'This saves a tentative offer, not a confirmed appointment. Nothing is emailed until you review and send the offer.',
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(c, false),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(c, true),
-              child: const Text('Save tentative offer'),
-            ),
-          ],
-        ),
+      barrierDismissible: false,
+      builder: (_) => AppointmentOfferDialog(
+        service: BusinessOperationsService(),
+        businessId: data!['businessId'].toString(),
+        operationId: widget.operationId,
+        inboundDigest: data!['inboundDigest'].toString(),
+        customerId: data!['operation']['crmCustomerId'].toString(),
+        existing: existing,
       ),
     );
-    if (approved == true && mounted) {
-      setState(() => busy = true);
-      try {
-        final raw = start.text.trim();
-        if (!RegExp(r'(Z|[+-]\d{2}:\d{2})$').hasMatch(raw)) {
-          throw const FormatException('Explicit timezone required');
-        }
-        final result = await BusinessOperationsService().call(
-          data!['businessId'].toString(),
-          'saveItem',
-          {
-            'expectedVersion': existing?['version'] ?? 0,
-            if (existing != null) 'itemId': existing['id'],
-            'item': {
-              'title': existing?['title'] ?? 'Customer appointment offer',
-              'type': existing?['type'] ?? 'estimate',
-              'customerId': data!['operation']['crmCustomerId'],
-              'startMs': DateTime.parse(raw).millisecondsSinceEpoch,
-              'durationMinutes': settings['durationMinutes'],
-              'timeZone': settings['timeZone'],
-              'assignedPeople': settings['assignedPeople'],
-              'location': location.text.trim(),
-              'status': 'tentative',
-            },
-            'emailConversation': {
-              'operationId': widget.operationId,
-              'inboundDigest': data!['inboundDigest'],
-              'availabilityVersion': availability['version'],
-              'authorizeAcceptedSlot': automatic,
-            },
-          },
-        );
-        if (result['acceptanceCode'] != null) {
-          subject.text = 'Appointment time for your review';
-          body.text =
-              'We can offer $raw (${settings['timeZone']}) for ${settings['durationMinutes']} minutes. To accept this exact appointment, reply with only:\nPlease book ${result['acceptanceCode']}';
-          savedDraft = null;
-        }
-        await load();
-        feedback =
-            'Tentative offer saved in Schedule (${result['itemId']}). Review the offered time and reply text before sending. No confirmation email has been sent.';
-      } catch (_) {
-        feedback =
-            'The tentative offer was not confirmed. Check the explicit time, staff availability and latest conversation. Nothing was sent.';
-      } finally {
-        if (mounted) setState(() => busy = false);
-      }
+    if (result == null || !mounted) return;
+    if (result['acceptanceCode'] != null) {
+      subject.text = 'Appointment time for your review';
+      body.text =
+          'We can offer ${result['summary']}. To accept this exact appointment, reply with only:\nPlease book ${result['acceptanceCode']}';
+      savedDraft = null;
     }
-    start.dispose();
-    location.dispose();
+    await load();
+    if (mounted) {
+      setState(
+        () => feedback =
+            'Tentative offer saved: ${result['summary']}. Open Schedule to review it. Nothing was sent.',
+      );
+    }
   }
 
   Future<void> confirmAppointment(Map appointment) async {
@@ -323,6 +243,7 @@ class _ConversationState extends State<BusinessEmailConversationScreen> {
             'ownerConfirmsAcceptance': true,
           },
         },
+        requestId: 'confirm_${appointment['id']}_${appointment['version']}',
       );
       await load();
       feedback =
@@ -353,6 +274,12 @@ class _ConversationState extends State<BusinessEmailConversationScreen> {
                 style: Theme.of(context).textTheme.titleLarge,
               ),
               if (feedback != null) Text(feedback!),
+              if (feedback?.startsWith('Tentative offer saved:') == true)
+                TextButton(
+                  onPressed: () =>
+                      Navigator.pushNamed(context, '/business/schedule'),
+                  child: const Text('Open Schedule'),
+                ),
               if (data!['operation']['state'] == 'sent') ...[
                 const Text('Sent message'),
                 SelectableText(

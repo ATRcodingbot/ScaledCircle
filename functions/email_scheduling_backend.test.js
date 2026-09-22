@@ -97,3 +97,19 @@ test('Schedule editor can save unassigned hours; non-editor cannot save and cann
  const denied=createService({db,FieldValue:admin.firestore.FieldValue,now:()=>at,authority:async()=>({businessId:'owner',ownerUid:'owner',actorUid:'viewer',actorName:'Fixture viewer',isOwner:false,permissions:['scheduleView'],activePaid:true,capacity:2})});
  await assert.rejects(denied.execute(request({expectedVersion:3,settings:hours()})),{code:'permission-denied'});
 });
+
+test('read-only picker uses exact workspace Schedule, optional staff and same transactional conflicts',async()=>{
+ await call('saveSchedulingAvailability',{expectedVersion:1,settings:hours()});
+ const before=(await db.collection('businessOperations/owner/items').get()).size;
+ let view=await call('appointmentOptions',{date:'2026-09-21',assignedPeople:[]});assert.equal(view.availability.version,2);assert.equal(view.people[0].name,'Fixture owner');assert.ok(view.slots.length);assert.equal(view.agenda.length,0);
+ assert.equal((await db.collection('businessOperations/owner/items').get()).size,before);
+ const offered={...item(),startMs:view.slots[0].startMs,durationMinutes:15,assignedPeople:[]};
+ const input={expectedVersion:0,item:offered,emailConversation:{...emailConversation(),availabilityVersion:2}};
+ const both=await Promise.all([call('saveItem',input,'one_picker_offer_123'),call('saveItem',input,'one_picker_offer_123')]);assert.equal(both[0].itemId,both[1].itemId);
+ view=await call('appointmentOptions',{date:'2026-09-21',assignedPeople:[]});assert.equal(view.agenda.length,1);assert.match(view.agenda[0].status,/Tentative/);assert.ok(!view.slots.some(x=>x.startMs===offered.startMs));
+ await assert.rejects(call('saveItem',input,'another_picker_offer'),/already scheduled/);
+ const edit=await call('appointmentOptions',{itemId:both[0].itemId});assert.equal(edit.selectedDate,'2026-09-21');assert.ok(edit.slots.some(x=>x.startMs===offered.startMs));
+ await assert.rejects(svc.execute({auth:{uid:'other'},data:{businessId:'owner',operation:'appointmentOptions',input:{date:'2026-09-21'}}}),{code:'permission-denied'});
+ const member=createService({db,FieldValue:admin.firestore.FieldValue,now:()=>at,authority:async()=>({businessId:'owner',isOwner:false,permissions:['scheduleView','communicationsRead']})});
+ await assert.rejects(member.execute({data:{businessId:'owner',operation:'appointmentOptions',input:{}}}),{code:'permission-denied'});
+});

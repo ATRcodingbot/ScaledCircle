@@ -39,6 +39,22 @@ function createService({db,FieldValue,authority,now=Date.now}){
    notifications:prefs.data()?.choices||{},counts:{needsResponse:full?allCustomers.filter(c=>c.stage==='new_lead').length+inbound.length:null,needsFollowUp:full?allCustomers.filter(c=>c.stage==='follow_up'||c.stage==='estimate_given').length:null,openTasks:items.filter(i=>i.type==='task'&&i.status==='open').length,unassignedWork:items.filter(i=>['estimate','job'].includes(i.type)&&!['completed','canceled'].includes(i.status)&&!i.assignedPeople.length).length},
    emailThreads,filesSupported:false,externalCalendarSync:false,automaticEmail:false,financialRevenue:null};
  }
+ async function appointmentOptions(request){
+  const a=await authority(request);if(!a.isOwner)m.fail('permission-denied','The Business owner must review this appointment workflow.');
+  requirePermission(a,'communicationsRead');requirePermission(a,'scheduleView');
+  const input=request.data.input||{};m.strict(input,['date','assignedPeople','itemId']);
+  const picker=require('./appointment_options');
+  const [availabilityDoc,roster,existingDoc]=await Promise.all([ref(a.businessId,'settings','scheduling').get(),people(a),input.itemId?ref(a.businessId,'items',input.itemId).get():null]);
+  const availability=availabilityDoc.data();if(!availability)m.fail('failed-precondition','Save your Schedule availability first.');
+  if(input.itemId&&(!existingDoc?.exists||existingDoc.data().removedAtMs!=null))m.fail('not-found','This appointment is no longer available.');
+  const existing=existingDoc?.data(),s=require('./email_scheduling').settings(availability.settings);
+  const selectedDate=input.date||picker.dateKey(existing?.startMs||now(),s.timeZone),anchor=picker.date(selectedDate),dt=new Date(anchor);
+  const from=Date.UTC(dt.getUTCFullYear(),dt.getUTCMonth(),1)-2*86400000,to=Date.UTC(dt.getUTCFullYear(),dt.getUTCMonth()+1,1)+2*86400000;
+  const assignedPeople=m.people(input.assignedPeople??existing?.assignedPeople??s.assignedPeople);checkPeople(assignedPeople,roster);
+  if(s.assignedPeople.length&&(!assignedPeople.length||assignedPeople.some(p=>!s.assignedPeople.includes(p))))m.fail('failed-precondition','Choose staff within your saved availability.');
+  const items=await bounded(root(a.businessId).collection('items').where('startMs','>=',from).where('startMs','<',to));
+  return {...picker.options({availability,items:items.map(x=>({...x,title:itemAccess(a,x,roster)?x.title:'Busy'})),roster,selectedDate,assignedPeople,itemId:input.itemId,now:now(),resolve:resolver(roster)}),assignedPeople,savedOffer:existing?{startLabel:new Intl.DateTimeFormat('en-US',{timeZone:existing.timeZone,dateStyle:'full',timeStyle:'short'}).format(existing.startMs),timeZone:existing.timeZone,durationMinutes:existing.durationMinutes,version:existing.version}:null};
+ }
  async function timeline(request){
   const a=await authority(request);requirePermission(a,'customersView');const input=request.data.input;m.strict(input,['customerId']);const key=m.id(input.customerId),customer=(await ref(a.businessId,'customers',key).get()).data();
   if(!customer)m.fail('not-found','Customer not found in this Business.');
@@ -136,9 +152,9 @@ function createService({db,FieldValue,authority,now=Date.now}){
      m.fail('failed-precondition','Review this appointment from its conversation before changing the accepted time.');
     }
     const candidate=emailBinding?.expanded||data;
-    const existing=await bounded(root(a.businessId).collection('items').where('startMs','>=',candidate.startMs-86400000).where('startMs','<',candidate.endMs),tx);
-    const overlaps=m.conflicts({...candidate,id:itemId},existing,resolver(roster));
-    if(overlaps.length&&input.overrideConflict!==true)m.fail('failed-precondition','Someone is already scheduled at this time.',{conflicts:overlaps.map(c=>({startMs:c.startMs,endMs:c.endMs,personName:roster.find(p=>p.id===c.person)?.name||'Team member'}))});
+    const existing=await bounded(root(a.businessId).collection('items').where('startMs','>=',candidate.startMs-2*86400000).where('startMs','<',candidate.endMs+120*60000),tx);
+    const overlaps=emailBinding?require('./appointment_options').conflicts({...candidate,id:itemId},existing,resolver(roster),now()):m.conflicts({...candidate,id:itemId},existing,resolver(roster)).concat(require('./appointment_options').conflicts({...candidate,id:itemId},existing.filter(x=>x.emailLink),resolver(roster),now()));
+    if(overlaps.length&&input.overrideConflict!==true)m.fail('failed-precondition','Someone is already scheduled at this time ('+new Intl.DateTimeFormat('en-US',{timeZone:data.timeZone,dateStyle:'medium',timeStyle:'short'}).format(overlaps[0].startMs)+').',{conflicts:overlaps.map(c=>({startMs:c.startMs,endMs:c.endMs,personName:roster.find(p=>p.id===c.person)?.name||'Team member'}))});
     if(input.overrideConflict===true){if(!a.isOwner)m.fail('permission-denied','Only the owner can override a schedule conflict.');m.text(input.overrideReason,500,true);}
     if(input.newCustomer){if(data.customerId)m.fail('invalid-argument','Choose an existing customer or create one.');const c=await prepareCustomer(input.newCustomer,null,0,{reuse:true});data={...data,customerId:c.id};customerBefore=c.value;}
     const value={...data,...(current?.estimate?{estimate:current.estimate}:{}),...(emailBinding?{emailLink:emailBinding.link}:current?.emailLink?{emailLink:current.emailLink}:{}),businessId:a.businessId,version:ver,createdAtMs:current?.createdAtMs||now(),updatedAtMs:now(),updatedBy:a.actorUid};
@@ -260,6 +276,6 @@ function createService({db,FieldValue,authority,now=Date.now}){
   }
   return {results};
  }
- return {load,timeline,mutate,acceptEmailOffer,async execute(request){m.strict(request.data,['businessId','operation','input','requestId']);if(request.data.operation==='load')return load(request);if(request.data.operation==='timeline')return timeline(request);if(request.data.operation==='propose')return propose(request);return mutate(request);}};
+ return {load,timeline,mutate,acceptEmailOffer,async execute(request){m.strict(request.data,['businessId','operation','input','requestId']);if(request.data.operation==='appointmentOptions')return appointmentOptions(request);if(request.data.operation==='load')return load(request);if(request.data.operation==='timeline')return timeline(request);if(request.data.operation==='propose')return propose(request);return mutate(request);}};
 }
 module.exports={createService,READ_CAP};

@@ -18,7 +18,7 @@ console.log(JSON.stringify({codebase,modules:[...seen].sort()}));
 // maintain a second appointment writer or add service-to-service permissions.
 const scheduleTarget=path.join(root,'functions-business-email','schedule_runtime');
 fs.mkdirSync(scheduleTarget,{recursive:true});
-for(const name of ['model','service','email_scheduling','proposal','authority']){
+for(const name of ['model','service','email_scheduling','appointment_options','proposal','authority']){
  let bytes=fs.readFileSync(path.join(root,'functions-business-operations',name+'.js'),'utf8');
  if(['authority','email_scheduling','service'].includes(name))bytes=bytes.replaceAll("require('./shared/","require('../shared/");
  fs.writeFileSync(path.join(scheduleTarget,name+'.js'),bytes);
