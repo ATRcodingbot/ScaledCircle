@@ -26,6 +26,12 @@ class _Snapshot implements QuerySnapshot {
 }
 
 void main() {
+  test('Email, Schedule, Job Room and Earnings retain their shared destinations', () {
+    expect(notificationDestination({'deepLink': {'destination':'business_email','operationId':'original'}})?.route, '/business/email-connection?operation=original');
+    expect(notificationDestination({'deepLink': {'destination':'business_schedule','businessId':'owner','itemId':'appointment','startMs':123}})?.route, '/business/schedule?workspace=owner&item=appointment&at=123');
+    expect(notificationDestination({'type':'zone_completion_submitted','zoneId':'zone','campaignId':'campaign'})?.route, '/job-room/zone');
+    expect(notificationDestination({'type':'earnings_available'})?.kind, 'earnings');
+  });
   for (final width in [390.0, 1280.0]) {
     testWidgets(
       'Social card and CTA open current authorized state with Back at $width',
