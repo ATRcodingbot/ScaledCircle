@@ -35,7 +35,9 @@ function createSubjectCheck({db,now=Date.now,clientFactory}){
    if(!invited.includes(uid))throw Error('Image subject checking is unavailable for this workspace.');
    const client=clientFactory?await clientFactory(config):require('./openai_image_adapter').createOpenAIWifClient({config,OpenAI:require('openai').OpenAI});
    // Read the actual project catalog; never repeatedly call an inaccessible snapshot.
-   const models=await client.models.list({maxRetries:0,timeout:10000});
+   let models;
+   try{models=await client.models.list({maxRetries:0,timeout:10000});}
+   catch{const error=Error('Image review provider connection could not be confirmed. No paid review was started.');error.preparationStage='model_catalog';throw error;}
    const model=selectModel(models.data||[]);
    const key=hash(JSON.stringify({uid,sha256,service,policy:POLICY,model})),ref=db.doc('socialCreativeVisualAssessments/'+key);
    const existing=(await ref.get()).data();

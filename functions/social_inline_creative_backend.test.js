@@ -83,9 +83,15 @@ test('regeneration stays in draft flow and frozen posts are never replaced',asyn
  await db.doc('providerConfigurations/generated-service-visuals').set({providerGenerationEnabled:true});
  await assert.rejects(preparation.prepare(s.uid,{...s.input,version:2,action:'regenerate',candidateSha256:s.candidate.sha256,confirmRegeneration:true}),/unscheduled/);
 });
+async function reviewFixture(uid){
+ const expiresAt=Date.now()+86400000;
+ await db.doc('providerConfigurations/generated-service-visuals').set({providerGenerationEnabled:true,rolloutMode:'beta_cohort',betaCohortBusinessUids:[uid],businessDailyMaximum:3,globalDailyMaximum:50,globalMonthlyMaximum:300,globalDailyCostMicros:10000000,globalMonthlyCostMicros:100000000});
+ await db.doc('socialManagedPolicies/'+uid).set({id:'policy',businessUid:uid,status:'active',startsAt:1,endsAt:expiresAt});
+ await db.doc('visualGenerationGrants/'+uid).set({id:'grant',businessUid:uid,policyId:'policy',status:'active',startsAt:1,expiresAt,source:'internal_operating_grant',product:'social_creative_generation',maximumCostMicros:15000000,maximumConcepts:60});
+ return require('sharp')({create:{width:100,height:100,channels:3,background:'#336688'}}).jpeg().toBuffer();
+}
 test('subject checks analyze exact derivative once, retain provider evidence and consume no generation units',async()=>{
- const uid='subject_check_'+crypto.randomUUID(),bytes=Buffer.from('owned generated derivative'),sha256=hash(bytes);let calls=0;
- await db.doc('providerConfigurations/generated-service-visuals').set({providerGenerationEnabled:false,authorizedBusinessUids:[uid]});
+ const uid='subject_check_'+crypto.randomUUID(),bytes=await reviewFixture(uid),sha256=hash(bytes);let calls=0;
  const check=require('../functions-social-operations/social_creative_subject').createSubjectCheck({db,clientFactory:async()=>({models:{list:async()=>({data:[{id:'gpt-4.1-mini'}]})},responses:{create:async request=>{
    calls++;assert.equal(request.store,false);assert.equal(request.input[0].content[1].image_url,'data:image/jpeg;base64,'+bytes.toString('base64'));
    return {id:'mock_subject_response',output_text:JSON.stringify({subjectVisible:true,relevantToService:true,backgroundDominant:false,severeCrop:false,
@@ -94,13 +100,12 @@ test('subject checks analyze exact derivative once, retain provider evidence and
  const args={uid,bytes,sha256,service:'decks'},a=await check(args),b=await check(args);
  assert.deepEqual(a,b);assert.equal(a.status,'passed');assert.equal(calls,1);
  await assert.rejects(check({...args,bytes:Buffer.from('different')}));await assert.rejects(check({...args,uid:'other'}));
- assert.equal((await db.collection('visualGenerationUsage').where('businessUid','==',uid).get()).size,0);
+ const usage=(await db.doc('visualGenerationUsage/grant_'+uid+'_grant').get()).data();assert.equal(usage.customerConsumedUnits,0);assert.ok(usage.actualCostMicros>0);assert.equal(usage.outstandingCostMicros,0);
  const result=(await db.collection('socialCreativeVisualAssessments').where('businessUid','==',uid).get()).docs[0].data();
  assert.equal(result.responseId,'mock_subject_response');assert.equal(result.sha256,sha256);
 });
 test('failed image analysis preserves only safe diagnostic codes and never approves the draft',async()=>{
- const uid='subject_error_'+crypto.randomUUID(),bytes=Buffer.from('private generated candidate'),sha256=hash(bytes);
- await db.doc('providerConfigurations/generated-service-visuals').set({providerGenerationEnabled:false,authorizedBusinessUids:[uid]});
+ const uid='subject_error_'+crypto.randomUUID(),bytes=await reviewFixture(uid),sha256=hash(bytes);
  const check=require('../functions-social-operations/social_creative_subject').createSubjectCheck({db,clientFactory:async()=>({
    models:{list:async()=>({data:[{id:'gpt-4.1-mini'}]})},responses:{create:async()=>{throw Object.assign(new Error('private body and authorization must not be retained'),{status:403,code:'model_not_found',type:'invalid_request_error',headers:{authorization:'private'}});}}
  })});

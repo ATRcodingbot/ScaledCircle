@@ -63,7 +63,7 @@ function createEditor({db,now=Date.now,enabledUids=[],planEntitled=false}) {
         const profile=(await tx.get(db.doc('businessGrowthProfiles/'+uid))).data()||{};
         const discovery=(await tx.get(db.doc('discoveryPreferences/'+uid))).data();
         const geography=discovery?.userUid===uid?(discovery.areas||[]).filter(a=>a.enabled!==false).map(a=>a.displayName).filter(x=>typeof x==='string'):[];
-        const recent=await tx.get(db.collection('socialContentVersions').where('businessUid','==',uid).limit(100));
+        const recent=await require('./social_version_history').readVersions({db,uid,read:r=>tx.get(r)});
         const variant=current.variants.find(v=>v.provider===input.provider);
         const revision=variant?.mediaRevisionId?(await tx.get(db.doc(`socialMediaLibraries/${uid}/items/${variant.mediaRevisionId}`))).data():null;
         let mediaAuthorityValid=true;

@@ -51,7 +51,7 @@ function choose(args){
  const unused=allowed.filter(t=>!used.has('scaledcircle:'+t[0]));
  report.unusedSemanticTopics=unused.length;
  if(!Object.values(report.platforms).some(p=>p.planningShortfall>0))return {status:'planning_buffer_covered',coverage:report};
- if(items.length>=60||versions.length>=90||jobs.length>=90)return {status:'history_limit',coverage:report};
+ if(items.length>=60||jobs.length>=90)return {status:'history_limit',coverage:report};
  const topic=unused[0];if(!topic)return {status:'fresh_topics_exhausted',coverage:report,message:'The reviewed topic supply is exhausted. More distinct, supported context is needed; no filler or repeated topic will be generated.'};
  const slots=policy.providers.map(provider=>({provider,at:require('./social_bounded_authority').nextSlot({policy,history:jobs,provider,now})})).filter(s=>s.at&&connections.some(c=>c.provider===s.provider&&(c.businessUid==null||c.businessUid===uid)&&c.status==='connected_write'&&c.tokenHealth==='healthy'));
  if(!slots.length)return {status:'cadence_or_connection_limited',coverage:report};

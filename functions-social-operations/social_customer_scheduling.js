@@ -8,7 +8,7 @@ const SCHEMA = 'CustomerPostApprovalV1';
 async function completedCreativeNeedsPreparation({db,uid,preparation,existingJob,version}) {
   if(existingJob||preparation?.businessUid!==uid||preparation.version!==version||
     preparation.state!=='needs_attention'||preparation.reviewCandidate||
-    preparation.generationStatus!=='available')return false;
+    (preparation.failureReason?!require('./social_preparation_recovery').eligible(preparation):preparation.generationStatus!=='available'))return false;
   const requestId=preparation.generationOverride?.requestId||preparation.recommendation?.requestId;
   if(!requestId)return false;
   const id='visual_job_'+require('node:crypto').createHash('sha256').update(uid+'\n'+requestId).digest('hex').slice(0,40);
@@ -119,8 +119,7 @@ function createStore({db, now=Date.now, enabledUids=[], planEntitled=false, envi
     catch{mediaAuthorityValid=false;}
     let quality=platformQuality.data()||q.data();
     if(!existingJob && quality?.businessUid===uid && quality.immutableSourceHash===version?.contentHash){
-      const recent=await read(db.collection('socialContentVersions').where('businessUid','==',uid).limit(101));
-      if(recent.size>100)throw Error('Content history needs review.');
+      const recent=await require('./social_version_history').readVersions({db,uid,read});
       const checks=require('./social_customer_quality').reviewChecks({variant,revision,mediaAuthorityValid,
         recentVariants:recent.docs.filter(d=>!d.id.startsWith(input.itemId+'_v')).flatMap(d=>d.data().variants||[])});
       quality={...quality,readyToPublish:checks.passed,reviewChecks:checks};

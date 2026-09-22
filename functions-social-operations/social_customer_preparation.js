@@ -79,7 +79,8 @@ function createPreparation({db,editor,media,now=Date.now}) {
      const old=(await tx.get(lease)).data();
      if(old?.state==='preparing'&&old.leaseUntil>now())return 'preparing';
      if(old?.state==='prepared'&&old.version===input.version&&old.recommendation?.policy===diversity.POLICY&&old.recommendation?.historyPolicy==='SocialCreativeHistoryV2'&&JSON.stringify(old.recommendation)===JSON.stringify(planned))return 'prepared';
-     tx.set(lease,{businessUid:uid,itemId:input.itemId,provider:input.provider,attempt,state:'preparing',leaseUntil:now()+180000,startedAt:now(),generationOverride:old?.generationOverride||null,
+     const infrastructureRecoveryAttempts=require('./social_preparation_recovery').claim(old);
+     tx.set(lease,{businessUid:uid,itemId:input.itemId,provider:input.provider,infrastructureRecoveryAttempts,attempt,state:'preparing',leaseUntil:now()+180000,startedAt:now(),generationOverride:old?.generationOverride||(require('./social_preparation_recovery').eligible(old)?old.recommendation:null)||null,
        reviewCandidate:old?.reviewCandidate||null,version:input.version,regenerationSequence:old?.regenerationSequence||0,regenerationPreviousSourceSha256:old?.regenerationPreviousSourceSha256||null});
      return 'claimed';
    });
@@ -144,6 +145,7 @@ function createPreparation({db,editor,media,now=Date.now}) {
    return result;
    }catch(error){
      await db.runTransaction(async tx=>{const old=(await tx.get(lease)).data();if(old?.attempt===attempt)tx.update(lease,{state:old.reviewCandidate?'creative_review':'needs_attention',finishedAt:now(),leaseUntil:0,
+       failureStage:error.preparationStage||'preparation',
        failureReason:'Creative preparation could not finish. Your saved preview is preserved. Try the image check again or replace the image.'});});
      throw error;
    }

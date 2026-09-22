@@ -19,7 +19,7 @@ function choose({uid,policy,plan,profile,scope,connections,items,versions,jobs,n
       if(!jobs.some(j=>j.provider===v.provider&&j.versionId?.startsWith(i.id+'_v')))return {status:'existing_drafts'};
     }
   }
-  if(items.length>=60||versions.length>=90||jobs.length>=90)return {status:'history_limit'};
+  if(items.length>=60||jobs.length>=90)return {status:'history_limit'};
   const slots=policy.providers.map(provider=>({provider,at:bounded.nextSlot({policy,history:jobs,provider,now})})).filter(x=>x.at);
   if(!slots.length)return {status:'cadence_full'};
   const reviewed=policy.reviewedScope;
@@ -67,8 +67,8 @@ async function replenish({db,uid,now=Date.now()}) {
     if(health?.killSwitchActive===true)throw Error('managed_social_safety_hold');
     const connections=(await read(db.collection('socialConnections').doc(uid).collection('providers'))).docs.map(d=>({provider:d.id,...d.data()}));
     const rows={};for(const c of ['socialContentItems','socialContentVersions','socialGrowthJobs']){
-      const q=await read(db.collection(c).where('businessUid','==',uid).limit(101));
-      if(q.size>100)throw Error('managed_social_history_limit');rows[c]=q.docs.map(d=>({...d.data(),id:d.id}));
+      const q=c==='socialContentVersions'?await require('./social_version_history').readVersions({db,uid,read}):await read(db.collection(c).where('businessUid','==',uid).limit(101));
+      if(c!=='socialContentVersions'&&q.size>100)throw Error('managed_social_history_limit');rows[c]=q.docs.map(d=>({...d.data(),id:d.id}));
     }
     const result=choose({uid,policy,plan,profile,scope:require('./growth_geography').serviceAreaScope(geography,uid),connections,
       items:rows.socialContentItems,versions:rows.socialContentVersions,jobs:rows.socialGrowthJobs,now});

@@ -89,3 +89,16 @@ test('cadence compares real equal-age platform results and never silently grants
  assert.equal(recommend({uid:'owner',provider:'facebook',observations:rows,now}).decision,'REDUCE');
 });
 module.exports={fixture};
+
+test('completed source gets one bounded infrastructure retry, never a rejected/unknown paid review replay',async()=>{
+ const {eligible,claim}=require('../functions-social-operations/social_preparation_recovery');
+ const p={businessUid:'owner',version:6,state:'needs_attention',failureReason:'saved failure',recommendation:{requestId:'same'}};
+ assert.equal(eligible(p),true);assert.equal(claim(p),1);
+ for(const change of [{infrastructureRecoveryAttempts:1},{reviewCandidate:{status:'blocked'}},{failureStage:'preparation'},{generationStatus:'configuration_unavailable'}])assert.equal(eligible({...p,...change}),false);
+ assert.throws(()=>claim({...p,infrastructureRecoveryAttempts:1}),/held/);
+ assert.equal(eligible({...p,failureStage:'model_catalog'}),true);
+ const resume=require('../functions-social-operations/social_customer_scheduling').completedCreativeNeedsPreparation;
+ const db={doc:()=>({get:async()=>({data:()=>({businessUid:'owner',status:'review_required',candidateAssetId:'a',candidateRevisionId:'r'})})})};
+ assert.equal(await resume({db,uid:'owner',preparation:p,version:6}),true);
+ assert.equal(await resume({db,uid:'owner',preparation:{...p,infrastructureRecoveryAttempts:1},version:6}),false);
+});

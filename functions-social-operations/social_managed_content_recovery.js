@@ -43,9 +43,9 @@ async function recover({db,uid,input,policyId,now=Date.now()}){
   const assessment=(await read(db.doc('socialContentQualityAssessments/'+input.itemId+'_v'+version+'_'+input.provider))).data();
   if(current?.businessUid!==uid||assessment?.businessUid!==uid||assessment.immutableSourceHash!==current.contentHash||!repeated(assessment))throw Error('managed_content_evidence');
   const profile=(await read(db.doc('businessGrowthProfiles/'+uid))).data();
-  const rows=await read(db.collection('socialContentVersions').where('businessUid','==',uid).limit(101));
+  const rows=await require('./social_version_history').readVersions({db,uid,read});
   const jobs=await read(db.collection('socialGrowthJobs').where('businessUid','==',uid).limit(101));
-  if(rows.size>100||jobs.size>100)throw Error('managed_content_history_limit');
+  if(jobs.size>100)throw Error('managed_content_history_limit');
   if(jobs.docs.some(d=>{const j=d.data();return j.provider===input.provider&&j.versionId?.startsWith(input.itemId+'_v')&&j.status!=='canceled';}))throw Error('managed_content_already_scheduled');
   const prepRef=db.doc('socialCreativePreparation/'+require('./social_creative_diversity').leaseId(uid,input));
   const prep=(await read(prepRef)).data();

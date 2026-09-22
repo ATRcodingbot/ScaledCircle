@@ -71,3 +71,12 @@ test('real scheduling readback accepts supplemental canonical draft without gran
  assert.match(preview.reviewedPost.variant.copy,/decks/);
  assert.equal((await rows('socialGrowthJobs',f.uid)).length,0);
 });
+
+test('101 immutable revisions of few ideas do not exhaust content supply or omit history',async()=>{
+ const f=await fixture();const batch=db.batch();
+ for(let n=0;n<101;n++)batch.set(db.doc('socialContentVersions/'+f.uid+'_old'+n),{businessUid:f.uid,variants:[{provider:'facebook',copy:'Archived bookkeeping revision '+n}]});
+ await batch.commit();const before=await rows('socialContentVersions',f.uid);
+ const result=await supply.replenish({db,uid:f.uid,now:f.now});assert.equal(result.status,'draft_created');
+ const after=await rows('socialContentVersions',f.uid);assert.equal(after.length,102);
+ for(const old of before)assert.deepEqual(after.find(v=>v.id===old.id),old);
+});

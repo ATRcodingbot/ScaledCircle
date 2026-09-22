@@ -43,3 +43,9 @@ test('bounded image request rejects configuration drift and missing usage; charg
  await assert.rejects(make(config,{}).generateServiceConcept({jobId:'image',brief:{}}),e=>e.outcome==='unknown_provider_outcome');
  await assert.rejects(make(config,{data:[{b64_json:bytes.toString('base64')}],usage:{input_tokens_details:{text_tokens:100,image_tokens:0},output_tokens:1372}}).generateServiceConcept({jobId:'image',brief:{}}),e=>e.providerAccepted&&e.cost.actualCostMicros===41660);
 });
+
+test('catalog authentication failure is explicitly pre-charge and does not reserve or call a paid model',async()=>{
+ const subject=createSubjectCheck({db,clientFactory:async()=>({models:{list:async()=>{throw Error('secret provider response')}},responses:{create:async()=>{calls++;}}})});
+ await assert.rejects(subject({uid:'owner',bytes,sha256:sha,service:'Product explanation'}),e=>e.preparationStage==='model_catalog'&&!e.message.includes('secret'));
+ assert.equal(calls,0);assert.equal((await db.collection('visualGenerationReservations').get()).size,0);
+});
