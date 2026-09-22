@@ -46,7 +46,7 @@ function createCollector({db,readEvidence,now=Date.now}) {
    const item=(await tx.get(ref)).data();
    if(!item||item.status==="completed"||item.status==="failed"||Date.parse(item.scheduledFor)>now()||item.leaseUntil>now()||item.nextAttemptAt>now())return null;
    if((item.attempts||0)>=2){tx.update(ref,{status:"failed"});return null;}
-   const next={...item,status:"reading",attempts:(item.attempts||0)+1,leaseUntil:now()+120000};tx.set(ref,next);return next;
+   const next={...item,status:"reading",attempts:(item.attempts||0)+1,lastAttemptAt:now(),leaseUntil:now()+120000};tx.set(ref,next);return next;
   });
   if(!claim)return;
   try {
@@ -63,10 +63,11 @@ function createCollector({db,readEvidence,now=Date.now}) {
     tx.create(db.doc(`socialMetaMeasurementSnapshots/${id}`),result);
     tx.update(ref,{status:"completed",leaseUntil:0,completedAt:now()});
    });
-  }catch(_){
+  }catch(error){
    await db.runTransaction(async tx=>{const current=(await tx.get(ref)).data();
     if(current?.status!=="reading"||current.attempts!==claim.attempts)return;
-    tx.update(ref,{status:claim.attempts>=2?"failed":"pending",leaseUntil:0,nextAttemptAt:now()+1800000,lastFailure:"post_measurement_unavailable"});});
+    const reason=/^meta_measurement_[a-z_]+$/.test(error?.message||'')?error.message:'post_measurement_unavailable';
+    tx.update(ref,{status:claim.attempts>=2?"failed":"pending",leaseUntil:0,nextAttemptAt:now()+1800000,lastFailure:reason});});
   }
  };
 }

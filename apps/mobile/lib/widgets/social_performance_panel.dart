@@ -20,6 +20,14 @@ class SocialPerformancePanel extends StatelessWidget {
                   socialProviderName('${p['provider']}'),
                   style: Theme.of(context).textTheme.titleLarge,
                 ),
+                if (p['freshnessReason'] is String)
+                  Text('${p['freshnessReason']}'),
+                if (p['lastCollectionAttempt'] == null)
+                  const Text('Last account collection attempt: not recorded'),
+                if (p['lastCollectionAttemptLabel'] is String)
+                  Text('Last account collection attempt: ${p['lastCollectionAttemptLabel']}'),
+                if (p['measurementPeriodLabel'] is String)
+                  Text('Provider request period: ${p['measurementPeriodLabel']}'),
                 Text(
                   p['baselineAt'] == null
                       ? 'No provider baseline captured.'

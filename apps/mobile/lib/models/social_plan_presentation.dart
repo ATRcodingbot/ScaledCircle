@@ -51,7 +51,7 @@ String socialEvidenceText(dynamic raw, String fallback) {
 }
 
 String socialQualityLabel(dynamic value) => switch (value) {
-  'keep' => 'Ready for your review',
+  'keep' => 'No content changes recommended',
   'improve' => 'Improve this post',
   'replace' => 'Prepare a better version',
   'reschedule' => 'Choose a future time',

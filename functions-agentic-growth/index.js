@@ -84,7 +84,7 @@ const growthEndpoint=(handler,operation)=>onCall({enforceAppCheck:false,maxInsta
     if((process.env.GCLOUD_PROJECT||process.env.GOOGLE_CLOUD_PROJECT)==='scaled-circle'){
       const result=await internalBridge.forward({url:process.env.GROWTH_INTERNAL_BRIDGE_URL,actorUid:request.auth.uid,operation,input:request.data,auth:new GoogleAuth()});
       if(operation!=='load')return result;
-      const [profile,workspace,operations]=await Promise.all(['businessGrowthProfiles/','businessWorkspaces/','businessOperations/'].map(p=>db.doc(p+request.auth.uid).get()));
+      const [profile,workspace,operations]=await Promise.all(['businessGrowthProfiles/'+request.auth.uid,'businessWorkspaces/'+request.auth.uid,'businessOperations/'+request.auth.uid+'/settings/scheduling'].map(p=>db.doc(p).get()));
       return require('./workspace_presentation').present(result,{profile:profile.data(),workspace:workspace.data(),operations:operations.data()});
     }
     return await handler(request,growthService());

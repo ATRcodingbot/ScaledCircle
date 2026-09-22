@@ -292,7 +292,11 @@ exports.getSocialOperationsWorkspace = onCall(
         state.nextEvaluationLabel=require('./social_lifecycle_presentation').timeLabel(state.nextEvaluationAt,automaticPublishing.cadence.timeZone);
       }
     }
-    const workspaceTimeZone=profileSnapshot.data()?.timeZone||profileSnapshot.data()?.timezone||customerPlans.find(p=>p.timeZone)?.timeZone||null;
+    const [workspaceSettings,schedulingSettings]=await Promise.all([
+      db.doc('businessWorkspaces/'+business.uid).get(),
+      db.doc('businessOperations/'+business.uid+'/settings/scheduling').get()]);
+    const workspaceTimeZone=require('./workspace_presentation').zone(profileSnapshot.data()||{},
+      workspaceSettings.data()||{},schedulingSettings.data()||{})||automaticPublishing?.cadence?.timeZone||customerPlans.find(p=>p.timeZone)?.timeZone||null;
     const cadenceObservations=await db.collection('socialMetaMeasurementSnapshots').where('businessUid','==',business.uid).limit(100).get();
     const cadenceJobs=await db.collection('socialMetaMeasurementJobs').where('businessUid','==',business.uid).limit(100).get();
     const cadenceJobMap=new Map(cadenceJobs.docs.map(doc=>[doc.id,doc.data()]));
@@ -317,11 +321,17 @@ exports.getSocialOperationsWorkspace = onCall(
     const runtimeStatus = await require("./social_runtime_status").load(db, business.uid, {
         plans: customerPlans, connections: safeConnections, automaticPublishing, timeZone:workspaceTimeZone, channels:safeConnections.map(c=>c.provider),
       });
-    const performancePresentation=require('./social_performance_presentation').project(performance,customerPlans);
+    const performancePresentation=require('./social_performance_presentation').project(performance,customerPlans,
+      {connections:connections.docs.map(doc=>({provider:doc.id,...doc.data()}))});
     for(const platform of performancePresentation.platforms){
       platform.published=runtimeStatus.available?runtimeStatus.posts.filter(p=>p.provider===platform.provider&&p.publicationStatus==='published').length:null;
       platform.baselineAtLabel=require('./social_lifecycle_presentation').timeLabel(platform.baselineAt,runtimeStatus.timeZone);
       platform.currentAtLabel=require('./social_lifecycle_presentation').timeLabel(platform.currentAt,runtimeStatus.timeZone);
+      platform.lastCollectionAttemptLabel=require('./social_lifecycle_presentation').timeLabel(platform.lastCollectionAttempt,runtimeStatus.timeZone);
+      const period=platform.measurementPeriod;
+      if(Number.isFinite(period?.since)&&Number.isFinite(period?.until))platform.measurementPeriodLabel=
+        require('./social_lifecycle_presentation').timeLabel(period.since*1000,runtimeStatus.timeZone)+' – '+
+        require('./social_lifecycle_presentation').timeLabel(period.until*1000,runtimeStatus.timeZone);
     }
     return {
       schemaVersion: socialOperations.SCHEMA_VERSION,
@@ -3155,6 +3165,12 @@ function syncSocialReadOnlyPerformanceHandler(expectedProvider, providerSecretPa
     if (!credential || credential.businessUid !== business.uid || credential.provider !== provider) {
       throw new HttpsError("permission-denied", "The connection credential is unavailable.");
     }
+    await db.runTransaction(async tx=>{
+      const current=(await tx.get(connectionRef)).data();
+      if(current?.credentialId!==connection.credentialId||current?.connectionRevision!==connection.connectionRevision)
+        throw new HttpsError('failed-precondition','The connection changed. Refresh before collecting results.');
+      tx.update(connectionRef,{lastMetricAttemptAt:new Date().toISOString()});
+    });
     try {
       let account;
       let tokens;
@@ -3643,20 +3659,18 @@ exports.runManagedSocialPreparationV1=onSchedule({schedule:'every 15 minutes',ti
 exports.runMetaGrowthMeasurementsV1=onSchedule({schedule:"every 15 minutes",timeZone:"UTC",
   maxInstances:1,timeoutSeconds:120,retryCount:0,secrets:[socialOAuthEncryptionKey]},async()=>{
   const config=(await providerConfigRef("meta",runtimeEnvironment()).get()).data();
-  if(!config?.metaDogfood?.businessUid)return;
-  metaConnection.authorize(config,config.metaDogfood.businessUid);
-  if(!config.historicalSyncEnabled)return;
+  if(!config?.historicalSyncEnabled)return;
   const collector=require("./social_meta_measurements").createCollector({db,readEvidence:async(job,receipt,approval)=>{
-    if(job.businessUid!==config.metaDogfood.businessUid)throw Error("meta_measurement_owner_mismatch");
     const connection=(await db.doc(`socialConnections/${job.businessUid}/providers/${job.provider}`).get()).data();
-    if(connection?.environment!==runtimeEnvironment()||connection?.providerUserId!==approval.providerAccounts?.[job.provider]?.providerUserId||
-        connection?.linkedPageId!==config.metaDogfood.pageId||connection?.status!=="connected_write")throw Error("meta_measurement_identity_mismatch");
+    await require('./social_measurement_authority').permitted({db,job,approval,connection,config,
+      environment:runtimeEnvironment(),authorizeInternal:metaConnection.authorize,
+      authorizeCustomer:require('./social_customer_enrollment').authorized});
     socialOAuth.exactScopeSet(connection.grantedScopes,socialOAuth.META_PUBLISH_SCOPES);
     const session=await loadMetaPublisherCredential(job,connection);
     return require("./social_meta_post_insights").collect({job,receipt,approval,session});
   }});
   const pending=await db.collection("socialMetaMeasurementJobs").where("status","in",["pending","reading"]).limit(50).get();
-  for(const snapshot of pending.docs)if(snapshot.data().businessUid===config.metaDogfood.businessUid)await collector(snapshot.id);
+  for(const snapshot of pending.docs)await collector(snapshot.id);
 });
 
 const socialGrowthMeasurements = require("./social_growth_measurements");

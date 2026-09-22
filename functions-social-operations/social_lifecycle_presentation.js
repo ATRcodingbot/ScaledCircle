@@ -23,7 +23,7 @@ function zone(context={}){
  try {if(candidate){new Intl.DateTimeFormat('en',{timeZone:candidate}).format();return candidate;}}catch{}
  return 'UTC'; // Explicit fallback; never infer geography or use the device zone.
 }
-function timeLabel(value,timeZone){const date=iso(value);return date?new Intl.DateTimeFormat('en-US',{timeZone:zone({timeZone}),month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit',timeZoneName:'short'}).format(new Date(date))+' · '+zone({timeZone}):null;}
+function timeLabel(value,timeZone){const date=iso(value);return date?new Intl.DateTimeFormat('en-US',{timeZone:zone({timeZone}),month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit',timeZoneName:'short'}).format(new Date(date)):null;}
 function creativeLabel({origin,format,mediaRequirement,newCreative=false}){
  if(mediaRequirement==='none')return 'Text-only recommendation';
  if(newCreative)return 'New creative';
