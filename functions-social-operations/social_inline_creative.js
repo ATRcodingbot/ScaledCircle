@@ -50,8 +50,7 @@ async function proposal({db,ctx,read=ref=>ref.get()}) {
   const geography=discovery?.userUid===uid?(discovery.areas||[]).filter(a=>a.enabled!==false).map(a=>a.displayName).filter(x=>typeof x==='string'):[];
   const advisory=social.assessScheduledContent({businessUid:uid,contentItemId:ctx.itemRef.id,
     versionRecord:{...version,variants:version.variants.filter(v=>v.provider===provider)},
-    businessContext:{businessName:profile.businessName,services:profile.services||profile.servicesOffered||[],
-      geography:geography.length?geography:[profile.serviceArea,profile.city,profile.county].filter(v=>typeof v==='string')},
+    businessContext:social.assessmentContext(profile,geography),
     recentVariants:recent.docs.filter(d=>!d.id.startsWith(ctx.itemRef.id+'_v')).flatMap(d=>d.data().variants||[]),now:ctx.now});
   const quality={...advisory,businessUid:uid,immutableSourceHash:version.contentHash,
     advisoryReady:advisory.readyToPublish,readyToPublish:checks.passed,reviewChecks:checks,provider};

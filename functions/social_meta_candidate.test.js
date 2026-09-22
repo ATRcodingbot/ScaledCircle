@@ -57,3 +57,31 @@ test("shared jobs support Facebook text and Instagram single image without carou
   assert.equal(image.children, undefined);
   assert.equal(image.container.body.caption, j.binding.variants[0].copy);
 });
+
+ test('assessment counts the exact Meta caption hashtags; publication never appends detached metadata',()=>{
+ const social=require('../functions-social-operations/social_operations');
+ const original=revision('instagram'),r=meta.mediaRevision({...original,productionOrigin:'https://scaledcircle.com',images:original.images.slice(0,1)}),j=job(r);
+ const copy='Explore the connected workflow. Link in bio. #MarylandBusiness #LocalMarketing #ScaledCircle';
+ Object.assign(j.binding.variants[0],{copy,hashtags:['NotActuallyPublished']});
+ const before=structuredClone(j.binding);
+ const assessment=social.discoveryRecommendation({variant:j.binding.variants[0]});
+ assert.equal(assessment.hashtagScore,90);
+ const payload=meta.describe({job:j,revision:r,account}).container.body.caption;
+ assert.equal(payload,copy);assert(!payload.includes('NotActuallyPublished'));assert.deepEqual(j.binding,before);
+ assert.equal(social.discoveryRecommendation({variant:{provider:'instagram',copy:'No tags here',hashtags:['MetadataOnly']}}).hashtagScore,55);
+ assert.equal(social.discoveryRecommendation({variant:{provider:'instagram',copy:' '.repeat(2)+'#Café #MarylandBusiness #marylandbusiness'}}).hashtagScore,90);
+ const many=Array.from({length:16},(_,i)=>'#tag'+i).join(' ');
+ assert.equal(social.discoveryRecommendation({variant:{provider:'instagram',copy:many}}).hashtagScore,30);
+ });
+ test('maintained internal planning topics are not required public keywords or inferred geography',()=>{
+ const social=require('../functions-social-operations/social_operations');
+ const profile={businessName:'ScaledCircle',servicesOffered:['Product explanation','Business value'],internalSocialContext:{source:'owner_reviewed_meta_strategy',audience:'Maryland Businesses and prospective Scalers'}};
+ const context=social.assessmentContext(profile);assert.deepEqual(context.services,[]);assert.deepEqual(context.geography,[]);
+ assert.deepEqual(social.assessmentContext({...profile,services:['Business value','CRM']}).services,['CRM']);
+ const version=social.contentItemVersion({businessUid:'tenant',planId:'plan',item:{itemKey:'post',scheduledFor:'2026-09-30T16:00:00Z',variants:[{provider:'instagram',copy:'ScaledCircle organizes customer conversations and appointments. Explore how it works. #MarylandBusiness',callToAction:'Learn more',destinationUrl:'https://scaledcircle.com/businesses'}]}});
+ const result=social.assessScheduledContent({businessUid:'tenant',contentItemId:'post',versionRecord:version,businessContext:context});
+ assert.equal(result.variantAssessments[0].scores.serviceRelevance,null);assert.equal(result.variantAssessments[0].scores.localRelevance,null);
+ assert.deepEqual(result.variantAssessments[0].discovery.keywords,['scaledcircle']);assert.equal(result.inputNormalizationVersion,2);
+ assert.equal(social.assessmentContext({businessName:'Contractor',servicesOffered:['Decks'],city:'Baltimore'}).services[0],'Decks');
+ assert.deepEqual(social.assessmentContext(profile,['Maintained service area']).geography,['Maintained service area']);
+ });

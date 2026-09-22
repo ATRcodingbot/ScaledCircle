@@ -37,6 +37,13 @@ test('transactional edit/assessment isolation; one new version; no approval, his
  const assessed=await editor.assess(uid,{itemId,provider:'facebook',version:2});assert.equal(assessed.variantAssessments.length,1);
  assert.equal(assessed.provider,'facebook');assert.equal(assessed.providerMutationsEnabled,false);
  const qualityRef=db.doc('socialContentQualityAssessments/'+itemId+'_v2_facebook');
+ const legacy={...assessed};delete legacy.inputNormalizationVersion;
+ await qualityRef.set(legacy);
+ await editor.assess(uid,{itemId,provider:'facebook',version:2});
+ await editor.assess(uid,{itemId,provider:'facebook',version:2});
+ const history=await qualityRef.collection('history').get();assert.equal(history.size,1);assert.deepEqual(history.docs[0].data(),legacy);
+ assert.equal((await qualityRef.get()).data().inputNormalizationVersion,2);
+
  await qualityRef.update({readyToPublish:false,reviewChecks:{passed:false,blockers:['Keep the service-concept disclosure with this image.']}});
  const rechecked=await store.preview(uid,{itemId,provider:'facebook'});
  assert.equal(rechecked.reviewedPost.quality.readyToPublish,true);assert.deepEqual(rechecked.reviewedPost.quality.reviewChecks.blockers,[]);

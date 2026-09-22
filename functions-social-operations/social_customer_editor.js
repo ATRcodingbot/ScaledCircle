@@ -71,14 +71,19 @@ function createEditor({db,now=Date.now,enabledUids=[],planEntitled=false}) {
         try{await require('./social_customer_media').assertDeliveryAuthority({db,read:ref=>tx.get(ref),uid,revision});}catch{mediaAuthorityValid=false;}
         const assessment=social.assessScheduledContent({businessUid:uid,contentItemId:input.itemId,
           versionRecord:{...current,variants:current.variants.filter(v=>v.provider===input.provider)},
-          businessContext:{businessName:profile.businessName,services:profile.services||profile.servicesOffered||[],
-            geography:geography.length?geography:[profile.serviceArea,profile.city,profile.county].filter(v=>typeof v==='string')},
+          businessContext:social.assessmentContext(profile,geography),
           recentVariants:recent.docs.filter(d=>!d.id.startsWith(input.itemId+'_v')).flatMap(d=>d.data().variants||[]),now:now()});
         const reviewChecks=require('./social_customer_quality').reviewChecks({variant,revision,mediaAuthorityValid,
           recentVariants:recent.docs.filter(d=>!d.id.startsWith(input.itemId+'_v')).flatMap(d=>d.data().variants||[])});
         const result={...assessment,advisoryReady:assessment.readyToPublish,readyToPublish:reviewChecks.passed,reviewChecks,
           provider:input.provider,versionId:`${input.itemId}_v${current.version}`,providerMutationsEnabled:false};
-        tx.set(db.doc(`socialContentQualityAssessments/${input.itemId}_v${current.version}_${input.provider}`),result);
+        const qualityRef=db.doc(`socialContentQualityAssessments/${input.itemId}_v${current.version}_${input.provider}`);
+        const previous=(await tx.get(qualityRef)).data();
+        if(previous && previous.inputNormalizationVersion!==result.inputNormalizationVersion){
+          const historyId=require('node:crypto').createHash('sha256').update(JSON.stringify(previous)).digest('hex');
+          tx.set(qualityRef.collection('history').doc(historyId),previous);
+        }
+        tx.set(qualityRef,result);
         return result;
       });
     },

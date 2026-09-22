@@ -87,8 +87,10 @@ function discoveryRecommendation({variant, services = [], geography = [], brandT
     ...list(geography, 6, 100)].map((item) => item.toLowerCase()))];
   const copy = text(variant?.copy, 5000).toLowerCase();
   const present = naturalTerms.filter((term) => copy.includes(term));
-  const hashtagCount = list(variant?.hashtags, 30, 80).length;
+  // Meta publishes copy verbatim; detached hashtag metadata is not sent.
+  const publishedTags = [...copy.matchAll(/(?:^|[^\p{L}\p{N}_])#([\p{L}\p{N}_]+)/gu)].map(m => m[1]);
   const provider = text(variant?.provider, 40).toLowerCase();
+  const hashtagCount = ["facebook", "instagram"].includes(provider) ? new Set(publishedTags).size : list(variant?.hashtags, 30, 80).length;
   const hashtagUseful = provider === "instagram" || provider === "x" || provider === "youtube";
   const keywordScore = naturalTerms.length ? clampScore(45 +
     Math.min(55, (present.length / Math.min(naturalTerms.length, 4)) * 55)) : null;
@@ -158,6 +160,21 @@ function availablePostActions({capability, published = true}) {
     explicitBusinessApprovalRequired: true};
 }
 
+// Normalize maintained profile inputs without turning strategy themes into
+// required public wording or inferring a service boundary from an audience.
+function assessmentContext(profile = {}, geography = []) {
+  const internal = profile.internalSocialContext?.source === 'owner_reviewed_meta_strategy';
+  const suppliedServices = profile.services || profile.servicesOffered || profile.selectedServices || [];
+  const planningTopics = new Set(['product explanation', 'business value', 'business and scaler roles']);
+  const services = internal ? list(suppliedServices, 12, 120).filter(s => !planningTopics.has(s.toLowerCase())) : suppliedServices;
+  const areas = geography.length ? geography : [profile.serviceArea, profile.city, profile.county].filter(v => typeof v === 'string' && v.trim());
+  return {businessName: profile.businessName,
+    services,
+    geography: areas, servicesArePlanningTopics: internal && !services.length,
+    geographyUnavailable: internal && !areas.length,
+    limitations: internal ? ['Planning themes are not literal service keywords', ...(!areas.length ? ['No explicit geographic scoring terms; audience is not a saved service boundary'] : [])] : []};
+}
+
 function assessScheduledContent({businessUid, contentItemId, versionRecord, businessContext = {},
   recentVariants = [], performanceEvidence = [], timingEvidence = {}, now = Date.now()}) {
   if (!versionRecord || versionRecord.businessUid !== businessUid) {
@@ -177,9 +194,9 @@ function assessScheduledContent({businessUid, contentItemId, versionRecord, busi
     const scores = {
       businessRelevance: businessContext.businessName &&
         copy.toLowerCase().includes(text(businessContext.businessName, 240).toLowerCase()) ? 95 : 70,
-      serviceRelevance: list(businessContext.services, 12, 120)
+      serviceRelevance: businessContext.servicesArePlanningTopics ? null : list(businessContext.services, 12, 120)
         .some((service) => copy.toLowerCase().includes(service.toLowerCase())) ? 95 : 62,
-      localRelevance: list(businessContext.geography, 8, 120)
+      localRelevance: businessContext.geographyUnavailable ? null : list(businessContext.geography, 8, 120)
         .some((area) => copy.toLowerCase().includes(area.toLowerCase())) ? 92 : 65,
       hookStrength: clampScore(copy.split(/\s+/).slice(0, 16).join(" ").length >= 35 ? 82 : 58),
       copyQuality: clampScore(copy.length >= 55 && copy.length <= 1800 ? 85 : 62),
@@ -212,7 +229,8 @@ function assessScheduledContent({businessUid, contentItemId, versionRecord, busi
     "replace" : variantAssessments.some((item) => item.recommendation === "improve") ?
       "improve" : variantAssessments.some((item) => item.recommendation === "reschedule") ?
         "reschedule" : "keep";
-  return {schemaVersion: CONTENT_QUALITY_VERSION, businessUid, contentItemId,
+  return {schemaVersion: CONTENT_QUALITY_VERSION, inputNormalizationVersion: 2, businessUid, contentItemId,
+    contextLimitations: businessContext.limitations || [],
     contentVersion: Number(versionRecord.version), score, qualityBand: qualityBand(score),
     recommendation, readyToPublish: score >= 75 && recommendation === "keep",
     variantAssessments, immutableSourceHash: text(versionRecord.contentHash, 64) || null,
@@ -657,7 +675,7 @@ module.exports = {SCHEMA_VERSION, PLAN_VERSION, CONTENT_VERSION, PERFORMANCE_VER
   approveContentVersion, publishJob, transitionPublishJob, normalizePerformance,
   weeklyLearning, createEmailContentPlan, adAccountHealth, repetitionAssessment,
   discoveryRecommendation, bestTimeRecommendation, postCapabilityProjection,
-  availablePostActions, assessScheduledContent, ratePastPost, replacementProposal,
+  availablePostActions, assessmentContext, assessScheduledContent, ratePastPost, replacementProposal,
   contentHealthProjection, qualityLearningComparison, qualityBand,
   SocialProviderAdapter, MockSocialProviderAdapter,
   mockProviderAdapters};
