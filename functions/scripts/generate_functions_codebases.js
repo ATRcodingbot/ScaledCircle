@@ -148,6 +148,7 @@ const creativeMediaExports = new Set([
   "getGeneratedServiceVisualWorkspace", "requestGeneratedServiceVisual",
   "processGeneratedServiceVisual", "approveGeneratedServiceVisual",
   "runManagedSocialVisualGenerationV1",
+  "enrollCreativeOperatingGrantV1", "researchPilotAuthorityV1",
   "rejectGeneratedServiceVisual", "getGeneratedMediaOperations",
   "updateGeneratedMediaSafetyConfiguration",
 ]);
@@ -336,6 +337,12 @@ function transformIndex(mode) {
     });
     return declarations.length ? [{...statement, declarations}] : [];
   });
+  // Legacy uses the same dependency closure as the smaller codebases. Removing
+  // migrated exports must also remove their unused initializers, otherwise an
+  // old generation initializer can reference a deliberately excluded import.
+  if (mode === "legacy") {
+    selectedProgram(ast, new Set(ast.program.body.map(exportedName).filter(Boolean)));
+  }
   return `${generator(ast, {
     comments: true,
     retainLines: mode !== "campaign-funding",
