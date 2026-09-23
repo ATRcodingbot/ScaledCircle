@@ -73,6 +73,8 @@ for(const pathname of ['/','/pricing']) for(const ref of ['abc234','invalid-secr
         self.assertIn('Available Business plans', documents()['/pricing'])
         self.assertIn('Coming Soon for new purchases', documents()['/pricing'])
         self.assertIn('residential photos are not required', documents()['/scalers'])
+        self.assertIn('Maryland Scaler registration is open.', documents()['/scalers'])
+        self.assertIn('Paid assignments remain unavailable until the current activation hold is cleared.', documents()['/scalers'])
 
     def test_staging_indexing_and_truthful_conversion_paths(self):
         home = documents(staging=True)['/']
