@@ -196,6 +196,9 @@ void main() {
           100,
           scrollable: find.byType(Scrollable).last,
         );
+        await tester.pumpAndSettle();
+        await tester.ensureVisible(find.text('Preview').first);
+        await tester.pumpAndSettle();
         await tester.tap(find.text('Preview').first);
         await tester.pumpAndSettle();
         expect(find.text('Post 1 of 2'), findsOneWidget);

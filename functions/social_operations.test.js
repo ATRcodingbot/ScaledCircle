@@ -261,7 +261,8 @@ test("repetition detection flags repeated copy, CTA, and media before scheduling
 
 test("discovery guidance remains bounded and platform-specific", () => {
   const instagram = social.discoveryRecommendation({variant: {provider: "instagram",
-    copy: "Maryland contractors can connect landing pages to tracked QR response.",
+    copy: "Maryland contractors can connect landing pages to tracked QR response. " +
+      Array.from({length: 18}, (_, index) => `#tag${index}`).join(' '),
     hashtags: Array.from({length: 18}, (_, index) => `tag${index}`)},
   services: ["Landing Pages"], geography: ["Maryland"], brandTerms: ["ScaledCircle"]});
   assert.equal(instagram.presentKeywords.includes("maryland"), true);

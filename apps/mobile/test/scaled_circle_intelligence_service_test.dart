@@ -62,8 +62,13 @@ void main() {
   });
 
   test('Weather UI preserves facts and shows separate AI interpretation', () {
-    final source = File(
+    final alerts = File(
       'lib/screens/business/weather_alerts_screen.dart',
+    ).readAsStringSync();
+    expect(alerts, contains('Optional Business weather planning analysis'));
+    expect(alerts, contains('WeatherOpportunityAnalysisScreen'));
+    final source = File(
+      'lib/screens/business/weather_opportunity_analysis_screen.dart',
     ).readAsStringSync();
     expect(source, contains('Ask AI About This Weather'));
     expect(source, contains('AI OPPORTUNITY ANALYSIS'));

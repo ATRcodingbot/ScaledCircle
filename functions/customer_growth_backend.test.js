@@ -8,7 +8,8 @@ let service,reads;
 const auth={getUser:async uid=>({uid,email:uid+'@example.test',disabled:uid==='disabled',emailVerified:uid!=='unverified'})};
 const call=(operation='load',uid='owner',businessId='owner',input)=>service.execute({auth:uid?{uid}:null,data:{operation,businessId,...(input?{input}:{})}});
 beforeEach(async()=>{
- for(const c of ['customerGrowthProductGrants','customerResearchSchedules','entitlementAuditEvents','users','businessWorkspaces','businessSubscriptions','legalConsents','discoveryPreferences','businessGrowthProfiles','agentProfiles','agentHealth','agentApprovals','agentProspects','agentCrmProspects','agentActions','agentRuns','agentReports','agentObservations','agentCommunicationPreferences','notifications','wallets','outboundEmailJobs'])await db.recursiveDelete(db.collection(c));
+ // This loopback-only suite owns its dedicated demo project; include newly added fixture collections.
+ for(const collection of await db.listCollections())await db.recursiveDelete(collection);
  await db.doc('users/owner').set({role:'business',active:true,name:'Example Builder'});
  await db.doc('businessSubscriptions/owner').set({planId:'managed_growth',status:'active',source:'stripe',addons:['lead_generation_research'],productEntitlements:['lead_generation_research'],expiresAt:Timestamp.fromMillis(Date.now()+86400000)});
  await db.doc('businessGrowthProfiles/owner').set({businessUid:'owner',businessName:'Example Builder',servicesOffered:['decks','fences'],plannedAdBudget:'$0'});
@@ -135,6 +136,21 @@ test('normal paid Lead purchasers enroll without invitation; Managed Growth alon
  ]){await ref.update(invalid);await assert.rejects(call(),/subscription|Reactivate membership/);}
 });
 
+test('Growth performance retains current-account freshness and collection failures',async()=>{
+ await call('initialize');
+ const connection=db.doc('socialConnections/owner/providers/facebook');
+ await connection.set({providerUserId:'current',status:'connected_write',metricCollectionHealth:'error',lastMetricAttemptAt:'2026-09-22T12:00:00Z'});
+ await db.doc('socialPerformanceSnapshots/old-account').set({businessUid:'owner',schemaVersion:'MetaBaselineV1',provider:'facebook',providerAccountId:'previous',observedAt:new Date().toISOString(),metrics:{followers:{value:500}}});
+ let view=(await call()).social.performance.platforms.find(x=>x.provider==='facebook');
+ assert.equal(view.freshness,'unavailable');assert.equal(view.currentAt,null);assert.equal(view.metrics[0].current,null);
+ await db.doc('socialPerformanceSnapshots/current-account').set({businessUid:'owner',schemaVersion:'MetaBaselineV1',provider:'facebook',providerAccountId:'current',observedAt:'2020-01-01T00:00:00Z',metrics:{followers:{value:0}}});
+ await connection.update({metricCollectionHealth:'healthy'});
+ view=(await call()).social.performance.platforms.find(x=>x.provider==='facebook');
+ assert.equal(view.freshness,'stale');assert.equal(view.metrics[0].current,0);assert.equal(view.metrics[0].change,null);
+ await connection.update({status:'reauth_required'});
+ assert.equal((await call()).social.performance.platforms.find(x=>x.provider==='facebook').freshness,'permission_limited');
+});
+
 test('Growth uses exact Social plan approval version and preserves all source records',async()=>{
  await call('initialize');
  const ref=db.doc('socialContentPlans/approved-social');
@@ -209,7 +225,7 @@ test('customer report email is owner-bound, preference-controlled and deduplicat
  const fs=require('node:fs'),vm=require('node:vm'),path=require('node:path');
  const source=fs.readFileSync(path.join(__dirname,'../functions-agentic-growth/index.js'),'utf8');
  const start=source.indexOf('exports.queueCustomerGrowthReportEmailV1 =');
- const end=source.indexOf('\nfunction growthService()',start);
+ const end=source.indexOf('\nfunction growthService(',start);
  assert.ok(start>=0&&end>start);const handlers={};
  vm.runInNewContext(source.slice(start,end),{exports:handlers,onDocumentCreated:(_,fn)=>fn,
   getAuth:()=>auth,db:new Proxy(db,{get:(t,k)=>k==='runTransaction'?fn=>t.runTransaction(tx=>Promise.resolve(fn(tx))):typeof t[k]==='function'?t[k].bind(t):t[k]}),FieldValue,process:{env:{GROWTH_CUSTOMER_BETA_UIDS:'owner',CUSTOMER_GROWTH_DOGFOOD_BUSINESS_UID:'owner'}},

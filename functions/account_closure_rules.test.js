@@ -4,8 +4,9 @@ const {initializeTestEnvironment,assertSucceeds,assertFails}=require('@firebase/
 const {doc,setDoc,getDoc}=require('firebase/firestore');
 const {ref,uploadBytes,getBytes}=require('firebase/storage');
 let env;
-before(async()=>{env=await initializeTestEnvironment({projectId:'demo-referral-authority',
-  firestore:{rules:fs.readFileSync(process.env.CLOSURE_PRODUCTION_RULES ? '../firestore.rules' : '../firestore.staging.rules','utf8')},storage:{rules:fs.readFileSync(process.env.CLOSURE_PRODUCTION_RULES ? '../storage.rules' : '../storage.staging.rules','utf8')}});});
+// Storage cross-service lookups use the emulator launch project namespace.
+before(async()=>{env=await initializeTestEnvironment({projectId:process.env.GCLOUD_PROJECT||'demo-referral-authority',
+  firestore:{rules:fs.readFileSync(process.env.CLOSURE_PRODUCTION_RULES ? '../firestore.rules' : '../firestore.staging.rules','utf8')},storage:{rules:fs.readFileSync(process.env.CLOSURE_PRODUCTION_RULES ? '../storage.rules' : '../storage.staging.rules','utf8')}});await env.clearFirestore();await env.clearStorage();});
 after(async()=>env.cleanup());
 test('closing/deleted UID and a fresh different UID cannot use stale identity to read old Wallet or private files',async()=>{
   await env.withSecurityRulesDisabled(async c=>{

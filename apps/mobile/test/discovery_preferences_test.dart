@@ -110,7 +110,7 @@ void main() {
     ).readAsStringSync();
     expect(
       weather,
-      contains('Set your service area to get relevant Weather opportunities'),
+      contains('Weather coverage and email preferences'),
     );
   });
 }

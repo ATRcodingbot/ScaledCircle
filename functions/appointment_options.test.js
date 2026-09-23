@@ -10,9 +10,10 @@ test('spring gap absent and autumn ambiguous times labelled with distinct offset
 test('Business timezone determines day independently of device/UTC date',()=>{assert.equal(p.dateKey(Date.parse('2026-09-22T02:00Z'),'America/New_York'),'2026-09-21');});
 test('confirmed, tentative, expired and canceled; buffers and unassigned Business capacity',()=>{
  const t=Date.parse('2026-09-22T15:00Z');const base={id:'a',title:'Busy',startMs:t,endMs:t+1800000,assignedPeople:[],status:'tentative',emailLink:{bufferMinutes:15}};
- const candidate={startMs:t-600000,endMs:t,assignedPeople:['user:one']};assert.equal(p.conflicts(candidate,[base]).length,1);
- assert.equal(p.conflicts(candidate,[{...base,status:'canceled'}]).length,0);
- assert.equal(p.conflicts(candidate,[{...base,emailLink:{expiresAtMs:1}}]).length,0);
+ const now=t-86400000;
+ const candidate={startMs:t-600000,endMs:t,assignedPeople:['user:one']};assert.equal(p.conflicts(candidate,[base],x=>x,now).length,1);
+ assert.equal(p.conflicts(candidate,[{...base,status:'canceled'}],x=>x,now).length,0);
+ assert.equal(p.conflicts(candidate,[{...base,emailLink:{expiresAtMs:1}}],x=>x,now).length,0);
  const view=make('2026-09-22',[base,{...base,id:'b',startMs:t+7200000,endMs:t+9000000,status:'scheduled'},{...base,id:'c',status:'canceled'}]);
  assert.equal(view.agenda.length,2);assert.match(view.agenda[0].status,/Tentative/);assert.match(view.agenda[1].status,/Confirmed/);assert.ok(view.datesWithAppointments.includes('2026-09-22'));assert.ok(!view.slots.some(x=>x.startMs===t));
 });

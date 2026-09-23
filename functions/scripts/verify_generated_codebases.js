@@ -201,6 +201,7 @@ assert.deepEqual(Object.keys(landingPage).sort(), [
 assert.deepEqual(Object.keys(creativeMedia).sort(), [
   "approveBusinessMediaRevision", "approveGeneratedServiceVisual",
   "createBusinessMediaUploadIntent", "finalizeBusinessMediaUpload",
+  "enrollCreativeOperatingGrantV1", "researchPilotAuthorityV1",
   "getBusinessMediaWorkspace", "getGeneratedMediaOperations",
   "getGeneratedServiceVisualWorkspace", "processGeneratedServiceVisual",
   "rejectBusinessMediaRevision", "rejectGeneratedServiceVisual",

@@ -47,6 +47,7 @@ try {
   Copy-Item -LiteralPath (Join-Path $canvasKitSource 'canvaskit.wasm') -Destination $canvasKitTarget
 
   $arguments = @(
+    "--packages=$(Join-Path $FlutterSdk 'packages\flutter_tools\.dart_tool\package_config.json')",
     $flutterSnapshot,
     'test',
     $TestFile,

@@ -113,7 +113,7 @@ void main() {
           findsOneWidget,
         );
         expect(
-          find.textContaining('This access does not authorize messages'),
+          find.textContaining('Research does not authorize outreach.'),
           findsOneWidget,
         );
         expect(tester.takeException(), isNull);

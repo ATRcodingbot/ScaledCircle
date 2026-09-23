@@ -18,4 +18,4 @@ test('immature or missing evidence holds without inventing failure, confirmed de
  assert.equal(r.decision,'HOLD');assert.equal(r.matureProspects,1);assert.equal(r.noResponseYet,1);assert.equal(r.uncertainConversations,1);assert.equal(r.humanReplyConversations,0);
  assert.equal(learning.priority({industry:'x'},[{feature:'industry',value:'x',sent:6,noReplyAfterFiveDays:6,negative:0,positive:0}]),0);
 });
-test('Growth uses identical workspace-local evidence rules',()=>assert.equal(fs.readFileSync('functions-business-email/growth_learning.js','utf8'),fs.readFileSync('functions-agentic-growth/mailbox_growth_learning.js','utf8')));
+test('Growth uses identical workspace-local evidence rules',()=>assert.equal(fs.readFileSync(require.resolve('../functions-business-email/growth_learning.js'),'utf8'),fs.readFileSync(require.resolve('../functions-agentic-growth/mailbox_growth_learning.js'),'utf8')));
