@@ -1,3 +1,4 @@
+import 'package:flutter_app/widgets/map_source_credit.dart';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -197,200 +198,206 @@ class _SmartZoneGeometryMapState extends State<SmartZoneGeometryMap> {
                       widget.mapKey ??
                       const Key('smart-zone-authoritative-map'),
                   height: mapHeight,
-                  child: Stack(
-                    children: [
-                      FlutterMap(
-                        options: MapOptions(
-                          initialCenter: operationalPoints.first,
-                          initialZoom: 14,
-                          initialCameraFit: CameraFit.bounds(
-                            bounds: LatLngBounds.fromPoints(operationalPoints),
-                            padding: EdgeInsets.all(cameraPadding),
-                            maxZoom: validZones.length == 1
-                                ? 17
-                                : validZones.length <= 5
-                                ? 16.5
-                                : 15.5,
+                  child: MapAttributionFrame(
+                    child: Stack(
+                      children: [
+                        FlutterMap(
+                          options: MapOptions(
+                            initialCenter: operationalPoints.first,
+                            initialZoom: 14,
+                            initialCameraFit: CameraFit.bounds(
+                              bounds: LatLngBounds.fromPoints(
+                                operationalPoints,
+                              ),
+                              padding: EdgeInsets.all(cameraPadding),
+                              maxZoom: validZones.length == 1
+                                  ? 17
+                                  : validZones.length <= 5
+                                  ? 16.5
+                                  : 15.5,
+                            ),
+                            interactionOptions: InteractionOptions(
+                              flags: widget.interactive
+                                  ? InteractiveFlag.all
+                                  : InteractiveFlag.none,
+                            ),
                           ),
-                          interactionOptions: InteractionOptions(
-                            flags: widget.interactive
-                                ? InteractiveFlag.all
-                                : InteractiveFlag.none,
-                          ),
-                        ),
-                        children: [
-                          TileLayer(
-                            urlTemplate:
-                                'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                            userAgentPackageName: 'com.scaledcircle.app',
-                          ),
-                          if (widget.selectedTerritory.length >= 3)
+                          children: [
+                            TileLayer(
+                              urlTemplate:
+                                  'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                              userAgentPackageName: 'com.scaledcircle.app',
+                            ),
+                            if (widget.selectedTerritory.length >= 3)
+                              PolygonLayer(
+                                polygons: [
+                                  Polygon(
+                                    points: widget.selectedTerritory,
+                                    color: const Color(
+                                      0xFF28485F,
+                                    ).withValues(alpha: 0.035),
+                                    borderColor: const Color(0xFF526C81),
+                                    borderStrokeWidth: 2,
+                                    pattern: StrokePattern.dashed(
+                                      segments: [8, 6],
+                                    ),
+                                  ),
+                                ],
+                              ),
                             PolygonLayer(
-                              polygons: [
-                                Polygon(
-                                  points: widget.selectedTerritory,
-                                  color: const Color(
-                                    0xFF28485F,
-                                  ).withValues(alpha: 0.035),
-                                  borderColor: const Color(0xFF526C81),
-                                  borderStrokeWidth: 2,
-                                  pattern: StrokePattern.dashed(
-                                    segments: [8, 6],
-                                  ),
-                                ),
-                              ],
-                            ),
-                          PolygonLayer(
-                            polygons: validZones
-                                .map((zone) {
-                                  final color = smartZoneColor(
-                                    zone.identity.styleKey - 1,
-                                  );
-                                  final active = selected == zone.index;
-                                  return Polygon(
-                                    points: zone.points,
-                                    color: color.withValues(
-                                      alpha: active ? 0.30 : 0.16,
-                                    ),
-                                    borderColor: color,
-                                    borderStrokeWidth: active ? 5 : 3,
-                                  );
-                                })
-                                .toList(growable: false),
-                          ),
-                          PolylineLayer(
-                            polylines: [
-                              for (final zone in validZones)
-                                if (widget.zones[zone.index]['executionRoute']
-                                    is Map)
-                                  Polyline(
-                                    points: smartZonePoints(
-                                      widget.zones[zone
-                                          .index]['executionRoute']['centerline'],
-                                    ),
-                                    color: smartZoneColor(
+                              polygons: validZones
+                                  .map((zone) {
+                                    final color = smartZoneColor(
                                       zone.identity.styleKey - 1,
-                                    ),
-                                    strokeWidth: 4,
-                                  ),
-                            ],
-                          ),
-                          MarkerLayer(
-                            markers: validZones
-                                .asMap()
-                                .entries
-                                .map((entry) {
-                                  final markerPosition = entry.key;
-                                  final zone = entry.value;
-                                  final point = _smartZoneCentroid(zone.points);
-                                  final color = smartZoneColor(
-                                    zone.identity.styleKey - 1,
-                                  );
-                                  final offset = markerOffsets[markerPosition];
-                                  final active = selected == zone.index;
-                                  return Marker(
-                                    point: point,
-                                    width: 112,
-                                    height: 112,
-                                    child: Semantics(
-                                      button: true,
-                                      label: 'Select ${zone.identity.label}',
-                                      child: Stack(
-                                        alignment: Alignment.center,
-                                        children: [
-                                          if (offset != Offset.zero)
-                                            CustomPaint(
-                                              size: const Size(112, 112),
-                                              painter: _MarkerConnectorPainter(
-                                                offset,
-                                                color,
-                                              ),
-                                            ),
-                                          Transform.translate(
-                                            offset: offset,
-                                            child: GestureDetector(
-                                              key: Key(
-                                                'smart-zone-marker-${zone.index}',
-                                              ),
-                                              onTap: () => _select(zone.index),
-                                              child: AnimatedContainer(
-                                                duration: const Duration(
-                                                  milliseconds: 160,
-                                                ),
-                                                width: active ? 42 : 34,
-                                                height: active ? 42 : 34,
-                                                alignment: Alignment.center,
-                                                decoration: BoxDecoration(
-                                                  color: color,
-                                                  shape: BoxShape.circle,
-                                                  border: Border.all(
-                                                    color: Colors.white,
-                                                    width: active ? 4 : 3,
-                                                  ),
-                                                  boxShadow: const [
-                                                    BoxShadow(
-                                                      color: Colors.black38,
-                                                      blurRadius: 5,
-                                                    ),
-                                                  ],
-                                                ),
-                                                child: Text(
-                                                  '${zone.identity.ordinal}',
-                                                  style: const TextStyle(
-                                                    color: Colors.white,
-                                                    fontWeight: FontWeight.w800,
-                                                  ),
-                                                ),
-                                              ),
-                                            ),
-                                          ),
-                                        ],
+                                    );
+                                    final active = selected == zone.index;
+                                    return Polygon(
+                                      points: zone.points,
+                                      color: color.withValues(
+                                        alpha: active ? 0.30 : 0.16,
                                       ),
+                                      borderColor: color,
+                                      borderStrokeWidth: active ? 5 : 3,
+                                    );
+                                  })
+                                  .toList(growable: false),
+                            ),
+                            PolylineLayer(
+                              polylines: [
+                                for (final zone in validZones)
+                                  if (widget.zones[zone.index]['executionRoute']
+                                      is Map)
+                                    Polyline(
+                                      points: smartZonePoints(
+                                        widget.zones[zone
+                                            .index]['executionRoute']['centerline'],
+                                      ),
+                                      color: smartZoneColor(
+                                        zone.identity.styleKey - 1,
+                                      ),
+                                      strokeWidth: 4,
                                     ),
-                                  );
-                                })
-                                .toList(growable: false),
-                          ),
-                          const RichAttributionWidget(
-                            attributions: [
-                              TextSourceAttribution(
-                                '© OpenStreetMap contributors',
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                      Positioned(
-                        left: 10,
-                        bottom: 10,
-                        child: IgnorePointer(
-                          child: DecoratedBox(
-                            decoration: BoxDecoration(
-                              color: Theme.of(
-                                context,
-                              ).colorScheme.surface.withValues(alpha: 0.92),
-                              borderRadius: BorderRadius.circular(8),
-                              boxShadow: const [
-                                BoxShadow(color: Colors.black26, blurRadius: 4),
                               ],
                             ),
-                            child: const Padding(
-                              padding: EdgeInsets.symmetric(
-                                horizontal: 10,
-                                vertical: 7,
+                            MarkerLayer(
+                              markers: validZones
+                                  .asMap()
+                                  .entries
+                                  .map((entry) {
+                                    final markerPosition = entry.key;
+                                    final zone = entry.value;
+                                    final point = _smartZoneCentroid(
+                                      zone.points,
+                                    );
+                                    final color = smartZoneColor(
+                                      zone.identity.styleKey - 1,
+                                    );
+                                    final offset =
+                                        markerOffsets[markerPosition];
+                                    final active = selected == zone.index;
+                                    return Marker(
+                                      point: point,
+                                      width: 112,
+                                      height: 112,
+                                      child: Semantics(
+                                        button: true,
+                                        label: 'Select ${zone.identity.label}',
+                                        child: Stack(
+                                          alignment: Alignment.center,
+                                          children: [
+                                            if (offset != Offset.zero)
+                                              CustomPaint(
+                                                size: const Size(112, 112),
+                                                painter:
+                                                    _MarkerConnectorPainter(
+                                                      offset,
+                                                      color,
+                                                    ),
+                                              ),
+                                            Transform.translate(
+                                              offset: offset,
+                                              child: GestureDetector(
+                                                key: Key(
+                                                  'smart-zone-marker-${zone.index}',
+                                                ),
+                                                onTap: () =>
+                                                    _select(zone.index),
+                                                child: AnimatedContainer(
+                                                  duration: const Duration(
+                                                    milliseconds: 160,
+                                                  ),
+                                                  width: active ? 42 : 34,
+                                                  height: active ? 42 : 34,
+                                                  alignment: Alignment.center,
+                                                  decoration: BoxDecoration(
+                                                    color: color,
+                                                    shape: BoxShape.circle,
+                                                    border: Border.all(
+                                                      color: Colors.white,
+                                                      width: active ? 4 : 3,
+                                                    ),
+                                                    boxShadow: const [
+                                                      BoxShadow(
+                                                        color: Colors.black38,
+                                                        blurRadius: 5,
+                                                      ),
+                                                    ],
+                                                  ),
+                                                  child: Text(
+                                                    '${zone.identity.ordinal}',
+                                                    style: const TextStyle(
+                                                      color: Colors.white,
+                                                      fontWeight:
+                                                          FontWeight.w800,
+                                                    ),
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    );
+                                  })
+                                  .toList(growable: false),
+                            ),
+                          ],
+                        ),
+                        Positioned(
+                          left: 10,
+                          bottom: 10,
+                          child: IgnorePointer(
+                            child: DecoratedBox(
+                              decoration: BoxDecoration(
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.surface.withValues(alpha: 0.92),
+                                borderRadius: BorderRadius.circular(8),
+                                boxShadow: const [
+                                  BoxShadow(
+                                    color: Colors.black26,
+                                    blurRadius: 4,
+                                  ),
+                                ],
                               ),
-                              child: Text(
-                                'Dashed: selected territory  •  Colored: Scaler Zones',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w700,
+                              child: const Padding(
+                                padding: EdgeInsets.symmetric(
+                                  horizontal: 10,
+                                  vertical: 7,
+                                ),
+                                child: Text(
+                                  'Dashed: selected territory  •  Colored: Scaler Zones',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w700,
+                                  ),
                                 ),
                               ),
                             ),
                           ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
                 if (widget.showZoneSelector)

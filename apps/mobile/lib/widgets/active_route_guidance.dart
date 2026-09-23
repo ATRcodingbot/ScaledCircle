@@ -1,3 +1,4 @@
+import 'package:flutter_app/widgets/map_source_credit.dart';
 import '../models/route_visualization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
@@ -109,95 +110,92 @@ class _ActiveRouteGuidanceState extends State<ActiveRouteGuidance> {
             if (corridor.length >= 3)
               SizedBox(
                 height: 300,
-                child: FlutterMap(
-                  options: MapOptions(
-                    initialCameraFit: CameraFit.bounds(
-                      bounds: LatLngBounds.fromPoints(corridor),
-                      padding: const EdgeInsets.all(24),
-                      maxZoom: 18,
-                    ),
-                  ),
-                  children: [
-                    if (tilesEnabled)
-                      TileLayer(
-                        urlTemplate:
-                            'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                        userAgentPackageName: 'com.scaledcircle.app',
+                child: MapAttributionFrame(
+                  child: FlutterMap(
+                    options: MapOptions(
+                      initialCameraFit: CameraFit.bounds(
+                        bounds: LatLngBounds.fromPoints(corridor),
+                        padding: const EdgeInsets.all(24),
+                        maxZoom: 18,
                       ),
-                    PolygonLayer(
-                      polygons: [
-                        Polygon(
-                          points: corridor,
-                          color: Colors.blue.withValues(alpha: .12),
-                          borderColor: Colors.blue,
-                          borderStrokeWidth: 2,
+                    ),
+                    children: [
+                      if (tilesEnabled)
+                        TileLayer(
+                          urlTemplate:
+                              'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                          userAgentPackageName: 'com.scaledcircle.app',
                         ),
-                      ],
-                    ),
-                    PolylineLayer(
-                      polylines: [
-                        if (line.length > 1)
-                          Polyline(
-                            points: line,
-                            color: Colors.blue,
-                            strokeWidth: 4,
+                      PolygonLayer(
+                        polygons: [
+                          Polygon(
+                            points: corridor,
+                            color: Colors.blue.withValues(alpha: .12),
+                            borderColor: Colors.blue,
+                            borderStrokeWidth: 2,
                           ),
-                        if (walked.length > 1)
-                          Polyline(
-                            points: walked,
-                            color: Colors.green,
-                            strokeWidth: 4,
-                          ),
-                      ],
-                    ),
-                    MarkerLayer(
-                      markers: [
-                        if (line.isNotEmpty)
-                          Marker(
-                            point: line.first,
-                            child: const Tooltip(
-                              message: 'Start / end area',
-                              child: Icon(Icons.flag, color: Colors.blue),
+                        ],
+                      ),
+                      PolylineLayer(
+                        polylines: [
+                          if (line.length > 1)
+                            Polyline(
+                              points: line,
+                              color: Colors.blue,
+                              strokeWidth: 4,
                             ),
-                          ),
-                        for (final checkpoint
-                            in (automaticGps ? const [] : checkpoints)
-                                .whereType<Map>())
-                          if (routeCoordinates([
-                            checkpoint['position'],
-                          ]).isNotEmpty)
+                          if (walked.length > 1)
+                            Polyline(
+                              points: walked,
+                              color: Colors.green,
+                              strokeWidth: 4,
+                            ),
+                        ],
+                      ),
+                      MarkerLayer(
+                        markers: [
+                          if (line.isNotEmpty)
                             Marker(
-                              point: routeCoordinates([
-                                checkpoint['position'],
-                              ]).first,
-                              child: Tooltip(
-                                message:
-                                    checkpoint['label']?.toString() ??
-                                    (automaticGps
-                                        ? 'Route waypoint'
-                                        : 'GPS checkpoint'),
-                                child: const Icon(
-                                  Icons.location_on,
-                                  color: Colors.purple,
-                                ),
+                              point: line.first,
+                              child: const Tooltip(
+                                message: 'Start / end area',
+                                child: Icon(Icons.flag, color: Colors.blue),
                               ),
                             ),
-                        if (current != null)
-                          Marker(
-                            point: current,
-                            child: const Icon(
-                              Icons.my_location,
-                              color: Colors.black,
+                          for (final checkpoint
+                              in (automaticGps ? const [] : checkpoints)
+                                  .whereType<Map>())
+                            if (routeCoordinates([
+                              checkpoint['position'],
+                            ]).isNotEmpty)
+                              Marker(
+                                point: routeCoordinates([
+                                  checkpoint['position'],
+                                ]).first,
+                                child: Tooltip(
+                                  message:
+                                      checkpoint['label']?.toString() ??
+                                      (automaticGps
+                                          ? 'Route waypoint'
+                                          : 'GPS checkpoint'),
+                                  child: const Icon(
+                                    Icons.location_on,
+                                    color: Colors.purple,
+                                  ),
+                                ),
+                              ),
+                          if (current != null)
+                            Marker(
+                              point: current,
+                              child: const Icon(
+                                Icons.my_location,
+                                color: Colors.black,
+                              ),
                             ),
-                          ),
-                      ],
-                    ),
-                    const RichAttributionWidget(
-                      attributions: [
-                        TextSourceAttribution('OpenStreetMap contributors'),
-                      ],
-                    ),
-                  ],
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
               ),
             Text(

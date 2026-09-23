@@ -1,3 +1,4 @@
+import 'package:flutter_app/widgets/map_source_credit.dart';
 import 'package:flutter_app/navigation/authenticated_app_bar.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
@@ -87,59 +88,58 @@ class _ServiceAreaMapPickerState extends State<ServiceAreaMapPicker> {
             ),
           ),
           Expanded(
-            child: FlutterMap(
-              options: MapOptions(
-                initialCenter:
-                    widget.initialCenter ??
-                    (_points.isEmpty ? _maryland : _points.first),
-                initialZoom: widget.initialCenter == null ? 8 : 10,
-                onTap: _tap,
-              ),
-              children: [
-                TileLayer(
-                  urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                  userAgentPackageName: 'com.scaledcircle.app',
+            child: MapAttributionFrame(
+              additionalCredit: 'Boundaries: Nominatim / U.S. Census',
+              child: FlutterMap(
+                options: MapOptions(
+                  initialCenter:
+                      widget.initialCenter ??
+                      (_points.isEmpty ? _maryland : _points.first),
+                  initialZoom: widget.initialCenter == null ? 8 : 10,
+                  onTap: _tap,
                 ),
-                const RichAttributionWidget(
-                  attributions: [
-                    TextSourceAttribution('© OpenStreetMap contributors'),
-                    TextSourceAttribution(
-                      'Boundaries: Nominatim / U.S. Census',
-                    ),
-                  ],
-                ),
-                if (_points.length >= 3)
-                  PolygonLayer(
-                    polygons:
-                        (usingResolvedBoundary &&
-                                    widget.initialGeometryParts.isNotEmpty
-                                ? widget.initialGeometryParts
-                                : [_points])
-                            .map(
-                              (part) => Polygon(
-                                points: part,
-                                color: const Color(0x3319C7A2),
-                                borderColor: const Color(0xFF19C7A2),
-                                borderStrokeWidth: 3,
-                              ),
-                            )
-                            .toList(),
+                children: [
+                  TileLayer(
+                    urlTemplate:
+                        'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                    userAgentPackageName: 'com.scaledcircle.app',
                   ),
-                MarkerLayer(
-                  markers: _points
-                      .asMap()
-                      .entries
-                      .map(
-                        (entry) => Marker(
-                          point: entry.value,
-                          width: 34,
-                          height: 34,
-                          child: CircleAvatar(child: Text('${entry.key + 1}')),
-                        ),
-                      )
-                      .toList(),
-                ),
-              ],
+
+                  if (_points.length >= 3)
+                    PolygonLayer(
+                      polygons:
+                          (usingResolvedBoundary &&
+                                      widget.initialGeometryParts.isNotEmpty
+                                  ? widget.initialGeometryParts
+                                  : [_points])
+                              .map(
+                                (part) => Polygon(
+                                  points: part,
+                                  color: const Color(0x3319C7A2),
+                                  borderColor: const Color(0xFF19C7A2),
+                                  borderStrokeWidth: 3,
+                                ),
+                              )
+                              .toList(),
+                    ),
+                  MarkerLayer(
+                    markers: _points
+                        .asMap()
+                        .entries
+                        .map(
+                          (entry) => Marker(
+                            point: entry.value,
+                            width: 34,
+                            height: 34,
+                            child: CircleAvatar(
+                              child: Text('${entry.key + 1}'),
+                            ),
+                          ),
+                        )
+                        .toList(),
+                  ),
+                ],
+              ),
             ),
           ),
           SafeArea(

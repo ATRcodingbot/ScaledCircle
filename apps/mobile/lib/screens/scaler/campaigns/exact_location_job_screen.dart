@@ -1,3 +1,4 @@
+import 'package:flutter_app/widgets/map_source_credit.dart';
 import 'package:flutter_app/navigation/authenticated_app_bar.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -692,7 +693,9 @@ class _ExactLocationJobScreenState extends State<ExactLocationJobScreen> {
       if (eventLocations.isEmpty || missingProof) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Event GPS verification is required before submission.'),
+            content: Text(
+              'Event GPS verification is required before submission.',
+            ),
           ),
         );
 
@@ -747,28 +750,30 @@ class _ExactLocationJobScreenState extends State<ExactLocationJobScreen> {
       height: 190,
       child: ClipRRect(
         borderRadius: BorderRadius.circular(12),
-        child: FlutterMap(
-          options: MapOptions(initialCenter: point, initialZoom: 17),
-          children: [
-            TileLayer(
-              urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-              userAgentPackageName: 'com.scaledcircle.app',
-            ),
-            MarkerLayer(
-              markers: [
-                Marker(
-                  point: point,
-                  width: 48,
-                  height: 48,
-                  child: const Icon(
-                    Icons.location_pin,
-                    color: Colors.red,
-                    size: 44,
+        child: MapAttributionFrame(
+          child: FlutterMap(
+            options: MapOptions(initialCenter: point, initialZoom: 17),
+            children: [
+              TileLayer(
+                urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                userAgentPackageName: 'com.scaledcircle.app',
+              ),
+              MarkerLayer(
+                markers: [
+                  Marker(
+                    point: point,
+                    width: 48,
+                    height: 48,
+                    child: const Icon(
+                      Icons.location_pin,
+                      color: Colors.red,
+                      size: 44,
+                    ),
                   ),
-                ),
-              ],
-            ),
-          ],
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -1094,9 +1099,7 @@ class _ExactLocationJobScreenState extends State<ExactLocationJobScreen> {
                             child: CircularProgressIndicator(strokeWidth: 2),
                           )
                         : Icon(
-                            complete
-                                ? Icons.check_circle
-                                : Icons.my_location,
+                            complete ? Icons.check_circle : Icons.my_location,
                           ),
                     label: Text(
                       complete ? 'Event GPS Verified' : 'Verify Event GPS',
@@ -1123,7 +1126,10 @@ class _ExactLocationJobScreenState extends State<ExactLocationJobScreen> {
 
     if (_loadingCompletion) {
       return Scaffold(
-        appBar: AuthenticatedAppBar(title: Text(_screenTitle), centerTitle: true),
+        appBar: AuthenticatedAppBar(
+          title: Text(_screenTitle),
+          centerTitle: true,
+        ),
         body: const Center(child: CircularProgressIndicator()),
       );
     }

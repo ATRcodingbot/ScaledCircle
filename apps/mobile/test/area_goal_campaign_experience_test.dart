@@ -115,7 +115,8 @@ void main() {
       expect(field, contains('onFieldSubmitted: (_) => _search()'));
       expect(field, contains('onPressed: widget.enabled ? _search : null'));
       expect(field, isNot(contains('Timer(')));
-      expect(field, contains('© OpenStreetMap contributors • Nominatim'));
+      expect(field, contains('MapSourceCredit('));
+      expect(field, contains("additionalCredit: 'Search: Nominatim'"));
     },
   );
 

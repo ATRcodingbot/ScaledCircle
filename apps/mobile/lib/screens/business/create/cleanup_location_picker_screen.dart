@@ -1,3 +1,4 @@
+import 'package:flutter_app/widgets/map_source_credit.dart';
 import 'package:flutter_app/navigation/authenticated_app_bar.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
@@ -73,100 +74,102 @@ class _CleanupLocationPickerScreenState
     return Scaffold(
       appBar: AuthenticatedAppBar(title: const Text("Select Cleanup Location")),
 
-      body: Stack(
-        children: [
-          FlutterMap(
-            mapController: _mapController,
+      body: MapAttributionFrame(
+        child: Stack(
+          children: [
+            FlutterMap(
+              mapController: _mapController,
 
-            options: MapOptions(
-              initialCenter: _defaultCenter,
+              options: MapOptions(
+                initialCenter: _defaultCenter,
 
-              initialZoom: 14,
+                initialZoom: 14,
 
-              onTap: handleMapTap,
-            ),
-
-            children: [
-              TileLayer(
-                urlTemplate: "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
-
-                userAgentPackageName: "com.scaledcircle.mobile",
+                onTap: handleMapTap,
               ),
 
-              if (_selectedPoint != null)
-                MarkerLayer(
-                  markers: [
-                    Marker(
-                      point: _selectedPoint!,
+              children: [
+                TileLayer(
+                  urlTemplate: "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
 
-                      width: 50,
-
-                      height: 50,
-
-                      child: const Icon(
-                        Icons.location_pin,
-
-                        color: Colors.red,
-
-                        size: 50,
-                      ),
-                    ),
-                  ],
+                  userAgentPackageName: "com.scaledcircle.mobile",
                 ),
-            ],
-          ),
 
-          Positioned(
-            top: 15,
+                if (_selectedPoint != null)
+                  MarkerLayer(
+                    markers: [
+                      Marker(
+                        point: _selectedPoint!,
 
-            left: 15,
+                        width: 50,
 
-            right: 15,
+                        height: 50,
 
-            child: Material(
-              elevation: 5,
+                        child: const Icon(
+                          Icons.location_pin,
 
-              borderRadius: BorderRadius.circular(12),
+                          color: Colors.red,
 
-              child: MappedAddressField(
-                controller: searchController,
-                labelText: 'Job Site Address',
-                hintText: 'Enter address, then search map',
-                onSelected: (suggestion) {
-                  final point = LatLng(
-                    suggestion.latitude,
-                    suggestion.longitude,
-                  );
-                  setState(() {
-                    _selectedPoint = point;
-                    _selectedAddress = suggestion.fullAddress;
-                  });
-                  _mapController.move(point, 17);
-                },
+                          size: 50,
+                        ),
+                      ),
+                    ],
+                  ),
+              ],
+            ),
+
+            Positioned(
+              top: 15,
+
+              left: 15,
+
+              right: 15,
+
+              child: Material(
+                elevation: 5,
+
+                borderRadius: BorderRadius.circular(12),
+
+                child: MappedAddressField(
+                  controller: searchController,
+                  labelText: 'Job Site Address',
+                  hintText: 'Enter address, then search map',
+                  onSelected: (suggestion) {
+                    final point = LatLng(
+                      suggestion.latitude,
+                      suggestion.longitude,
+                    );
+                    setState(() {
+                      _selectedPoint = point;
+                      _selectedAddress = suggestion.fullAddress;
+                    });
+                    _mapController.move(point, 17);
+                  },
+                ),
               ),
             ),
-          ),
 
-          Positioned(
-            bottom: 25,
+            Positioned(
+              bottom: 25,
 
-            left: 20,
+              left: 20,
 
-            right: 20,
+              right: 20,
 
-            child: ElevatedButton.icon(
-              onPressed: confirmLocation,
+              child: ElevatedButton.icon(
+                onPressed: confirmLocation,
 
-              icon: const Icon(Icons.check),
+                icon: const Icon(Icons.check),
 
-              label: const Text("Confirm Location"),
+                label: const Text("Confirm Location"),
 
-              style: ElevatedButton.styleFrom(
-                minimumSize: const Size(double.infinity, 55),
+                style: ElevatedButton.styleFrom(
+                  minimumSize: const Size(double.infinity, 55),
+                ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

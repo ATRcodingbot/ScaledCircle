@@ -1,3 +1,4 @@
+import 'package:flutter_app/widgets/map_source_credit.dart';
 import 'package:flutter_app/navigation/authenticated_app_bar.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
@@ -204,24 +205,26 @@ class _CampaignLocationsScreenState extends State<CampaignLocationsScreen> {
                 body: Column(
                   children: [
                     Expanded(
-                      child: FlutterMap(
-                        options: MapOptions(
-                          initialCenter: initialCenter,
-                          initialZoom: 16,
-                          onTap: (tapPosition, point) {
-                            setPickerState(() {
-                              workingPoint = point;
-                            });
-                          },
-                        ),
-                        children: [
-                          TileLayer(
-                            urlTemplate:
-                                'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                            userAgentPackageName: 'com.scaledcircle.app',
+                      child: MapAttributionFrame(
+                        child: FlutterMap(
+                          options: MapOptions(
+                            initialCenter: initialCenter,
+                            initialZoom: 16,
+                            onTap: (tapPosition, point) {
+                              setPickerState(() {
+                                workingPoint = point;
+                              });
+                            },
                           ),
-                          MarkerLayer(markers: markers),
-                        ],
+                          children: [
+                            TileLayer(
+                              urlTemplate:
+                                  'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                              userAgentPackageName: 'com.scaledcircle.app',
+                            ),
+                            MarkerLayer(markers: markers),
+                          ],
+                        ),
                       ),
                     ),
                     Container(
@@ -429,9 +432,13 @@ class _CampaignLocationsScreenState extends State<CampaignLocationsScreen> {
         return;
       }
 
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('The location could not be confirmed. Check the saved locations before trying again.')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'The location could not be confirmed. Check the saved locations before trying again.',
+          ),
+        ),
+      );
     } finally {
       if (mounted) {
         setState(() {
@@ -557,9 +564,13 @@ class _CampaignLocationsScreenState extends State<CampaignLocationsScreen> {
         return;
       }
 
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Removal could not be confirmed. Check the saved locations before trying again.')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Removal could not be confirmed. Check the saved locations before trying again.',
+          ),
+        ),
+      );
     }
   }
 
@@ -629,7 +640,11 @@ class _CampaignLocationsScreenState extends State<CampaignLocationsScreen> {
       }
 
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Location setup could not be confirmed. Your saved locations are still available. Please try again.')),
+        SnackBar(
+          content: Text(
+            'Location setup could not be confirmed. Your saved locations are still available. Please try again.',
+          ),
+        ),
       );
     } finally {
       if (mounted) {
@@ -785,7 +800,10 @@ class _CampaignLocationsScreenState extends State<CampaignLocationsScreen> {
         final locations = snapshot.data ?? [];
 
         return Scaffold(
-          appBar: AuthenticatedAppBar(title: Text(_screenTitle), centerTitle: true),
+          appBar: AuthenticatedAppBar(
+            title: Text(_screenTitle),
+            centerTitle: true,
+          ),
           body: SafeArea(
             child: ListView(
               padding: const EdgeInsets.all(20),
@@ -855,25 +873,28 @@ class _CampaignLocationsScreenState extends State<CampaignLocationsScreen> {
                           height: 300,
                           child: ClipRRect(
                             borderRadius: BorderRadius.circular(12),
-                            child: FlutterMap(
-                              mapController: _mapController,
-                              options: MapOptions(
-                                initialCenter: _mapCenterForLocations(
-                                  locations,
+                            child: MapAttributionFrame(
+                              child: FlutterMap(
+                                mapController: _mapController,
+                                options: MapOptions(
+                                  initialCenter: _mapCenterForLocations(
+                                    locations,
+                                  ),
+                                  initialZoom: 14,
+                                  onTap: _handleMainMapTap,
                                 ),
-                                initialZoom: 14,
-                                onTap: _handleMainMapTap,
+                                children: [
+                                  TileLayer(
+                                    urlTemplate:
+                                        'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                                    userAgentPackageName:
+                                        'com.scaledcircle.app',
+                                  ),
+                                  MarkerLayer(
+                                    markers: _buildLocationMarkers(locations),
+                                  ),
+                                ],
                               ),
-                              children: [
-                                TileLayer(
-                                  urlTemplate:
-                                      'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                                  userAgentPackageName: 'com.scaledcircle.app',
-                                ),
-                                MarkerLayer(
-                                  markers: _buildLocationMarkers(locations),
-                                ),
-                              ],
                             ),
                           ),
                         ),

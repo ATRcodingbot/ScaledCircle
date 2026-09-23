@@ -1,3 +1,4 @@
+import 'package:flutter_app/widgets/map_source_credit.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
@@ -90,117 +91,95 @@ class AuthenticProductMap extends StatelessWidget {
         child: SizedBox(
           height: height,
           width: double.infinity,
-          child: Stack(
-            children: [
-              Positioned.fill(
-                child: IgnorePointer(
-                  child: FlutterMap(
-                    options: MapOptions(
-                      initialCenter: validatedSmartZoneDemoPosition,
-                      initialZoom: 15.4,
-                      initialCameraFit: CameraFit.bounds(
-                        bounds: LatLngBounds.fromPoints(validatedSmartZoneDemo),
-                        padding: const EdgeInsets.all(28),
-                        maxZoom: 16,
-                      ),
-                      interactionOptions: const InteractionOptions(
-                        flags: InteractiveFlag.none,
-                      ),
-                    ),
-                    children: [
-                      TileLayer(
-                        urlTemplate:
-                            'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                        userAgentPackageName: 'com.scaledcircle.app',
-                      ),
-                      if (!activeWork)
-                        PolygonLayer(
-                          polygons: [
-                            Polygon(
-                              points: validatedSmartZoneDemo,
-                              color: publicMuted.withValues(alpha: .04),
-                              borderColor: const Color(0xFF526C81),
-                              borderStrokeWidth: 6,
-                            ),
-                            Polygon(
-                              points: validatedSmartZoneDemo,
-                              color: businessGreen.withValues(alpha: .08),
-                              borderColor: businessGreen,
-                              borderStrokeWidth: 3.5,
-                            ),
-                          ],
+          child: MapAttributionFrame(
+            child: Stack(
+              children: [
+                Positioned.fill(
+                  child: IgnorePointer(
+                    child: FlutterMap(
+                      options: MapOptions(
+                        initialCenter: validatedSmartZoneDemoPosition,
+                        initialZoom: 15.4,
+                        initialCameraFit: CameraFit.bounds(
+                          bounds: LatLngBounds.fromPoints(
+                            validatedSmartZoneDemo,
+                          ),
+                          padding: const EdgeInsets.all(28),
+                          maxZoom: 16,
                         ),
-                      if (activeWork)
-                        PolygonLayer(
-                          polygons: [
-                            Polygon(
-                              points: validatedSmartZoneDemo,
-                              color: scalerBlue.withValues(alpha: .18),
-                              borderColor: scalerBlue,
-                              borderStrokeWidth: 4,
-                            ),
-                          ],
+                        interactionOptions: const InteractionOptions(
+                          flags: InteractiveFlag.none,
                         ),
-                      if (activeWork)
-                        const MarkerLayer(
-                          markers: [
-                            Marker(
-                              point: validatedSmartZoneDemoPosition,
-                              width: 46,
-                              height: 46,
-                              child: _CurrentPositionMarker(),
-                            ),
-                          ],
-                        ),
-                      const RichAttributionWidget(
-                        attributions: [
-                          TextSourceAttribution('© OpenStreetMap contributors'),
-                        ],
                       ),
-                    ],
-                  ),
-                ),
-              ),
-              Positioned(
-                left: 12,
-                top: 12,
-                child: _MapStateBadge(
-                  text: activeWork
-                      ? 'GPS verification • Active'
-                      : 'Smart Zone A • Validated demo',
-                  color: activeWork ? businessGreen : scalerBlue,
-                ),
-              ),
-              Positioned(
-                left: 8,
-                bottom: 6,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 6,
-                    vertical: 3,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: .9),
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                  child: const Text(
-                    '© OpenStreetMap contributors',
-                    style: TextStyle(
-                      color: Color(0xFF243442),
-                      fontSize: 9,
-                      fontWeight: FontWeight.w600,
+                      children: [
+                        TileLayer(
+                          urlTemplate:
+                              'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                          userAgentPackageName: 'com.scaledcircle.app',
+                        ),
+                        if (!activeWork)
+                          PolygonLayer(
+                            polygons: [
+                              Polygon(
+                                points: validatedSmartZoneDemo,
+                                color: publicMuted.withValues(alpha: .04),
+                                borderColor: const Color(0xFF526C81),
+                                borderStrokeWidth: 6,
+                              ),
+                              Polygon(
+                                points: validatedSmartZoneDemo,
+                                color: businessGreen.withValues(alpha: .08),
+                                borderColor: businessGreen,
+                                borderStrokeWidth: 3.5,
+                              ),
+                            ],
+                          ),
+                        if (activeWork)
+                          PolygonLayer(
+                            polygons: [
+                              Polygon(
+                                points: validatedSmartZoneDemo,
+                                color: scalerBlue.withValues(alpha: .18),
+                                borderColor: scalerBlue,
+                                borderStrokeWidth: 4,
+                              ),
+                            ],
+                          ),
+                        if (activeWork)
+                          const MarkerLayer(
+                            markers: [
+                              Marker(
+                                point: validatedSmartZoneDemoPosition,
+                                width: 46,
+                                height: 46,
+                                child: _CurrentPositionMarker(),
+                              ),
+                            ],
+                          ),
+                      ],
                     ),
                   ),
                 ),
-              ),
-              if (showOpportunityCard)
-                const Positioned(
-                  left: 14,
-                  right: 14,
-                  bottom: 30,
-                  child: _OpportunityCard(),
+                Positioned(
+                  left: 12,
+                  top: 12,
+                  child: _MapStateBadge(
+                    text: activeWork
+                        ? 'GPS verification • Active'
+                        : 'Smart Zone A • Validated demo',
+                    color: activeWork ? businessGreen : scalerBlue,
+                  ),
                 ),
-            ],
+
+                if (showOpportunityCard)
+                  const Positioned(
+                    left: 14,
+                    right: 14,
+                    bottom: 30,
+                    child: _OpportunityCard(),
+                  ),
+              ],
+            ),
           ),
         ),
       ),

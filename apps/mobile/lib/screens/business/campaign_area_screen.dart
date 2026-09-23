@@ -1,3 +1,4 @@
+import 'package:flutter_app/widgets/map_source_credit.dart';
 import 'package:flutter_app/navigation/authenticated_app_bar.dart';
 import '../../services/business_workspace_service.dart';
 import 'weather_alerts_screen.dart';
@@ -1219,37 +1220,39 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
                 SizedBox(
                   key: const Key('campaign-zone-map-workspace'),
                   height: mapHeight,
-                  child: FlutterMap(
-                    mapController: _mapController,
+                  child: MapAttributionFrame(
+                    child: FlutterMap(
+                      mapController: _mapController,
 
-                    options: MapOptions(
-                      initialCenter: _generatedArea.isEmpty
-                          ? (_searchBoundary.isEmpty
-                                ? _defaultCenter
-                                : _calculateCenter(_searchBoundary))
-                          : _calculateCenter(_generatedArea),
-                      initialZoom: _generatedArea.isEmpty
-                          ? (_searchBoundary.isEmpty ? 13 : 10)
-                          : 15,
+                      options: MapOptions(
+                        initialCenter: _generatedArea.isEmpty
+                            ? (_searchBoundary.isEmpty
+                                  ? _defaultCenter
+                                  : _calculateCenter(_searchBoundary))
+                            : _calculateCenter(_generatedArea),
+                        initialZoom: _generatedArea.isEmpty
+                            ? (_searchBoundary.isEmpty ? 13 : 10)
+                            : 15,
 
-                      onTap: _mappingLocked
-                          ? null
-                          : (tapPosition, point) {
-                              unawaited(_handleMapTap(tapPosition, point));
-                            },
-                    ),
-
-                    children: [
-                      TileLayer(
-                        urlTemplate:
-                            'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                        userAgentPackageName: 'com.scaledcircle.app',
+                        onTap: _mappingLocked
+                            ? null
+                            : (tapPosition, point) {
+                                unawaited(_handleMapTap(tapPosition, point));
+                              },
                       ),
 
-                      PolygonLayer(polygons: polygons),
+                      children: [
+                        TileLayer(
+                          urlTemplate:
+                              'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                          userAgentPackageName: 'com.scaledcircle.app',
+                        ),
 
-                      MarkerLayer(markers: markers),
-                    ],
+                        PolygonLayer(polygons: polygons),
+
+                        MarkerLayer(markers: markers),
+                      ],
+                    ),
                   ),
                 ),
 

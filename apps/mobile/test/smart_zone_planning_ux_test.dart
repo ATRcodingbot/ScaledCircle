@@ -425,12 +425,12 @@ void main() {
     expect(source, contains('selectedZoneIndex'));
     expect(source, contains('Dashed outline: selected campaign territory'));
     expect(mapSource, contains('CameraFit.bounds'));
-    expect(mapSource, contains('LatLngBounds.fromPoints(operationalPoints)'));
+    expect(mapSource, matches(RegExp(r'LatLngBounds\.fromPoints\(\s*operationalPoints,?\s*\)')));
     expect(mapSource, isNot(contains('LatLngBounds.fromPoints(allPoints)')));
     expect(mapSource, contains('cameraPadding'));
     expect(mapSource, contains('smartZoneMarkerOffsets'));
     expect(source, contains('showZoneSelector: true'));
-    expect(mapSource, contains('© OpenStreetMap contributors'));
+    expect(mapSource, contains('MapAttributionFrame('));
     expect(mapSource, contains('Dashed: selected territory'));
     expect(mapSource, contains('constraints.maxWidth < 520 ? 300.0 : 360.0'));
     expect(mapSource, contains('InteractiveFlag.all'));

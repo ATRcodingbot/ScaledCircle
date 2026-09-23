@@ -1,3 +1,4 @@
+import 'package:flutter_app/widgets/map_source_credit.dart';
 import 'package:flutter_app/navigation/authenticated_app_bar.dart';
 import '../../widgets/campaign_card_header.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -714,9 +715,11 @@ class _CampaignDetailsScreenState extends State<CampaignDetailsScreen> {
         return;
       }
 
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Changes could not be requested. Please try again.')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Changes could not be requested. Please try again.'),
+        ),
+      );
     }
   }
 
@@ -922,9 +925,13 @@ class _CampaignDetailsScreenState extends State<CampaignDetailsScreen> {
         return;
       }
 
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Your campaign could not be deleted. Check its status and try again.')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Your campaign could not be deleted. Check its status and try again.',
+          ),
+        ),
+      );
     }
   }
 
@@ -1279,7 +1286,9 @@ class _CampaignDetailsScreenState extends State<CampaignDetailsScreen> {
           return Card(
             child: Padding(
               padding: const EdgeInsets.all(20),
-              child: Text('We could not load the assigned work areas. Please try again.'),
+              child: Text(
+                'We could not load the assigned work areas. Please try again.',
+              ),
             ),
           );
         }
@@ -1669,71 +1678,73 @@ class _CampaignDetailsScreenState extends State<CampaignDetailsScreen> {
 
                   SizedBox(
                     height: 320,
-                    child: FlutterMap(
-                      options: MapOptions(
-                        initialCenter: center,
-                        initialZoom: 16,
-                      ),
-                      children: [
-                        TileLayer(
-                          urlTemplate:
-                              'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                          userAgentPackageName: 'com.scaledcircle.app',
+                    child: MapAttributionFrame(
+                      child: FlutterMap(
+                        options: MapOptions(
+                          initialCenter: center,
+                          initialZoom: 16,
                         ),
-
-                        if (serviceArea.length >= 3)
-                          PolygonLayer(
-                            polygons: [
-                              Polygon(
-                                points: serviceArea,
-                                borderStrokeWidth: 3,
-                                color: Colors.blue.withValues(alpha: 0.15),
-                                borderColor: Colors.blue,
-                              ),
-                            ],
+                        children: [
+                          TileLayer(
+                            urlTemplate:
+                                'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                            userAgentPackageName: 'com.scaledcircle.app',
                           ),
 
-                        if (routePoints.length >= 2)
-                          PolylineLayer(
-                            polylines: [
-                              Polyline(
-                                points: routePoints,
-                                strokeWidth: 5,
-                                color: Colors.green,
-                              ),
-                            ],
-                          ),
+                          if (serviceArea.length >= 3)
+                            PolygonLayer(
+                              polygons: [
+                                Polygon(
+                                  points: serviceArea,
+                                  borderStrokeWidth: 3,
+                                  color: Colors.blue.withValues(alpha: 0.15),
+                                  borderColor: Colors.blue,
+                                ),
+                              ],
+                            ),
 
-                        MarkerLayer(
-                          markers: [
-                            if (routePoints.isNotEmpty)
-                              Marker(
-                                point: routePoints.first,
-                                width: 40,
-                                height: 40,
-                                child: const Icon(
-                                  Icons.play_circle_fill,
+                          if (routePoints.length >= 2)
+                            PolylineLayer(
+                              polylines: [
+                                Polyline(
+                                  points: routePoints,
+                                  strokeWidth: 5,
                                   color: Colors.green,
-                                  size: 34,
                                 ),
-                              ),
+                              ],
+                            ),
 
-                            if (routePoints.length >= 2)
-                              Marker(
-                                point: routePoints.last,
-                                width: 40,
-                                height: 40,
-                                child: const Icon(
-                                  Icons.flag_circle,
-                                  color: Colors.red,
-                                  size: 34,
+                          MarkerLayer(
+                            markers: [
+                              if (routePoints.isNotEmpty)
+                                Marker(
+                                  point: routePoints.first,
+                                  width: 40,
+                                  height: 40,
+                                  child: const Icon(
+                                    Icons.play_circle_fill,
+                                    color: Colors.green,
+                                    size: 34,
+                                  ),
                                 ),
-                              ),
 
-                            ...outsideMarkers,
-                          ],
-                        ),
-                      ],
+                              if (routePoints.length >= 2)
+                                Marker(
+                                  point: routePoints.last,
+                                  width: 40,
+                                  height: 40,
+                                  child: const Icon(
+                                    Icons.flag_circle,
+                                    color: Colors.red,
+                                    size: 34,
+                                  ),
+                                ),
+
+                              ...outsideMarkers,
+                            ],
+                          ),
+                        ],
+                      ),
                     ),
                   ),
 
@@ -2042,7 +2053,11 @@ class _CampaignDetailsScreenState extends State<CampaignDetailsScreen> {
         if (snapshot.hasError) {
           return Scaffold(
             appBar: _campaignAppBar(),
-            body: Center(child: Text('We could not load this campaign. Check your access and try again.')),
+            body: Center(
+              child: Text(
+                'We could not load this campaign. Check your access and try again.',
+              ),
+            ),
           );
         }
 
@@ -2544,7 +2559,10 @@ class _CampaignDetailsScreenState extends State<CampaignDetailsScreen> {
             StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
               stream: FirebaseFirestore.instance
                   .collection('campaignZones')
-                  .where('businessId', isEqualTo: liveCampaign.get('businessId'))
+                  .where(
+                    'businessId',
+                    isEqualTo: liveCampaign.get('businessId'),
+                  )
                   .where('campaignId', isEqualTo: liveCampaign.id)
                   .limit(10)
                   .snapshots(),

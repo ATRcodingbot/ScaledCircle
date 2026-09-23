@@ -336,7 +336,7 @@ void main() {
     expect(maps, contains('FlutterMap('));
     expect(maps, contains('PolygonLayer('));
     expect(maps, contains('MarkerLayer('));
-    expect(maps, contains('© OpenStreetMap contributors'));
+    expect(maps, contains('MapAttributionFrame('));
     expect(maps, isNot(contains('PolylineLayer(')));
     expect(maps, contains('InteractiveFlag.none'));
     expect(maps, contains('SmartZonePlanningV3'));

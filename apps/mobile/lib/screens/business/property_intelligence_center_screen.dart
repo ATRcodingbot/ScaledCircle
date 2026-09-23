@@ -1,3 +1,4 @@
+import 'package:flutter_app/widgets/map_source_credit.dart';
 import '../../config/native_release_policy.dart';
 import 'dart:math';
 import '../../widgets/property_territory_shortlist.dart';
@@ -1226,37 +1227,39 @@ class _PropertyIntelligenceCenterScreenState
                 SizedBox(
                   key: const Key('property-map-workspace'),
                   height: mapHeight,
-                  child: FlutterMap(
-                    mapController: _mapController,
-                    options: MapOptions(
-                      initialCenter: _defaultCenter,
-                      initialZoom: 12,
-                      onTap: _fromSavedArea ? null : _addPoint,
-                    ),
-                    children: [
-                      TileLayer(
-                        urlTemplate:
-                            'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                        userAgentPackageName: 'com.scaledcircle.app',
+                  child: MapAttributionFrame(
+                    child: FlutterMap(
+                      mapController: _mapController,
+                      options: MapOptions(
+                        initialCenter: _defaultCenter,
+                        initialZoom: 12,
+                        onTap: _fromSavedArea ? null : _addPoint,
                       ),
-                      PolygonLayer(polygons: polygon),
-                      MarkerLayer(
-                        markers: _area
-                            .asMap()
-                            .entries
-                            .map(
-                              (entry) => Marker(
-                                point: entry.value,
-                                width: 34,
-                                height: 34,
-                                child: CircleAvatar(
-                                  child: Text('${entry.key + 1}'),
+                      children: [
+                        TileLayer(
+                          urlTemplate:
+                              'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                          userAgentPackageName: 'com.scaledcircle.app',
+                        ),
+                        PolygonLayer(polygons: polygon),
+                        MarkerLayer(
+                          markers: _area
+                              .asMap()
+                              .entries
+                              .map(
+                                (entry) => Marker(
+                                  point: entry.value,
+                                  width: 34,
+                                  height: 34,
+                                  child: CircleAvatar(
+                                    child: Text('${entry.key + 1}'),
+                                  ),
                                 ),
-                              ),
-                            )
-                            .toList(growable: false),
-                      ),
-                    ],
+                              )
+                              .toList(growable: false),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
                 Container(

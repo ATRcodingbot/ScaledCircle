@@ -1,3 +1,4 @@
+import 'package:flutter_app/widgets/map_source_credit.dart';
 import 'package:flutter/material.dart';
 
 import '../services/address_search_service.dart';
@@ -237,26 +238,8 @@ class _MappedAddressFieldState extends State<MappedAddressField> {
                         if (index < _suggestions.length - 1)
                           const Divider(height: 1),
                       ],
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 5, 16, 8),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.end,
-                          children: [
-                            Icon(
-                              Icons.map_outlined,
-                              size: 14,
-                              color: colorScheme.onSurfaceVariant,
-                            ),
-                            const SizedBox(width: 5),
-                            Text(
-                              'Search © OpenStreetMap contributors • Nominatim',
-                              style: Theme.of(context).textTheme.labelSmall
-                                  ?.copyWith(
-                                    color: colorScheme.onSurfaceVariant,
-                                  ),
-                            ),
-                          ],
-                        ),
+                      const MapSourceCredit(
+                        additionalCredit: 'Search: Nominatim',
                       ),
                     ],
                   ),

@@ -1,3 +1,4 @@
+import 'package:flutter_app/widgets/map_source_credit.dart';
 import 'package:flutter_app/navigation/authenticated_app_bar.dart';
 import '../../../widgets/production_compensation_acceptance.dart';
 import '../../../widgets/campaign_card_header.dart';
@@ -447,30 +448,32 @@ class _ScalerCampaignDetailsScreenState
       child: SizedBox(
         height: 320,
 
-        child: FlutterMap(
-          options: MapOptions(initialCenter: center, initialZoom: 15),
+        child: MapAttributionFrame(
+          child: FlutterMap(
+            options: MapOptions(initialCenter: center, initialZoom: 15),
 
-          children: [
-            TileLayer(
-              urlTemplate: "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+            children: [
+              TileLayer(
+                urlTemplate: "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
 
-              userAgentPackageName: "com.scaledcircle.app",
-            ),
+                userAgentPackageName: "com.scaledcircle.app",
+              ),
 
-            PolygonLayer(
-              polygons: [
-                Polygon(
-                  points: points,
+              PolygonLayer(
+                polygons: [
+                  Polygon(
+                    points: points,
 
-                  borderStrokeWidth: 3,
+                    borderStrokeWidth: 3,
 
-                  color: Colors.blue.withValues(alpha: 0.15),
+                    color: Colors.blue.withValues(alpha: 0.15),
 
-                  borderColor: Colors.blue,
-                ),
-              ],
-            ),
-          ],
+                    borderColor: Colors.blue,
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );
