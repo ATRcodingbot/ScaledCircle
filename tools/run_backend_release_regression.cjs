@@ -13,6 +13,17 @@ for(const key of ['GCLOUD_PROJECT','GOOGLE_CLOUD_PROJECT','FIREBASE_CONFIG','APP
   'PRODUCTION_FUNDING_CANDIDATE','JOB_ROOM_PRESENTATION_ENTRY'])delete env[key];
 env.QA_GEOMETRY_TEST_FILE=path.join(root,'.firebase/dual-qa-final-route.private.json');
 env.QA_RETEST_GEOMETRY_TEST_FILE=path.join(root,'.firebase/kenilworth-retest.private.json');
+// Independently downloaded, generation-pinned deployed privacy adapter. Never
+// substitute the canonical staging handler for this production payload contract.
+const archive=path.join(root,'.firebase/launch-close-20260919/remaining-jobroom-deployed.zip');
+const archiveHash='574f7330fecc9b4127f3048c6c9f8dc4d93b126453ad72239c0d948aa6203460';
+if(require('node:crypto').createHash('sha256').update(fs.readFileSync(archive)).digest('hex')!==archiveHash)throw Error('Production Job Room archive mismatch');
+const room=path.join(output,'job-room-production');
+execFileSync('python',['-c',
+  'import zipfile,pathlib,sys; b=pathlib.Path(sys.argv[2]).resolve(); z=zipfile.ZipFile(sys.argv[1]); '+
+  '\nfor n in z.namelist():\n p=(b/n).resolve()\n if not p.is_relative_to(b): raise Exception("Unsafe archive")\n if n.endswith((".js",".json")) and "node_modules/" not in n:\n  p.parent.mkdir(parents=True,exist_ok=True); p.write_bytes(z.read(n))',archive,room]);
+env.JOB_ROOM_PRESENTATION_ENTRY=path.join(room,'index.js');
+env.NODE_PATH=path.join(cwd,'node_modules');
 for(const key of ['QA_GEOMETRY_TEST_FILE','QA_RETEST_GEOMETRY_TEST_FILE']) {
   if(!fs.existsSync(env[key]))throw Error('Required private fixture unavailable: '+key);
 }
