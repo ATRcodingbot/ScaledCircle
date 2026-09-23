@@ -1,3 +1,4 @@
+import '../../config/native_release_policy.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 
@@ -99,11 +100,13 @@ class PublicLandingScreen extends StatelessWidget {
                             onStart: () => _start(context, 'scaler'),
                           ),
                           const _Gap(),
-                          const _ManagedGrowth(),
+                          if (NativeReleasePolicy.premiumToolsAvailable)
+                            const _ManagedGrowth(),
                           const _Gap(),
-                          const CustomerCapabilityStatus(
-                            foregroundColor: Colors.white,
-                          ),
+                          if (NativeReleasePolicy.premiumToolsAvailable)
+                            const CustomerCapabilityStatus(
+                              foregroundColor: Colors.white,
+                            ),
                           const _Gap(),
                           _Pricing(
                             key: pricingKey,

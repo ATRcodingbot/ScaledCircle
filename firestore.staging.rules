@@ -18,9 +18,20 @@ service cloud.firestore {
 
     // Workspace membership is server-managed. Every private read rechecks the
     // member document and authoritative subscription capacity, not client claims.
+    // Only the audited, explicitly non-billable Core reviewer grant has no end.
+    // Missing expiry alone never grants a member seat.
+    function durableCoreReviewTerm(s) {
+      return s.get('planId', s.get('plan', '')) in ['starter', 'growth', 'scale']
+        && s.get('comped', false) == true && s.get('billingStatus', '') == 'comped'
+        && s.get('source', '') == 'internal_qa' && s.get('purpose', '') == 'store_review'
+        && s.get('paidProviderUsageAllowed', true) == false
+        && s.get('accessTerm', '') == 'until_revoked'
+        && s.get('expiresAt', null) == null && s.get('revokedAt', null) == null;
+    }
     function workspaceSeatLimit(businessId) {
       let s = get(/databases/$(database)/documents/businessSubscriptions/$(businessId)).data;
-      return s.get('status', '') == 'active' && s.get('expiresAt', request.time) > request.time
+      return s.get('status', '') == 'active' && (durableCoreReviewTerm(s)
+        || (s.get('expiresAt', null) is timestamp && s.expiresAt > request.time))
         ? (s.get('planId', s.get('plan', '')) == 'managed_growth' ? 10
           : s.get('planId', s.get('plan', '')) == 'scale' ? 5
           : s.get('planId', s.get('plan', '')) == 'growth' ? 3 : 1) : 1;

@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 // Snapshot test doubles only; no Firestore SDK implementation is shipped.
 // ignore_for_file: subtype_of_sealed_class
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -128,6 +129,13 @@ void main() {
           ),
         );
         await tester.pumpAndSettle();
+        if (!kIsWeb) {
+          expect(find.text('Old review'), findsOneWidget);
+          expect(find.text('View Social Post'), findsNothing);
+          expect(find.text('View Social'), findsNothing);
+          expect(receipts, 0);
+          return;
+        }
         expect(find.text('Old review'), findsNothing);
         await tester.tap(find.text('Instagram post — scheduled'));
         await tester.pumpAndSettle();
@@ -155,7 +163,7 @@ void main() {
           currentUserId: 'owner',
           resolveNotification: (_) async => {
             'available': true,
-            'deepLink': {'destination': 'social_review'},
+            'deepLink': {'destination': 'business_schedule'},
           },
           markNotificationRead: (_) async {
             receipts++;
@@ -165,7 +173,7 @@ void main() {
               _Document({
                 'title': 'Open notice',
                 'read': false,
-                'deepLink': {'destination': 'social_review'},
+                'deepLink': {'destination': 'business_schedule'},
               }),
             ]),
           ),

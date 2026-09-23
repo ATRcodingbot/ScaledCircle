@@ -13,6 +13,8 @@ void main() {
         'subscriptionBillingStatus': 'comped',
         'subscriptionSource': 'internal_qa',
         'subscriptionAccessTerm': 'until_revoked',
+        'subscriptionPurpose': 'store_review',
+        'subscriptionPaidProviderUsageAllowed': false,
         'subscriptionExpiresAt': null,
       };
       final plans = SubscriptionPlanService();
@@ -25,6 +27,10 @@ void main() {
       expect(plans.hasActiveManagedGrowth(wallet, now: future), isFalse);
       for (final patch in <Map<String, dynamic>>[
         {'subscriptionStatus': 'revoked'},
+        {'subscriptionRevokedAt': Timestamp.now()},
+        {'subscriptionPurpose': null},
+        {'subscriptionSource': 'internal_beta'},
+        {'subscriptionPaidProviderUsageAllowed': null},
         {'subscriptionSource': 'stripe'},
         {'subscriptionComped': false},
         {'subscriptionAccessTerm': null},

@@ -1,3 +1,4 @@
+import '../../config/native_release_policy.dart';
 import 'dart:math';
 import '../../widgets/property_territory_shortlist.dart';
 import 'package:flutter/foundation.dart';
@@ -1345,7 +1346,8 @@ class _PropertyIntelligenceCenterScreenState
                         const SizedBox(height: 12),
                         _buildPhysicalChannelRecommendation(),
                         const SizedBox(height: 12),
-                        _buildAiAnalysis(),
+                        if (NativeReleasePolicy.premiumToolsAvailable)
+                          _buildAiAnalysis(),
                       ],
                     ],
                   ),

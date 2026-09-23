@@ -1,11 +1,17 @@
 import '../navigation/app_routes.dart';
+import '../config/native_release_policy.dart';
 import '../navigation/workspace_presentation.dart';
 
 NotificationDestination? workspaceNotificationDestination(
   Map<String, dynamic> data,
-  Map<String, dynamic>? workspace,
-) {
+  Map<String, dynamic>? workspace, {
+  bool web = NativeReleasePolicy.premiumToolsAvailable,
+}) {
   final target = notificationDestination(data);
+  if (target?.route != null &&
+      !NativeReleasePolicy.allowsRoute(target!.route!, web: web)) {
+    return null;
+  }
   if (target == null || workspace == null || workspace['isOwner'] == true) {
     return target;
   }

@@ -13,7 +13,10 @@ void main() {
 
     expect(dashboard, contains("value == 'campaigns'"));
     expect(dashboard, contains('_openCampaigns('));
-    expect(dashboard, contains('BusinessWorkspaceSession.businessIdFor(user.uid)'));
+    expect(
+      dashboard,
+      contains('BusinessWorkspaceSession.businessIdFor(user.uid)'),
+    );
     expect(dashboard, contains("value == 'results'"));
     expect(dashboard, contains('BusinessCampaignView.results'));
     expect(
@@ -38,14 +41,19 @@ void main() {
       'lib/widgets/response_tracking_feature_card.dart',
     );
 
+    expect(
+      subscription,
+      contains(
+        'Paid Scaler execution is held pending live cash-out certification',
+      ),
+    );
     for (final capability in [
-      'Lead tracking — Coming Soon',
-      'Call tracking — Coming Soon',
-      'Campaign landing pages — Coming Soon',
+      'Lead Tracking',
+      'Call Tracking',
+      'Campaign Landing Pages',
     ]) {
-      expect(subscription, contains(capability));
+      expect(services, contains("name: '$capability'"));
     }
-    expect(subscription, contains('cash-out coming soon'));
     expect(services, contains("name: 'Scaler Cash-out'"));
     expect(services, contains('comingSoon: true'));
     expect(builder, contains('ResponseTrackingFeatureCard'));

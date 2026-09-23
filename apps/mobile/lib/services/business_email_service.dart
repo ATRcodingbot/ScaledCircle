@@ -1,3 +1,4 @@
+import '../config/native_release_policy.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'business_workspace_service.dart';
@@ -18,6 +19,7 @@ class BusinessEmailService {
     String operation, [
     Map<String, dynamic> input = const {},
   ]) async {
+    NativeReleasePolicy.requirePremiumWeb();
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) throw StateError('Sign in to your Business.');
     final response = await FirebaseFunctions.instanceFor(region: 'us-east1')

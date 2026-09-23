@@ -36,7 +36,7 @@ void main() {
         'A PRACTICAL EXAMPLE',
         'EVIDENCE YOU CAN REVIEW',
         'FOR SCALERS',
-        'GROWTH TOOLS — BETA',
+        if (kIsWeb) 'GROWTH TOOLS — BETA',
         if (kIsWeb) 'SIMPLE PRICING',
         'READY TO GROW LOCALLY?',
       ];

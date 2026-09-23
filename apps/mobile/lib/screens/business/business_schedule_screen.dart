@@ -1,3 +1,4 @@
+import '../../config/native_release_policy.dart';
 import 'package:flutter_app/navigation/authenticated_app_bar.dart';
 import 'dart:async';
 import 'package:cloud_functions/cloud_functions.dart';
@@ -1054,7 +1055,9 @@ class _BusinessScheduleScreenState extends State<BusinessScheduleScreen>
               Text(
                 'Quote: ${i['estimate']['quotedAmountCents'] == null ? 'Not recorded' : '\$${((i['estimate']['quotedAmountCents'] as num) / 100).toStringAsFixed(2)}'} · ${i['estimate']['outcome']} · Not collected revenue',
               ),
-            if (i['emailLink'] is Map && can('communicationsRead'))
+            if (NativeReleasePolicy.premiumToolsAvailable &&
+                i['emailLink'] is Map &&
+                can('communicationsRead'))
               TextButton.icon(
                 icon: const Icon(Icons.forum_outlined),
                 label: const Text('View conversation'),
@@ -1284,7 +1287,8 @@ class _BusinessScheduleScreenState extends State<BusinessScheduleScreen>
                               icon: const Icon(Icons.add),
                               label: const Text('Add to schedule'),
                             ),
-                          if (editable &&
+                          if (NativeReleasePolicy.premiumToolsAvailable &&
+                              editable &&
                               data?['agentAvailable'] == true &&
                               can('scheduleEdit') &&
                               can('customersView'))
@@ -1415,7 +1419,9 @@ class _BusinessScheduleScreenState extends State<BusinessScheduleScreen>
                                       onPressed: () => customerDetail(c),
                                       child: const Text('View history'),
                                     ),
-                                    if (editable &&
+                                    if (NativeReleasePolicy
+                                            .premiumToolsAvailable &&
+                                        editable &&
                                         can('customersEdit') &&
                                         can('communicationsRead'))
                                       TextButton(

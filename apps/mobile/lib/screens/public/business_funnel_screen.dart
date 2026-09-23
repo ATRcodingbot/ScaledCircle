@@ -1,3 +1,4 @@
+import '../../config/native_release_policy.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 
@@ -57,15 +58,16 @@ class BusinessFunnelScreen extends StatelessWidget {
         accent: businessGreen,
         visual: _WeatherVisual(),
       ),
-      const FunnelSection(
-        key: Key('business-step-marketing'),
-        step: 'STEP 3',
-        title: 'TURN THE SIGNAL INTO MARKETING.',
-        body:
-            'Create, preview, edit, and approve—always with your business context in view.',
-        accent: businessGreen,
-        visual: _SocialVisual(),
-      ),
+      if (NativeReleasePolicy.premiumToolsAvailable)
+        const FunnelSection(
+          key: Key('business-step-marketing'),
+          step: 'STEP 3',
+          title: 'TURN THE SIGNAL INTO MARKETING.',
+          body:
+              'Create, preview, edit, and approve—always with your business context in view.',
+          accent: businessGreen,
+          visual: _SocialVisual(),
+        ),
       const FunnelSection(
         key: Key('business-step-campaigns'),
         step: 'STEP 4',
@@ -112,7 +114,7 @@ class BusinessFunnelScreen extends StatelessWidget {
           ],
         ),
       ),
-      const _ManagedGrowthBand(),
+      if (NativeReleasePolicy.premiumToolsAvailable) const _ManagedGrowthBand(),
       if (kIsWeb)
         _BusinessPricing(
           onStart: () => openPublicAccountRegistration(context, 'business'),
@@ -314,8 +316,10 @@ class _IntelligenceVisual extends StatelessWidget {
           runSpacing: 8,
           children: [
             StatusPill('Create Flyer Campaign', color: businessGreen),
-            StatusPill('Create Social Posts', color: businessGreen),
-            StatusPill('Ask AI More', color: publicMuted),
+            if (NativeReleasePolicy.premiumToolsAvailable)
+              StatusPill('Create Social Posts', color: businessGreen),
+            if (NativeReleasePolicy.premiumToolsAvailable)
+              StatusPill('Ask AI More', color: publicMuted),
           ],
         ),
       ],

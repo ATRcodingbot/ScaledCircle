@@ -28,6 +28,8 @@ import 'screens/auth/staging_privacy_screen.dart';
 import 'screens/auth/team_invitation_screen.dart';
 
 import 'config/app_environment.dart';
+import 'config/native_release_policy.dart';
+import 'navigation/native_unavailable_screen.dart';
 import 'bootstrap/ios_startup_gate.dart';
 import 'config/firebase_auth_emulator_session.dart';
 import 'navigation/app_routes.dart';
@@ -36,6 +38,7 @@ import 'navigation/app_router.dart';
 import 'navigation/protected_route_gate.dart';
 import 'navigation/startup_session_gate.dart';
 import 'screens/business/business_dashboard.dart';
+import 'screens/business/property_intelligence_center_screen.dart';
 import 'screens/business/business_attribution_screen.dart';
 import 'screens/business/landing_page_builder_screen.dart';
 import 'screens/business/brand_assets_screen.dart';
@@ -129,7 +132,19 @@ Future<void> _connectToFirebaseEmulators() async {
 class ScaledCircleApp extends StatelessWidget {
   const ScaledCircleApp({super.key});
 
-  static Route<dynamic> _generateRoute(RouteSettings settings) {
+  static Route<dynamic> generateRoute(RouteSettings settings) {
+    if (!NativeReleasePolicy.allowsRoute(settings.name ?? '/')) {
+      return MaterialPageRoute(
+        settings: settings,
+        builder: (_) => NativeUnavailableScreen(
+          homeRoute:
+              (settings.name ?? '').startsWith('/admin') ||
+                  settings.name == '/sales'
+              ? '/business'
+              : '/',
+        ),
+      );
+    }
     final route = Uri.tryParse(settings.name ?? '');
     if (route?.path == '/') {
       return MaterialPageRoute(
@@ -252,6 +267,16 @@ class ScaledCircleApp extends StatelessWidget {
               MaterialPageRoute(builder: (_) => const CreateCampaignScreen()),
             ),
           ),
+        ),
+      );
+    }
+    if (route?.path == '/business/property') {
+      return MaterialPageRoute(
+        settings: settings,
+        builder: (_) => ProtectedRouteGate(
+          routeName: settings.name!,
+          audience: ProtectedRouteAudience.business,
+          builder: (_, _) => const PropertyIntelligenceCenterScreen(),
         ),
       );
     }
@@ -590,7 +615,7 @@ class ScaledCircleApp extends StatelessWidget {
   }
 
   static final AppRouterDelegate _routerDelegate = AppRouterDelegate(
-    _generateRoute,
+    generateRoute,
   );
   // Preserve explicit email destinations while web Firebase startup resolves.
   // Native routing and ordinary public/role-home startup remain unchanged.

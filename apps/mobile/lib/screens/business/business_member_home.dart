@@ -1,5 +1,6 @@
 import 'package:flutter_app/navigation/authenticated_app_bar.dart';
 import 'package:flutter/material.dart';
+import '../../config/native_release_policy.dart';
 import '../../navigation/workspace_presentation.dart';
 import '../../navigation/app_router.dart';
 import 'business_account_screen.dart';
@@ -33,11 +34,23 @@ class BusinessWorkspaceHome extends StatelessWidget {
         padding: const EdgeInsets.all(24),
         children: [
           const Text('Your workspace', style: TextStyle(fontSize: 24)),
-          if (access.can('intelligence'))
+          if (NativeReleasePolicy.premiumToolsAvailable &&
+              access.can('intelligence'))
             ListTile(
               title: const Text('Growth'),
               onTap: () => AppNavigation.push(context, '/business/growth'),
             ),
+          if (!NativeReleasePolicy.premiumToolsAvailable &&
+              access.can('intelligence')) ...[
+            ListTile(
+              title: const Text('Property'),
+              onTap: () => AppNavigation.push(context, '/business/property'),
+            ),
+            ListTile(
+              title: const Text('Weather'),
+              onTap: () => AppNavigation.push(context, '/business/weather'),
+            ),
+          ],
           if (access.can('campaigns'))
             ListTile(
               title: const Text('Campaigns'),

@@ -10,10 +10,9 @@ class SubscriptionPlanService {
         ].contains(wallet['subscriptionPlan']) &&
         wallet['subscriptionComped'] == true &&
         wallet['subscriptionBillingStatus'] == 'comped' &&
-        const [
-          'internal_qa',
-          'internal_beta',
-        ].contains(wallet['subscriptionSource']) &&
+        wallet['subscriptionSource'] == 'internal_qa' &&
+        wallet['subscriptionPurpose'] == 'store_review' &&
+        wallet['subscriptionPaidProviderUsageAllowed'] == false &&
         wallet['subscriptionAccessTerm'] == 'until_revoked' &&
         wallet['subscriptionExpiresAt'] == null &&
         wallet['subscriptionRevokedAt'] == null;

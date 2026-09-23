@@ -14,7 +14,7 @@ test('workspace paid-model restriction is enforced by the real authority before 
   const vm=require('node:vm'),parser=require('@babel/parser');
   const node=parser.parse(indexSource).program.body.find(n=>n.type==='FunctionDeclaration'&&n.id.name==='requireScaleIntelligenceBusiness');
   assert.ok(node);
-  let record={plan:'scale',status:'active',comped:true,billingStatus:'comped',source:'internal_qa',accessTerm:'until_revoked',expiresAt:null,paidProviderUsageAllowed:false};
+  let record={plan:'scale',status:'active',comped:true,billingStatus:'comped',source:'internal_qa',purpose:'store_review',paidProviderUsageAllowed:false,accessTerm:'until_revoked',expiresAt:null};
   const markers=[];
   class HttpsError extends Error {constructor(code,message){super(message);this.code=code;}}
   const context={HttpsError,authenticatedUserContext:async()=>({uid:'isolated-owner',role:'business',isAdmin:false}),

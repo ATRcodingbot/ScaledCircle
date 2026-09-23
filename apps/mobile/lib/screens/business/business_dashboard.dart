@@ -1,3 +1,4 @@
+import '../../config/native_release_policy.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_app/navigation/authenticated_app_bar.dart';
 import '../preferences/market_state_screen.dart';
@@ -60,14 +61,15 @@ class _BusinessGoalGrid extends StatelessWidget {
         description: 'Explore Property, Weather, and local intelligence.',
         onTap: onFindOpportunity,
       ),
-      _GoalCard(
-        key: const Key('business-goal-create-marketing'),
-        icon: Icons.auto_awesome_outlined,
-        title: 'CREATE MARKETING — BETA',
-        description:
-            'Prepare reviewed drafts and plans in Managed Growth Beta.',
-        onTap: onCreateMarketing,
-      ),
+      if (NativeReleasePolicy.premiumToolsAvailable)
+        _GoalCard(
+          key: const Key('business-goal-create-marketing'),
+          icon: Icons.auto_awesome_outlined,
+          title: 'CREATE MARKETING — BETA',
+          description:
+              'Prepare reviewed drafts and plans in Managed Growth Beta.',
+          onTap: onCreateMarketing,
+        ),
       _GoalCard(
         key: const Key('business-goal-launch-campaign'),
         icon: Icons.rocket_launch_outlined,
@@ -588,7 +590,10 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
                   ?.data()?['role']
                   ?.toString()
                   .toLowerCase();
-              if (role != 'admin') return const SizedBox.shrink();
+              if (!NativeReleasePolicy.premiumToolsAvailable ||
+                  role != 'admin') {
+                return const SizedBox.shrink();
+              }
               return IconButton(
                 tooltip: 'Beta Entitlements',
                 icon: const Icon(Icons.admin_panel_settings_outlined),
@@ -606,7 +611,8 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
             icon: const Icon(Icons.menu),
             itemBuilder: (_) => [
               const PopupMenuItem(value: 'home', child: Text('Home')),
-              const PopupMenuItem(value: 'grow', child: Text('Growth')),
+              if (NativeReleasePolicy.premiumToolsAvailable)
+                const PopupMenuItem(value: 'grow', child: Text('Growth')),
               const PopupMenuItem(value: 'schedule', child: Text('Schedule')),
               const PopupMenuItem(value: 'campaigns', child: Text('Campaigns')),
               const PopupMenuItem(value: 'results', child: Text('Results')),
@@ -894,7 +900,7 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
                     const SizedBox(height: 22),
 
                     ExpansionTile(
-                      title: const Text('Planning and growth tools'),
+                      title: const Text('Campaign planning tools'),
                       subtitle: const Text(
                         'Optional help with your next campaign',
                       ),
@@ -969,14 +975,15 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
                     const SizedBox(height: 16),
                     if (BusinessWorkspaceSession.can('intelligence'))
                       ExpansionTile(
-                        title: const Text('Explore growth insights — Beta'),
+                        title: const Text('Property and Weather — Beta'),
                         children: [
                           _buildPropertyIntelligenceCard(
                             BusinessWorkspaceSession.businessIdFor(user.uid),
                           ),
-                          _buildManagedGrowthCard(
-                            BusinessWorkspaceSession.businessIdFor(user.uid),
-                          ),
+                          if (NativeReleasePolicy.premiumToolsAvailable)
+                            _buildManagedGrowthCard(
+                              BusinessWorkspaceSession.businessIdFor(user.uid),
+                            ),
                           _buildWeatherSection(),
                         ],
                       ),
@@ -1348,11 +1355,11 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
             leading: Icon(
               entitled ? Icons.home_work_outlined : Icons.lock_outline,
             ),
-            title: const Text('AI Property Intelligence'),
+            title: const Text('Property Intelligence'),
             subtitle: Text(
               entitled
-                  ? 'Explore authoritative housing-stock patterns with qualified AI interpretation.'
-                  : 'AI intelligence included with Scale.',
+                  ? 'Explore authoritative housing-stock patterns and compare target areas.'
+                  : 'Property Intelligence included with Scale.',
             ),
             trailing: Text(
               entitled

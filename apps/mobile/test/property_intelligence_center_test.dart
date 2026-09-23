@@ -73,7 +73,7 @@ void main() {
       'lib/screens/business/business_dashboard.dart',
     ).readAsStringSync();
     expect(source, contains('_buildPropertyIntelligenceCard('));
-    expect(source, contains("'AI intelligence included with Scale.'"));
+    expect(source, contains("'Property Intelligence included with Scale.'"));
     expect(source, contains("'Upgrade to Scale'"));
     expect(source, contains('PropertyIntelligenceCenterScreen'));
   });

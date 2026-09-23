@@ -27,7 +27,7 @@ for(const [plan,capacity,monthly] of [['starter',1,99],['growth',3,299],['scale'
  test(plan+' keeps the frozen owner-inclusive capacity and price',async()=>{const f=setup({plan}),v=await f.billing.get({uid:'owner',businessId:'owner'});assert.equal(v.seatLimit,capacity);assert.equal(v.seatsUsed,1);assert.equal(v.seatsAvailable,capacity-1);assert.equal(v.price,monthly);});
 
 test('durable Core Billing shows no expiry or charge, ordinary five-seat inventory and no paid add-ons',async()=>{
- const entitlement={plan:'scale',status:'active',comped:true,billingStatus:'comped',source:'internal_qa',accessTerm:'until_revoked',expiresAt:null,purpose:'store_review'};
+ const entitlement={plan:'scale',status:'active',comped:true,billingStatus:'comped',source:'internal_qa',purpose:'store_review',paidProviderUsageAllowed:false,accessTerm:'until_revoked',expiresAt:null};
  const workspace={actor:async()=>{},authority:async()=>({businessId:'owner',entitlement}),inventory:async()=>({members:[],invitations:[]})};
  const db={doc:()=>({get:async()=>({data:()=>({})})})};
  const billing=createBillingService({db,FieldValue:{},workspace,stripe:()=>{throw Error('No Stripe permitted');},now:()=>Date.parse('2050-01-01')});

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../config/native_release_policy.dart';
 import 'app_shell_identity.dart';
 import 'app_router.dart';
 import 'context_back_button.dart';
@@ -173,8 +174,16 @@ class AuthenticatedAppBar extends StatelessWidget
         'Campaigns': '/business/campaigns',
       if (business && access?.can('analytics') == true)
         'Results': '/business/results',
-      if (business && access?.can('intelligence') == true)
+      if (NativeReleasePolicy.premiumToolsAvailable &&
+          business &&
+          access?.can('intelligence') == true)
         'Growth': '/business/growth',
+      if (!NativeReleasePolicy.premiumToolsAvailable &&
+          business &&
+          access?.can('intelligence') == true) ...{
+        'Property': '/business/property',
+        'Weather': '/business/weather',
+      },
       if (business && access?.can('teamManagement') == true)
         'Team': '/business/team',
       if (business && access?.can('billing') == true)

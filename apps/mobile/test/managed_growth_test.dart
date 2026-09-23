@@ -115,9 +115,17 @@ void main() {
     final subscription = File(
       'lib/screens/business/subscription_screen.dart',
     ).readAsStringSync();
-    expect(public, matches(RegExp("planId == 'managed_growth'\\s*\\? 'PRIVATE BETA / INVITE ONLY'")));
+    expect(
+      public,
+      matches(RegExp("planId == 'managed_growth'\\s*\\? 'COMING SOON'")),
+    );
     expect(public, contains('SubscriptionPlanService.plans[planId]'));
-    expect(public, contains('Campaign compensation and platform fees are shown before funding.'));
+    expect(
+      public,
+      contains(
+        'Planning does not activate paid field work. Campaign costs are separate.',
+      ),
+    );
     expect(subscription, contains("plan: 'managed_growth'"));
     expect(subscription, contains('Printing and postcards are Coming Soon'));
   });

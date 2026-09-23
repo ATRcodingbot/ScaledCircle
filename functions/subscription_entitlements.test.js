@@ -9,9 +9,9 @@ const nowMillis = Date.parse("2026-08-13T12:00:00Z");
 const timestamp = (value) => ({toMillis: () => Date.parse(value)});
 
 test('no-expiry requires an explicit trusted complimentary Core term; malformed and paid records fail closed',()=>{
-  const record={plan:'scale',status:'active',comped:true,billingStatus:'comped',source:'internal_qa',accessTerm:'until_revoked',expiresAt:null};
+  const record={plan:'scale',status:'active',comped:true,billingStatus:'comped',source:'internal_qa',purpose:'store_review',paidProviderUsageAllowed:false,accessTerm:'until_revoked',expiresAt:null};
   assert.equal(entitlement.hasActiveScaleEntitlement(record,{nowMillis:Date.parse('2050-01-01')}),true);
-  for(const patch of [{comped:false},{billingStatus:'paid'},{source:'stripe'},{accessTerm:null},{plan:'managed_growth'},
+  for(const patch of [{purpose:null},{purpose:'other'},{paidProviderUsageAllowed:undefined},{source:'internal_beta'},{comped:false},{billingStatus:'paid'},{source:'stripe'},{accessTerm:null},{plan:'managed_growth'},
     {expiresAt:timestamp('2020-01-01')},{status:'revoked'},{status:'expired'}])
     assert.equal(entitlement.hasActiveScaleEntitlement({...record,...patch},{nowMillis}),false,JSON.stringify(patch));
   assert.equal(entitlement.hasActiveScaleEntitlement({plan:'scale',status:'active',expiresAt:null},{nowMillis}),false);

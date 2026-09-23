@@ -1,3 +1,4 @@
+import '../../config/native_release_policy.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_app/navigation/authenticated_app_bar.dart';
 import '../../navigation/app_routes.dart';
@@ -62,38 +63,40 @@ class ScaledCircleServicesScreen extends StatelessWidget {
               ),
               const SizedBox(height: 16),
               ..._catalog(context, plan),
-              ExpansionTile(
-                title: const Text('Campaign support tools'),
-                children: [
-                  for (final tool in <(String, String)>[
-                    ('Landing Pages — Beta', AppRoutes.businessLandingPages),
-                    ('Brand Assets — Beta', AppRoutes.businessBrandAssets),
-                    ('Physical Marketing', AppRoutes.businessPhysicalMarketing),
-                    (
-                      'Postcards — Coming Soon',
-                      AppRoutes.businessPostcards,
-                    ),
-                    (
-                      'Tracking Numbers — Beta',
-                      AppRoutes.businessTrackingPhone,
-                    ),
-                    if (AppEnvironmentConfig.responseTrackingEnabled)
+              if (NativeReleasePolicy.premiumToolsAvailable)
+                ExpansionTile(
+                  title: const Text('Campaign support tools'),
+                  children: [
+                    for (final tool in <(String, String)>[
+                      ('Landing Pages — Beta', AppRoutes.businessLandingPages),
+                      ('Brand Assets — Beta', AppRoutes.businessBrandAssets),
                       (
-                        'Response tracking — Beta',
-                        AppRoutes.businessAttribution,
+                        'Physical Marketing',
+                        AppRoutes.businessPhysicalMarketing,
                       ),
-                  ])
-                    ListTile(
-                      title: Text(tool.$1),
-                      trailing: const Icon(Icons.chevron_right),
-                      onTap: () => AppNavigation.push(context, tool.$2),
-                    ),
-                ],
-              ),
+                      ('Postcards — Coming Soon', AppRoutes.businessPostcards),
+                      (
+                        'Tracking Numbers — Beta',
+                        AppRoutes.businessTrackingPhone,
+                      ),
+                      if (AppEnvironmentConfig.responseTrackingEnabled)
+                        (
+                          'Response tracking — Beta',
+                          AppRoutes.businessAttribution,
+                        ),
+                    ])
+                      ListTile(
+                        title: Text(tool.$1),
+                        trailing: const Icon(Icons.chevron_right),
+                        onTap: () => AppNavigation.push(context, tool.$2),
+                      ),
+                  ],
+                ),
               const SizedBox(height: 16),
-              _financialOverview(),
+              if (NativeReleasePolicy.premiumToolsAvailable)
+                _financialOverview(),
               const SizedBox(height: 16),
-              _growthAnalytics(),
+              if (NativeReleasePolicy.premiumToolsAvailable) _growthAnalytics(),
             ],
           ),
         );
@@ -121,6 +124,18 @@ class ScaledCircleServicesScreen extends StatelessWidget {
       'EXECUTION',
       'ANALYTICS',
     ]) {
+      final items = ScaledCircleServiceCatalog.items
+          .where(
+            (item) =>
+                item.category == category &&
+                (NativeReleasePolicy.premiumToolsAvailable ||
+                    (!item.comingSoon &&
+                        NativeReleasePolicy.includesService(
+                          item.requiredPlan,
+                        ))),
+          )
+          .toList();
+      if (items.isEmpty) continue;
       widgets.add(
         Padding(
           padding: const EdgeInsets.only(top: 12, bottom: 6),
@@ -130,9 +145,7 @@ class ScaledCircleServicesScreen extends StatelessWidget {
           ),
         ),
       );
-      for (final item in ScaledCircleServiceCatalog.items.where(
-        (item) => item.category == category,
-      )) {
+      for (final item in items) {
         final entitled = item.entitledFor(plan) && !item.comingSoon;
         widgets.add(
           Card(

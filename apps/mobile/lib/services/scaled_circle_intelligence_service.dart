@@ -1,3 +1,4 @@
+import '../config/native_release_policy.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 
 class ScaledCircleAiInterpretation {
@@ -115,6 +116,7 @@ class ScaledCircleIntelligenceService {
   Future<ScaledCircleAiInterpretation> _call(
     Map<String, dynamic> request,
   ) async {
+    NativeReleasePolicy.requirePremiumWeb();
     final response = await _functions
         .httpsCallable('analyzeScaleIntelligence')
         .call(request);

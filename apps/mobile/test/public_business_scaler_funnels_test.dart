@@ -103,20 +103,34 @@ void main() {
     final intelligence = tester
         .getTopLeft(find.byKey(const Key('business-step-intelligence')))
         .dy;
-    final marketing = tester
-        .getTopLeft(find.byKey(const Key('business-step-marketing')))
-        .dy;
+    final marketing = kIsWeb
+        ? tester.getTopLeft(find.byKey(const Key('business-step-marketing'))).dy
+        : null;
     final campaigns = tester
         .getTopLeft(find.byKey(const Key('business-step-campaigns')))
         .dy;
     expect(setup, lessThan(intelligence));
-    expect(intelligence, lessThan(marketing));
-    expect(marketing, lessThan(campaigns));
-    for (final price in [99, 299, 499, 999]) {
-      expect(find.text('\$$price/month'), kIsWeb ? findsOneWidget : findsNothing);
+    if (kIsWeb) {
+      expect(intelligence, lessThan(marketing!));
+      expect(marketing, lessThan(campaigns));
+    } else {
+      expect(find.byKey(const Key('business-step-marketing')), findsNothing);
+      expect(intelligence, lessThan(campaigns));
     }
-    expect(find.text('PRIVATE BETA / INVITE ONLY'), kIsWeb ? findsOneWidget : findsNothing);
-    expect(find.textContaining('connection requires approval'), findsOneWidget);
+    for (final price in [99, 299, 499, 999]) {
+      expect(
+        find.text('\$$price/month'),
+        kIsWeb ? findsOneWidget : findsNothing,
+      );
+    }
+    expect(
+      find.text('PRIVATE BETA / INVITE ONLY'),
+      kIsWeb ? findsOneWidget : findsNothing,
+    );
+    expect(
+      find.textContaining('connection requires approval'),
+      kIsWeb ? findsOneWidget : findsNothing,
+    );
     expect(find.text('Flyer Distribution Results'), findsOneWidget);
     expect(find.text('SAMPLE RESULTS'), findsOneWidget);
     expect(find.text('Weather Intelligence'), findsOneWidget);
@@ -255,10 +269,7 @@ void main() {
     expect(find.text('Join as a Scaler'), findsWidgets);
     expect(find.text('Join Scaler Waitlist'), findsWidgets);
     expect(find.text('Log In'), findsWidgets);
-    expect(
-      find.textContaining("work is not guaranteed"),
-      findsOneWidget,
-    );
+    expect(find.textContaining("work is not guaranteed"), findsOneWidget);
   });
 
   test('account CTAs reuse pending registration without granting access', () {

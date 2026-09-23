@@ -9,7 +9,8 @@ const CORE_PLANS = new Set(["starter", "growth", "scale"]);
 function hasNonExpiringComplimentaryTerm(record) {
   return !!record && CORE_PLANS.has(record.planId || record.plan) &&
     record.comped === true && record.billingStatus === "comped" &&
-    ["internal_qa", "internal_beta"].includes(record.source) &&
+    record.source === "internal_qa" && record.purpose === "store_review" &&
+    record.paidProviderUsageAllowed === false &&
     record.accessTerm === "until_revoked" && record.expiresAt == null && record.revokedAt == null;
 }
 

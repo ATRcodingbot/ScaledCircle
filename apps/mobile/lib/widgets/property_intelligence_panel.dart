@@ -1,3 +1,4 @@
+import '../config/native_release_policy.dart';
 import 'package:flutter/material.dart';
 
 import '../services/property_intelligence_service.dart';
@@ -178,10 +179,11 @@ class PropertyIntelligencePanel extends StatelessWidget {
                   onPressed: onCompare,
                   child: const Text('Compare Nearby Areas'),
                 ),
-                OutlinedButton(
-                  onPressed: onAskAi,
-                  child: const Text('Ask AI About This Area'),
-                ),
+                if (NativeReleasePolicy.premiumToolsAvailable)
+                  OutlinedButton(
+                    onPressed: onAskAi,
+                    child: const Text('Ask AI About This Area'),
+                  ),
               ],
             ),
           ],

@@ -1,3 +1,4 @@
+import '../../config/native_release_policy.dart';
 import 'package:flutter/material.dart';
 import '../../navigation/authenticated_app_bar.dart';
 import '../../services/weather_monitoring_service.dart';
@@ -154,15 +155,16 @@ class _WeatherAlertsState extends State<WeatherAlertsScreen> {
               ),
             for (final row in rows) alert(row as Map),
           ],
-          TextButton(
-            onPressed: () => Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => const WeatherOpportunityAnalysisScreen(),
+          if (NativeReleasePolicy.premiumToolsAvailable)
+            TextButton(
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const WeatherOpportunityAnalysisScreen(),
+                ),
               ),
+              child: const Text('Optional Business weather planning analysis'),
             ),
-            child: const Text('Optional Business weather planning analysis'),
-          ),
         ],
       ),
     );

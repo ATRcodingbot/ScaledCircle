@@ -1,5 +1,6 @@
 import 'dart:math';
 import 'package:cloud_functions/cloud_functions.dart';
+import '../config/native_release_policy.dart';
 
 const customerStageLabels = <String, String>{
   'new_lead': 'New lead',
@@ -52,6 +53,9 @@ class BusinessOperationsService {
     Map<String, dynamic> input, {
     String? requestId,
   }) async {
+    if (const {'propose', 'linkEmailThread'}.contains(operation)) {
+      NativeReleasePolicy.requirePremiumWeb();
+    }
     final response = await FirebaseFunctions.instanceFor(region: 'us-east1')
         .httpsCallable('businessOperationsV1')
         .call({

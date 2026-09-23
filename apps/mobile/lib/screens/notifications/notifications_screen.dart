@@ -2,6 +2,7 @@ import 'package:flutter_app/navigation/authenticated_app_bar.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import '../../config/native_release_policy.dart';
 import '../../models/notification_destination.dart';
 import '../../services/mobile_notifications_service.dart';
 import '../../navigation/context_back_button.dart';
@@ -334,7 +335,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
 
               final data = notification.data() as Map<String, dynamic>;
 
-              if ((data['type']?.toString() ?? '').startsWith('social_')) {
+              if (NativeReleasePolicy.premiumToolsAvailable &&
+                  (data['type']?.toString() ?? '').startsWith('social_')) {
                 final key =
                     '${notification.id}:${data['updatedAt']}:${data['read']}';
                 return FutureBuilder<Map<String, dynamic>>(
