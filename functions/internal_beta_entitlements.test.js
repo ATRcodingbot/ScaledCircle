@@ -13,7 +13,7 @@ const Timestamp = {fromMillis: (value) => ({toMillis: () => value})};
 const FieldValue = {serverTimestamp: () => SERVER_TIMESTAMP};
 
 function fakeEnvironment({profileRole = "business", authEmail = "owner@example.test",
-  emailVerified = true,
+  emailVerified = true, disabled = false, now = () => NOW,
   existingSubscription = null} = {}) {
   const documents = new Map();
   documents.set("users/business-one", {role: profileRole});
@@ -44,19 +44,86 @@ function fakeEnvironment({profileRole = "business", authEmail = "owner@example.t
   };
   // Profile reads happen outside the transaction.
   db.collection = (name) => ({doc: (id) => ({...reference(name, id), get: async () => snapshot(`${name}/${id}`)})});
-  const authUser = {uid: "business-one", email: authEmail, emailVerified};
+  const authUser = {uid: "business-one", email: authEmail, emailVerified, disabled};
   const auth = {
     async getUser(uid) { if (uid !== authUser.uid) throw new Error("missing"); return authUser; },
     async getUserByEmail(email) { if (email !== authEmail) throw new Error("missing"); return authUser; },
   };
   const service = beta.createInternalBetaEntitlementService({db, auth, FieldValue, Timestamp,
-    now: () => NOW});
+    now});
   return {service, documents, writes};
 }
 
 const grantInput = (target = {businessUid: "business-one"}) => ({...target,
   plan: "managed_growth", reason: "Managed Growth founding beta",
   expiresAt: new Date(EXPIRY).toISOString()});
+
+const reviewInput = () => ({businessUid: "business-one", plan: "starter", source: "internal_qa",
+  purpose: "store_review", durationDays: 30, reason: "Founder-approved isolated store review"});
+
+test("review grant uses the existing Core resolver, finite term and audit without premium or money", async () => {
+  const env = fakeEnvironment();
+  await env.service.grant(reviewInput(), {uid: "admin-one"});
+  const record = env.documents.get("businessSubscriptions/business-one");
+  assert.equal(record.plan, "starter");
+  assert.equal(record.source, "internal_qa");
+  assert.equal(record.startsAt.toMillis(), NOW);
+  assert.equal(record.expiresAt.toMillis(), NOW + 30 * 86400000);
+  assert.equal(record.automaticRenewal, false);
+  assert.equal(entitlements.hasActivePaidBusinessEntitlement(record, {nowMillis: NOW}), true);
+  assert.equal(entitlements.hasActiveScaleEntitlement(record, {nowMillis: NOW}), false);
+  assert.equal(entitlements.hasActiveManagedGrowthEntitlement(record, {nowMillis: NOW}), false);
+  assert.equal(entitlements.hasActiveProductEntitlement(record, "business_assistant", {nowMillis: NOW}), false);
+  assert.equal(entitlements.hasActiveProductEntitlement(record, "lead_generation_research", {nowMillis: NOW}), false);
+  assert.equal(entitlements.hasActivePaidBusinessEntitlement(record, {nowMillis: NOW + 30 * 86400000}), false);
+  const wallet = env.documents.get("wallets/business-one");
+  assert.equal(wallet.subscriptionPrice, 99);
+  for (const field of ["balance", "availableBalance", "earnings", "stripeCustomerId", "stripeSubscriptionId",
+    "paymentIntentId", "addons", "productEntitlements"]) {
+    assert.equal(Object.hasOwn(record, field), false);
+    assert.equal(Object.hasOwn(wallet, field), false);
+  }
+  assert.equal(env.writes.length, 3);
+  assert.equal(env.writes.filter(w => w.path.startsWith("entitlementAuditEvents/"))[0].value.additionalSpendingUsd, 0);
+});
+
+test("review retries preserve one term after delay, expiry and revocation", async () => {
+  let current = NOW;
+  const env = fakeEnvironment({now: () => current});
+  await env.service.grant(reviewInput(), {uid: "admin-one"});
+  const original = env.documents.get("businessSubscriptions/business-one");
+  current += 86400000;
+  const retry = await env.service.grant({...reviewInput(), reason: "Retry after browser restart"}, {uid: "admin-two"});
+  assert.equal(retry.idempotentReplay, true);
+  assert.equal(retry.expiresAtMillis, NOW + 30 * 86400000);
+  assert.equal(env.writes.length, 3);
+  assert.equal(env.documents.get("businessSubscriptions/business-one"), original);
+  await env.service.revoke({businessUid: "business-one", reason: "Review completed"}, {uid: "admin-one"});
+  const count = env.writes.length;
+  assert.equal((await env.service.grant(reviewInput(), {uid: "admin-one"})).granted, false);
+  current = NOW + 31 * 86400000;
+  assert.equal((await env.service.grant(reviewInput(), {uid: "admin-one"})).granted, false);
+  assert.equal(env.writes.length, count);
+});
+
+test("review purpose cannot expand plans, terms, source or replace existing entitlements", async () => {
+  for (const patch of [{plan: "managed_growth"}, {plan: "scale"}, {source: "internal_beta"},
+    {durationDays: 31}, {durationDays: 0}, {expiresAt: new Date(EXPIRY).toISOString()},
+    {purpose: "other"}]) {
+    assert.throws(() => beta.validateGrantInput({...reviewInput(), ...patch}, NOW));
+  }
+  assert.throws(() => beta.validateGrantInput({...grantInput(), plan: "starter"}, NOW));
+  const prior = {plan: "managed_growth", status: "active", source: "internal_qa"};
+  const env = fakeEnvironment({existingSubscription: prior});
+  await assert.rejects(env.service.grant(reviewInput(), {uid: "admin-one"}), /existing_entitlement_preserved/);
+  assert.equal(env.documents.get("businessSubscriptions/business-one"), prior);
+  assert.equal(env.writes.length, 0);
+  for (const options of [{disabled: true}, {emailVerified: false}, {profileRole: "scaler"}]) {
+    const denied = fakeEnvironment(options);
+    await assert.rejects(denied.service.grant(reviewInput(), {uid: "admin-one"}));
+    assert.equal(denied.writes.length, 0);
+  }
+});
 
 test("only a verified trusted admin actor is accepted", () => {
   assert.throws(() => beta.assertTrustedAdminActor(null), /trusted_beta_admin_required/);

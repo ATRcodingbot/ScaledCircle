@@ -4964,6 +4964,7 @@ function internalBetaHttpsError(error) {
   const code = String(error?.message || "");
   if (["exactly_one_beta_target_required", "unsupported_internal_beta_plan",
     "unsupported_internal_entitlement_source", "internal_beta_reason_required",
+    "unsupported_internal_entitlement_purpose", "invalid_store_review_term",
     "finite_internal_beta_expiry_required"].includes(code)) {
     return new HttpsError("invalid-argument", code.replaceAll("_", " "));
   }
@@ -4972,6 +4973,8 @@ function internalBetaHttpsError(error) {
   }
   if (code === "internal_beta_target_not_business" ||
       code === "internal_beta_target_email_unverified" ||
+      code === "internal_beta_target_disabled" ||
+      code === "store_review_existing_entitlement_preserved" ||
       code === "internal_beta_entitlement_not_found") {
     return new HttpsError("failed-precondition", code.replaceAll("_", " "));
   }
