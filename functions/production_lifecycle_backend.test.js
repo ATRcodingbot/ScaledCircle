@@ -54,6 +54,7 @@ for(let i=1;i<7;i++)geometry.push({lat:40+.0015,lon:-75-.0015+i*.0005});
 for(let i=1;i<7;i++)geometry.push({lat:40+.0015-i*.0005,lon:-75+.0015});
 for(let i=1;i<7;i++)geometry.push({lat:40-.0015,lon:-75+.0015-i*.0005});
 global.fetch=async(url,options)=>{
+ if(String(url).startsWith('https://tigerweb.geo.census.gov/arcgis/rest/services/TIGERweb/State_County/MapServer/0/query'))return {ok:true,json:async()=>({features:[{attributes:{STATE:'42'}}]})};
  if(String(url)==='https://overpass-api.de/api/interpreter')return {ok:true,json:async()=>({elements:[{id:1,type:'way',tags:{highway:'residential',foot:'yes'},geometry}]})};
  if(/https?:\/\/(127\.0\.0\.1|localhost)(:|\/)/.test(String(url)))return realFetch(url,options);
  throw Error('External network denied in production lifecycle proof');
@@ -62,6 +63,7 @@ let env;
 before(async()=>{
  env=await initializeTestEnvironment({projectId:process.env.GCLOUD_PROJECT,firestore:{rules:fs.readFileSync(path.join(__dirname,'../firestore.production.rules'),'utf8')}});
  for(const col of await db.listCollections())await db.recursiveDelete(col);
+ await require('./test_market_fixture').seed(db,[['business','business'],['scaler','scaler'],['other','scaler']],'PA');
  for(const [uid,role]of [['business','business'],['scaler','scaler'],['other','scaler']]) {
   try{await auth.createUser({uid,email:uid+'@example.invalid',emailVerified:true});}catch(e){if(e.code!=='auth/uid-already-exists')throw e;}
   await db.doc('users/'+uid).set({role,active:true});
@@ -70,7 +72,7 @@ before(async()=>{
   }
  }
  await db.doc('businessSubscriptions/business').set({plan:'starter',status:'active',expiresAt:Timestamp.fromMillis(Date.now()+86400000)});
- await auth.createUser({uid:'notification-admin',email:require('../functions-campaign-funding/admin_revenue_notifications').SUPPORT_EMAIL,emailVerified:true});
+ try {await auth.createUser({uid:'notification-admin',email:require('../functions-campaign-funding/admin_revenue_notifications').SUPPORT_EMAIL,emailVerified:true});}catch(e){if(e.code!=='auth/uid-already-exists')throw e;}
 });
 after(async()=>{
  global.fetch=realFetch;require.cache[fr.resolve('stripe')].exports=actualStripe;

@@ -10,19 +10,26 @@ const {getApps} = require("firebase-admin/app");
 const qa = require("./staging_physical_qa");
 const legal = require("./legal_consent");
 const db = getFirestore();
+const restoreGeography = require('./test_market_fixture').mockGeography('24');
+const serviceArea = [{latitude:39,longitude:-76},{latitude:39.001,longitude:-76},
+ {latitude:39.001,longitude:-76.001},{latitude:39,longitude:-76.001}];
 const call = (name, uid, data) => fft.wrap(functions[name])({data,
   auth: {uid, token: {email_verified: true, email: `${uid}@example.invalid`}}});
 before(async () => {
   process.env.GCLOUD_PROJECT = "scaledcircle-staging";
+  for (const col of await db.listCollections()) await db.recursiveDelete(col);
+  await require("./test_market_fixture").seed(db, [["business","business"],["scaler","scaler"],["other","scaler"]]);
   for (const [id, role] of [["business", "business"], ["scaler", "scaler"], ["other", "scaler"]]) {
+    try { await require('firebase-admin/auth').getAuth().createUser({uid:id,email:id+'@example.invalid',emailVerified:true}); }
+    catch(error) { if(error.code!=='auth/uid-already-exists')throw error; }
     await db.doc(`users/${id}`).set({role, active: true});
   }
   await db.doc(qa.AUTHORITY_PATH).set({projectId: "scaledcircle-staging", immutable: true,
     certificationFixture: true, campaignId: qa.CAMPAIGN_ID, zoneId: qa.ZONE_ID,
     businessUid: "business", scalerUid: "scaler"});
-  await db.doc(`campaigns/${qa.CAMPAIGN_ID}`).set({businessId: "business", status: "open"});
+  await db.doc(`campaigns/${qa.CAMPAIGN_ID}`).set({businessId: "business", status: "open", serviceArea});
 });
-after(async () => { fft.cleanup(); await Promise.all(getApps().map((a) => a.delete())); });
+after(async () => { restoreGeography(); fft.cleanup(); await Promise.all(getApps().map((a) => a.delete())); });
 test("QA application keeps consent gate, creates once, and rejects unrelated Scaler", async () => {
   const data = {campaignId: qa.CAMPAIGN_ID};
   await assert.rejects(call("applyToCampaign", "scaler", data), (e) => e.code === "failed-precondition");

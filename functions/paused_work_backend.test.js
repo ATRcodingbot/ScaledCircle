@@ -6,8 +6,8 @@ const production=process.env.PRODUCTION_SETTLEMENT_TEST==='true';
 const project=production?'demo-production-engineering':'scaledcircle-staging';
 if(production){process.env.APP_ENV='production';process.env.UNUSED_WORK_REFUNDS_ENABLED='true';}
 const app=initializeApp({projectId:production?project:'demo-paused-work'},'paused-work-tests'),db=getFirestore(app);
-const finance=require(production?'../.firebase/production-engineering/package/campaign-funding/campaign_reserve_settlement':'./campaign_reserve_settlement');
-const pause=require(production?'../.firebase/production-engineering/package/job-room-core/paused_work':'./paused_work'),route=require('./route_progress');
+const finance=require(production?'../.firebase/production-engineering/funding/campaign_reserve_settlement':'./campaign_reserve_settlement');
+const pause=require(production?'../.firebase/production-engineering/tracking/paused_work':'./paused_work'),route=require('./route_progress');
 let ticks=2000000;
 const svc=()=>pause.createService({db,FieldValue,Timestamp,project,clock:()=>ticks});
 let counter=0;

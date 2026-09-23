@@ -6,9 +6,10 @@ function moduleSource(name,input){
  if(name==='campaign_reserve_settlement.js'){
   s=once(s,"  function staging() { if (project !== 'scaledcircle-staging') fail('This settlement release is staging only.'); }",
    "  const authority=require('./production_work_settlement_policy');\n  function staging() { authority.environment(project); }");
-  s=once(s,'    staging();\n    if (!funded(payment)',
-   '    staging(); authority.contract(zoneId,zone,contract); authority.payment(payment,contract);\n    if (!funded(payment)');
+  s=once(s,'    else staging();\n    if (!funded(payment)',
+   '    else staging();\n    authority.contract(zoneId,zone,contract); authority.payment(payment,contract);\n    if (!funded(payment)');
   s=s.replaceAll("!== 'test'","!== 'live'").replaceAll("!=='test'","!=='live'")
+   .replaceAll("(productionAuthority ? 'live' : 'test')","'live'")
    .replaceAll('Verified staging TEST funding','Verified production funding').replaceAll('verified TEST payment','verified production payment')
    .replaceAll('intent.livemode!==false','intent.livemode!==true').replaceAll('charge.livemode!==false','charge.livemode!==true')
    .replaceAll('refund.livemode===true','refund.livemode!==true');

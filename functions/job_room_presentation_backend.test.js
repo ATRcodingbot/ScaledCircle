@@ -3,15 +3,17 @@ const {test,before,after}=require('node:test'),assert=require('node:assert/stric
 for(const key of ['FIRESTORE_EMULATOR_HOST','FIREBASE_AUTH_EMULATOR_HOST']) {
   assert.match(process.env[key]||'',/^(127\.0\.0\.1|localhost):\d+$/,'Loopback emulators required');
 }
-const entry=process.env.JOB_ROOM_PRESENTATION_ENTRY;
-assert.ok(entry,'Exact prepared candidate required');
-process.env.GCLOUD_PROJECT='demo-job-room-presentation';process.env.APP_ENV='production';
+const entry=process.env.JOB_ROOM_PRESENTATION_ENTRY || require.resolve('../functions-job-room');
+// Current generated presentation contract; the production privacy adapter and
+// its privacyVersion requirement are covered by production_job_room_backend.
+assert.ok(entry,'Current generated candidate required');
+process.env.GCLOUD_PROJECT='demo-job-room-presentation';process.env.APP_ENV='staging';
 const localRequire=require('node:module').createRequire(path.resolve(entry));
 const fft=require('firebase-functions-test')({projectId:process.env.GCLOUD_PROJECT});
 const fn=localRequire(entry).getJobRoom;
 const {getFirestore,Timestamp}=localRequire('firebase-admin/firestore');
 const {getAuth}=localRequire('firebase-admin/auth');const {getApps}=localRequire('firebase-admin/app');const db=getFirestore();
-const invoke=uid=>fft.wrap(fn)({data:{zoneId:'zone',privacyVersion:'logistics_privacy_v1'},
+const invoke=uid=>fft.wrap(fn)({data:{zoneId:'zone'},
   auth:uid?{uid,token:{email_verified:true}}:undefined});
 let preserved;
 before(async()=>{

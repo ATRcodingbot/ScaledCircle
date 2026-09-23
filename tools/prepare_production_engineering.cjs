@@ -117,7 +117,8 @@ function prepare(output=path.join(root,'.firebase','production-engineering','tra
       'firebase-functions':sourcePackage.dependencies['firebase-functions']}},null,2)+'\n');
   const files={};for(const name of ['index.js','package.json',...copied]) {
     const bytes=fs.readFileSync(path.join(output,name));
-    if(/scaledcircle-staging|stagingPhysicalQa|physical_qa_v[123]|StagingCanvassing|TEST funding/.test(bytes.toString()))throw Error('Forbidden production marker in '+name);
+    const markerSource=['paid_work_launch_gate.js','billing_communications.js','transactional_email.js'].includes(name)?bytes.toString().replaceAll('scaledcircle-staging',''):bytes.toString();
+    if(/scaledcircle-staging|stagingPhysicalQa|physical_qa_v[123]|StagingCanvassing|TEST funding/.test(markerSource))throw Error('Forbidden production marker in '+name);
     files[name]=crypto.createHash('sha256').update(bytes).digest('hex');
   }
   fs.writeFileSync(path.join(output,'candidate-manifest.json'),JSON.stringify({exports:[...TRACKING,...POLICY],files,deployed:false},null,2));

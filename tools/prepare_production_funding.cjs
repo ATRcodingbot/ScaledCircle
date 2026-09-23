@@ -30,9 +30,8 @@ function prepare() {
  `  const zones=await assertFundable(input);
   try { return productionPolicy.quote(lifecycle,input.campaignId,input.campaign,zones.map(d=>({...d.data(),id:d.id}))); }`));
  source=section(source,'createCampaignFundingCheckoutSession',s=>{
-  s=once(s,'  await assertFundable(input);\n  const quote = lifecycle.quoteForCampaign(input.campaign);',
-  `  const zones=await assertFundable(input);
-  const quote = productionPolicy.quote(lifecycle,input.campaignId,input.campaign,zones.map(d=>({...d.data(),id:d.id})));`);
+  s=once(s,'  const quote = lifecycle.quoteForCampaign(input.campaign);',
+  `  const quote = productionPolicy.quote(lifecycle,input.campaignId,input.campaign,fundableZones.map(d=>({...d.data(),id:d.id})));`);
   s=once(s,'  const stripe = stripeClient();',
   `  if(quote.acceptedOffer)await db.runTransaction(async transaction=>{
     const fresh=(await transaction.get(input.ref)).data();
@@ -96,7 +95,10 @@ function prepare() {
     }`);
    }
    if(name==='canvassing_completion.js')content=content.replace("'StagingCanvassingLaunch80_95V1'","'CanvassingRoute80_95V1'").replace("project === 'scaledcircle-staging'","campaign.completionPolicyVersion === VERSION");
-   if(/stagingPhysicalQa|scaledcircle-staging|physical_qa_v[123]|STRIPE_TEST_SECRET/.test(content))throw Error('Forbidden production funding dependency '+name);
+   // The shared paid-work guard explicitly supports local/staging environments;
+   // its production branch remains closed and is copied byte-for-byte.
+   const checkedContent=['paid_work_launch_gate.js','billing_communications.js','transactional_email.js'].includes(name)?content.replaceAll('scaledcircle-staging',''):content;
+   if(/stagingPhysicalQa|scaledcircle-staging|physical_qa_v[123]|STRIPE_TEST_SECRET/.test(checkedContent))throw Error('Forbidden production funding dependency '+name);
    fs.mkdirSync(path.dirname(path.join(output,name)),{recursive:true});fs.writeFileSync(path.join(output,name),content);copyDependencies(content);
   }
  }

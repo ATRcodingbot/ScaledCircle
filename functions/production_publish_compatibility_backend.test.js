@@ -15,8 +15,10 @@ const fn=require(entry).publishFundedCampaign;
 const {getFirestore}=localRequire('firebase-admin/firestore');
 const {getApps}=localRequire('firebase-admin/app');
 const db=getFirestore();
+const restoreGeography=require('./test_market_fixture').mockGeography('24');
 const invoke=id=>fft.wrap(fn)({data:{campaignId:id},auth:{uid:'business',token:{email_verified:true}}});
 before(async()=>{
+ await require("./test_market_fixture").seed(db, [["business","business"]]);
  const auth=localRequire('firebase-admin/auth').getAuth();
  try{await auth.createUser({uid:'business',email:'business@example.invalid',emailVerified:true});}catch(error){if(error.code!=='auth/uid-already-exists')throw error;}
  await db.doc('users/business').set({role:'business',active:true});
@@ -25,9 +27,16 @@ before(async()=>{
   await db.doc('campaignPayments/payment-'+id).set({businessUid:'business',campaignId:id,status:'paid',stripeMode:'live',amountTotalCents:1800});
   await db.doc('campaignZones/'+id+'-invalid').set({campaignId:id,businessId:'business',mapped:false,pointCount:2});
  }
- await db.doc('campaignZones/mixed-valid').set({campaignId:'mixed',businessId:'business',mapped:true});
+ await db.doc('campaignZones/mixed-valid').set({campaignId:'mixed',businessId:'business',mapped:true,serviceArea:[{latitude:39,longitude:-76},{latitude:39.001,longitude:-76},{latitude:39,longitude:-76.001}]});
 });
-after(async()=>{fft.cleanup();for(const app of getApps())await app.delete();});
+after(async()=>{restoreGeography();fft.cleanup();for(const app of getApps())await app.delete();});
+test('production paid-work hold denies publication before downstream compatibility checks',async()=>{
+ delete process.env.LIVE_PAID_WORK_ACTIVATION_ENABLED;
+ await assert.rejects(invoke('mixed'),e=>e.details?.reason==='LIVE_PAYOUT_READINESS_REQUIRED');
+ assert.equal((await db.doc('campaigns/mixed').get()).data().status,'draft');
+ // Loopback-only fixture for the independently tested compatibility branch.
+ process.env.LIVE_PAID_WORK_ACTIVATION_ENABLED='true';
+});
 test('production handler filters invalid zones and preserves paid authority without additional economic effect',async()=>{
  const payment=(await db.doc('campaignPayments/payment-mixed').get()).data();
  assert.deepEqual(await invoke('mixed'),{campaignId:'mixed',status:'open',zonesLocked:1});
@@ -37,7 +46,7 @@ test('production handler filters invalid zones and preserves paid authority with
  assert.deepEqual((await db.doc('campaignPayments/payment-mixed').get()).data(),payment);
  for(const collection of ['walletTransactions','scalerEarnings','trackingSessions'])assert.equal((await db.collection(collection).get()).empty,true);
 });
-test('production handler rejects all-invalid campaign with the deployed payment/zone failure',async()=>{
- await assert.rejects(invoke('invalid'),e=>e.code==='failed-precondition'&&e.message==='Signed Stripe payment and a valid mapped Zone are required.');
+test('production handler rejects all-invalid campaign before funding publication when no work geography survives validation',async()=>{
+ await assert.rejects(invoke('invalid'),e=>e.code==='failed-precondition'&&e.message==='Confirm the assigned work area before continuing.');
  assert.equal((await db.doc('campaigns/invalid').get()).data().status,'draft');
 });

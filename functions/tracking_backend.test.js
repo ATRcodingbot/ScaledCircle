@@ -16,6 +16,7 @@ const fft = fftFactory({
 const functions = require("./index");
 const {classifyCutoffAction} = require("./operational_layer");
 const db = getFirestore();
+const restoreGeography = require("./test_market_fixture").mockGeography("24");
 
 const call = (fn, uid, data, verified = true) => fft.wrap(fn)({
   data,
@@ -46,9 +47,10 @@ const point = (sequence, offset = sequence) => ({
 });
 
 async function seed() {
+  await require("./test_market_fixture").seed(db, [["business","business"],["scaler","scaler"]]);
   await Promise.all([
-    db.doc("users/scaler").set({role: "scaler"}),
-    db.doc("users/other").set({role: "scaler"}),
+    db.doc("users/scaler").set({role: "scaler", active:true}),
+    db.doc("users/other").set({role: "scaler", active:true}),
     db.doc("users/business").set({role: "business", active:true}),
     db.doc("users/admin").set({role: "admin"}),
     db.doc("legalConsents/scaler_location_notice_location-notice-2026-08-v1").set({
@@ -101,6 +103,7 @@ beforeEach(async () => {
 });
 
 after(async () => {
+  restoreGeography();
   fft.cleanup();
   for (const app of getApps()) await app.delete();
 });
@@ -685,7 +688,7 @@ test("zone completion submission records contract authority without legacy payou
     }),
     db.doc("assignmentCompensations/zone").set({
       campaignId: "campaign", zoneId: "zone", businessId: "business", scalerId: "scaler",
-      baseAmountCents: 10000, bonusAmountCents: 0, currency: "usd", compensationVersion: 1,
+      baseAmountCents: 10000, bonusAmountCents: 0, currency: "usd", compensationVersion: 1, immutable: true,
     }),
     db.doc("campaignRoutes/submission-route").set({
       campaignId: "campaign", zoneId: "zone", businessId: "business", scalerId: "scaler",
@@ -716,7 +719,7 @@ test("concurrent Business review establishes exactly one earning and no provider
     }),
     db.doc("assignmentCompensations/zone").set({
       campaignId: "campaign", zoneId: "zone", businessId: "business", scalerId: "scaler",
-      baseAmountCents: 10000, bonusAmountCents: 2000, currency: "usd", compensationVersion: 1,
+      baseAmountCents: 10000, bonusAmountCents: 2000, currency: "usd", compensationVersion: 1, immutable: true,
     }),
     db.doc("campaignCompletions/earning-completion").set({
       campaignId: "campaign", zoneId: "zone", businessId: "business", scalerId: "scaler",

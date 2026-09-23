@@ -28,12 +28,13 @@ function emit(name,sha,output,guard=false) {
  source=source.replace('initializeApp();',"if(!require('firebase-admin/app').getApps().length)initializeApp();");
  fs.mkdirSync(output,{recursive:true});fs.writeFileSync(path.join(output,'index.js'),source);
  const copied=new Set();
- function deps(text) {for(const m of text.matchAll(/require\(['"]\.\/([\w./-]+)['"]\)/g)) {
+ function deps(text,current=false) {for(const m of text.matchAll(/require\(['"]\.\/([\w./-]+)['"]\)/g)) {
    const n=m[1].replace(/\.js$/,'')+'.js';if(copied.has(n))continue;copied.add(n);
    const shared=['workspace_access.js','business_workspace.js','subscription_entitlements.js','legal_consent.js'];
-   const content=shared.includes(n)?fs.readFileSync(path.join(root,'functions',n),'utf8'):files[n];
+   const useCurrent=current||shared.includes(n);
+   const content=useCurrent?fs.readFileSync(path.join(root,'functions',n),'utf8'):files[n];
    if(!content)throw Error('Missing reviewed dependency '+n);
-   fs.mkdirSync(path.dirname(path.join(output,n)),{recursive:true});fs.writeFileSync(path.join(output,n),content);deps(content);
+   fs.mkdirSync(path.dirname(path.join(output,n)),{recursive:true});fs.writeFileSync(path.join(output,n),content);deps(content,useCurrent);
  }}
  deps(source);
  fs.writeFileSync(path.join(output,'legacy-base-manifest.json'),JSON.stringify({name,archiveSha256:sha,
