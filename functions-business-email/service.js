@@ -234,6 +234,8 @@ function createService({db,authority,provider,providers,key,project,now=Date.now
       const draft={businessId:a.businessId,prospectId,version,operationId,provider:c.provider||'google',providerSubject:c.subject||null,from:c.email,recipient:p.recipient,subject,body,connectionGeneration:c.generation,
         source:p.sourceUrl||null,reason:p.reason||p.qualificationReason||'Review the source and Business fit.',certification,
         ...(pilotContext?{assistance:pilotContext.binding,automatic}:{}),...(outreach?{outreach}:{}),
+        // Inherit exact-conversation test provenance; never infer it from a recipient address.
+        ...(inboundParent?.controlledTest===true?{controlledTest:true,controlledTestDesignation:inboundParent.controlledTestDesignation||null}:{}),
         features:{...learning.featuresFor(p),channel:'email',messageAngle:input.messageAngle||'unspecified',cta:input.cta||'unspecified'},
         followupTo,inboundDigest,parentMessageId:previous?.messageId||old?.parentMessageId||null,
         parentThreadId:previous?.providerThreadId||inboundParent?.providerThreadId||old?.parentThreadId||null,state:'draft',editedBy:a.actorUid,editedAt:stamp()};
@@ -321,11 +323,12 @@ function createService({db,authority,provider,providers,key,project,now=Date.now
       }
       const recordContact=await require('./contact_relationship').sent({db,tx,businessId:a.businessId,opId:ref.id,op,now:now(),receipt:result});
       recordContact();
-      tx.update(ref,{state:'sent',providerMessageId:result.id,providerThreadId:result.threadId,conversationId:hash([a.businessId,ref.id]),providerAcceptedAt:stamp(),delivered:false});
+      tx.update(ref,{state:'sent',providerMessageId:result.id,providerThreadId:result.threadId,conversationId:hash([a.businessId,ref.id]),providerAcceptedAt:stamp(),delivered:false,...(result.replyReference?{replyReference:result.replyReference}:{})});
       if(!op.campaignId)tx.update(sub(a.businessId,'drafts',op.prospectId),{state:'sent'});
       tx.set(sub(a.businessId,'crm',op.prospectId),{businessId:a.businessId,prospectId:op.prospectId,state:'contacted',operationId:ref.id,
         providerThreadId:result.threadId,conversationId:hash([a.businessId,ref.id]),certification:op.certification===true,
         ...(op.crmCustomerId?{crmCustomerId:op.crmCustomerId}:{}),
+        ...(op.controlledTest===true?{controlledTest:true,controlledTestDesignation:op.controlledTestDesignation||null}:{}),
         ...(op.campaignId?{campaignId:op.campaignId,candidateId:op.candidateId,displayName:op.displayName,recipient:op.recipient}:{}),updatedAt:stamp()},{merge:true});
       if(op.campaignId)tx.create(sub(a.businessId,'contactHistory',hash([ref.id,'sent'])),{businessId:a.businessId,campaignId:op.campaignId,
         candidateId:op.candidateId,recipient:op.recipient,operationId:ref.id,providerMessageId:result.id,providerThreadId:result.threadId,

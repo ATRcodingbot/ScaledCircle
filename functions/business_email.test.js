@@ -97,3 +97,13 @@ test('provider response size is bounded while streaming',async()=>{
  const p=gmail.createProvider({clientId:'client',clientSecret:'secret',redirectUri:'https://example.test',fetchImpl:async()=>new Response('x'.repeat(2_000_001))});
  await assert.rejects(p.thread('secret','thread'),/too large/);
 });
+
+test('first inquiry reply resolves authenticated original RFC reference and refuses mismatched threads',async()=>{
+ const calls=[];let wrong=false;
+ const provider=gmail.createProvider({clientId:'client',clientSecret:'secret',redirectUri:'https://example.test/callback',fetchImpl:async(url,options)=>{
+ calls.push({url,options});return {ok:true,text:async()=>JSON.stringify(url.includes('/token')?{access_token:'transient'}:url.includes('/threads/')?{id:'original',messages:[{id:'inbound',threadId:'original',internalDate:'100',payload:{headers:[{name:'From',value:wrong?'other@example.test':'Greg <recipient@example.test>'},{name:'To',value:'owner@example.test'},{name:'Subject',value:'Information'},{name:'Message-ID',value:'<original@example.test>'}]}}]}:{id:'sent',threadId:'original'})};}});
+ const input={refreshToken:'fixture',from:'owner@example.test',to:'recipient@example.test',subject:'Re: Information',body:'Exact information.',messageId:'operation@mail.scaledcircle.com',parentThreadId:'original'};
+ const receipt=await provider.send(input);assert.equal(receipt.replyReference,'original@example.test');
+ const payload=JSON.parse(calls.find(c=>c.url.endsWith('/messages/send')).options.body),raw=Buffer.from(payload.raw,'base64url').toString();assert.equal(payload.threadId,'original');assert.match(raw,/In-Reply-To: <original@example.test>/);assert.match(raw,/References: <original@example.test>/);
+ wrong=true;calls.length=0;await assert.rejects(provider.send(input),/original reply reference/);assert.equal(calls.filter(c=>c.url.endsWith('/messages/send')).length,0);
+});

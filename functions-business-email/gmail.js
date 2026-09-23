@@ -62,14 +62,29 @@ function createProvider({clientId,clientSecret,redirectUri,fetchImpl=fetch}) {
     },
     async send({refreshToken,from,to,subject,body,messageId,parentMessageId,parentThreadId}) {
       const access=(await token({grant_type:'refresh_token',refresh_token:refreshToken})).access_token;
+      // First replies to received inquiries have no prior outbound RFC Message-ID.
+      // Resolve it from this authenticated, exact provider thread before sending.
+      if(parentThreadId&&!parentMessageId){
+        if(!/^[a-zA-Z0-9_-]{1,160}$/.test(parentThreadId))fail('invalid-argument','Invalid conversation.');
+        const thread=await request('https://gmail.googleapis.com/gmail/v1/users/me/threads/'+parentThreadId+'?format=metadata',{headers:headers(access)});
+        const header=(m,n)=>(m.payload?.headers||[]).find(h=>h.name.toLowerCase()===n)?.value||'';
+        const address=v=>(v.match(/<([^<>]+)>/)?.[1]||v).trim().toLowerCase();
+        const incoming=(thread.messages||[]).filter(m=>m.threadId===parentThreadId&&address(header(m,'from'))===email(to)&&address(header(m,'to'))===email(from)).sort((a,b)=>Number(b.internalDate)-Number(a.internalDate))[0];
+        const reference=header(incoming||{},'message-id').trim();
+        const baseSubject=v=>v.replace(/^(?:re:\s*)+/i,'').trim();
+        if(thread.id!==parentThreadId||!incoming||!/^<[^<>\s]+@[^<>\s]+>$/.test(reference)||baseSubject(header(incoming,'subject'))!==baseSubject(subject))
+          fail('failed-precondition','The original reply reference needs review before sending.');
+        parentMessageId=reference.slice(1,-1);
+      }
       const raw=[`From: ${email(from)}`,`To: ${email(to)}`,`Subject: =?UTF-8?B?${Buffer.from(subject).toString('base64')}?=`,
         `Message-ID: <${messageId}>`,...(parentMessageId?[`In-Reply-To: <${parentMessageId}>`,`References: <${parentMessageId}>`]:[]),
         'MIME-Version: 1.0','Content-Type: text/plain; charset=UTF-8','Content-Transfer-Encoding: base64','',
         Buffer.from(body).toString('base64').match(/.{1,76}/g).join('\r\n')].join('\r\n');
       // Gmail has no send idempotency key. The service makes one attempt, then
       // holds uncertain results; Message-ID alone is not duplicate protection.
-      return request('https://gmail.googleapis.com/gmail/v1/users/me/messages/send',{method:'POST',
+      const receipt=await request('https://gmail.googleapis.com/gmail/v1/users/me/messages/send',{method:'POST',
         headers:{...headers(access),'Content-Type':'application/json'},body:JSON.stringify({raw:Buffer.from(raw).toString('base64url'),...(parentThreadId?{threadId:parentThreadId}:{})})});
+      return {...receipt,...(parentMessageId?{replyReference:parentMessageId}:{})};
     },
     async thread(refreshToken,threadId) {
       if(!/^[a-zA-Z0-9_-]{1,160}$/.test(threadId))fail('invalid-argument','Invalid conversation.');

@@ -52,7 +52,7 @@ test('ordinary owner replies survive model-pilot expiry but cannot release an in
  const input={assistanceKind:'reply',customerId:'contact',followupTo:'inquiry',expectedInboundDigest:context.inboundDigest,expectedVersion:0,subject:'Your question',body:'Owner-reviewed answer.'};
  await assert.rejects(call('saveDraft',input),/not active/);
  actor.beta.sendEnabled=true;actor.beta.certificationOnly=false;
- const d=await call('saveDraft',input);await send(d);assert.equal(sends,1);assert.equal(d.assistance.grantId,'ordinary_owner_reviewed_reply');
+ const d=await call('saveDraft',input);await send(d);assert.equal(sends,1);assert.equal(d.assistance.grantId,'ordinary_owner_reviewed_reply');assert.equal(d.controlledTest,undefined);
 });
 
 test('revoked scoped grant cannot authorize automatic or reviewed pilot sending',async()=>{
@@ -120,3 +120,20 @@ test('prepared initial copy can stay fixed with immutable attribution and no mod
  const row=(await db.doc('businessMailboxes/owner/outreachVariants/'+sent.outreach.variantRecordId).get()).data();assert.equal(row.origin,'maintained_business_proposal');assert.equal(sent.subject,row.template.subject);
  assert.equal((await db.collection('businessMailboxes/owner/outreachPreparation').get()).size,0);
 });
+
+ test('controlled conversation reply inherits exclusion through immutable revision and single provider send',async()=>{
+ actor.beta.sendEnabled=true;actor.beta.certificationOnly=false;
+ const parent={businessId:'owner',state:'received',crmCustomerId:'contact',recipient:'recipient@example.test',from:actor.beta.mailbox,replyCount:1,providerThreadId:'original-thread',controlledTest:true,controlledTestDesignation:'exact-message'};
+ await db.doc('businessMailboxes/owner/operations/inquiry').set(parent);
+ await db.doc('businessMailboxes/owner/replies/inbound').set({businessId:'owner',operationId:'inquiry',from:parent.recipient,to:parent.from,providerThreadId:parent.providerThreadId,providerMessageId:'inbound',receivedAt:at,body:'Please reply with information only.',classification:'substantive',controlledTest:true});
+ const context=await call('loadConversation',{operationId:'inquiry'});
+ const d=await call('saveDraft',{assistanceKind:'reply',customerId:'contact',followupTo:'inquiry',expectedInboundDigest:context.inboundDigest,expectedVersion:0,subject:'Re: Information',body:'Exact approved information.',});
+ assert.equal(d.controlledTest,true);assert.equal(d.controlledTestDesignation,'exact-message');assert.equal(d.parentThreadId,'original-thread');
+ assert.equal((await db.doc('businessMailboxes/owner/versions/'+d.operationId).get()).data().controlledTest,true);
+ provider.send=async input=>{sends++;assert.equal(input.body,d.body);assert.equal(input.parentThreadId,'original-thread');assert.equal(input.controlledTest,true);return {id:'reply-provider-id',threadId:input.parentThreadId};};
+ await Promise.all([send(d),send(d)]);await send(d);assert.equal(sends,1);
+ const op=(await db.doc('businessMailboxes/owner/operations/'+d.operationId).get()).data();assert.equal(op.controlledTest,true);assert.equal(op.providerThreadId,'original-thread');assert.equal(op.approvalSource,'exact_owner_review');
+ assert.equal((await db.doc('businessMailboxes/owner/crm/crm_contact').get()).data().controlledTest,true);
+ const learning=require('../functions-business-email/growth_learning').project({businessId:'owner',operations:[{...op,id:d.operationId}],now:at});assert.equal(learning.sent,0);assert.equal(learning.patterns.length,0);
+ assert.equal((await db.collection('businessOperations/owner/items').get()).size,0);
+ });
