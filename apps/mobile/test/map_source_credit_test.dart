@@ -147,6 +147,80 @@ void main() {
       });
     }
   }
+  for (final configuration in [
+    (
+      name: 'Android gesture',
+      size: const Size(390, 844),
+      inset: const EdgeInsets.only(bottom: 24),
+    ),
+    (
+      name: 'Android buttons',
+      size: const Size(320, 568),
+      inset: const EdgeInsets.only(bottom: 48),
+    ),
+    (
+      name: 'iPhone home indicator',
+      size: const Size(390, 844),
+      inset: const EdgeInsets.only(bottom: 34),
+    ),
+    (
+      name: 'rotated phone',
+      size: const Size(568, 320),
+      inset: const EdgeInsets.fromLTRB(44, 0, 48, 21),
+    ),
+  ]) {
+    testWidgets(
+      '${configuration.name} keeps credit tappable within safe bounds',
+      (tester) async {
+        tester.view.physicalSize = configuration.size;
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: MediaQuery(
+                data: MediaQueryData(
+                  padding: configuration.inset,
+                  textScaler: TextScaler.linear(2),
+                ),
+                child: const MapAttributionFrame(
+                  additionalCredit: 'Boundaries: Nominatim / U.S. Census',
+                  child: SizedBox.expand(),
+                ),
+              ),
+            ),
+          ),
+        );
+        expect(tester.takeException(), isNull);
+        final button = tester.getRect(find.byType(TextButton));
+        expect(button.left, greaterThanOrEqualTo(configuration.inset.left));
+        expect(
+          button.right,
+          lessThanOrEqualTo(
+            configuration.size.width - configuration.inset.right,
+          ),
+        );
+        expect(
+          button.bottom,
+          lessThanOrEqualTo(
+            configuration.size.height - configuration.inset.bottom,
+          ),
+        );
+        expect(
+          tester
+              .getRect(find.text('Boundaries: Nominatim / U.S. Census'))
+              .bottom,
+          lessThanOrEqualTo(
+            configuration.size.height - configuration.inset.bottom,
+          ),
+        );
+        await tester.tap(find.byType(TextButton));
+        await tester.pumpAndSettle();
+        expect(launcher.url, osmCopyrightUrl);
+      },
+    );
+  }
   test('every existing OSM map uses the shared visible attribution frame', () {
     final maps = Directory('lib')
         .listSync(recursive: true)
