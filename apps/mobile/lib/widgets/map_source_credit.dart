@@ -50,35 +50,38 @@ class MapSourceCredit extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Material(
     color: Theme.of(context).colorScheme.surface,
-    child: Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Semantics(
-          key: const Key('osm-copyright-link'),
-          link: true,
-          button: true,
-          excludeSemantics: true,
-          label:
-              '© OpenStreetMap contributors. Copyright and licence. Opens browser.',
-          onTap: () => _open(context),
-          child: TextButton(
-            onPressed: () => _open(context),
-            child: const Text(
-              '© OpenStreetMap contributors',
-              textAlign: TextAlign.center,
+    child: SafeArea(
+      top: false,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Semantics(
+            key: const Key('osm-copyright-link'),
+            link: true,
+            button: true,
+            excludeSemantics: true,
+            label:
+                '© OpenStreetMap contributors. Copyright and licence. Opens browser.',
+            onTap: () => _open(context),
+            child: TextButton(
+              onPressed: () => _open(context),
+              child: const Text(
+                '© OpenStreetMap contributors',
+                textAlign: TextAlign.center,
+              ),
             ),
           ),
-        ),
-        if (additionalCredit != null)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(8, 0, 8, 4),
-            child: Text(
-              additionalCredit!,
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.labelSmall,
+          if (additionalCredit != null)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(8, 0, 8, 4),
+              child: Text(
+                additionalCredit!,
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.labelSmall,
+              ),
             ),
-          ),
-      ],
+        ],
+      ),
     ),
   );
 }

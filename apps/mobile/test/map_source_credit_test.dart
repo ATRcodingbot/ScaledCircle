@@ -82,6 +82,35 @@ void main() {
       expect(find.text('Saved map selection'), findsOneWidget);
     });
   }
+  testWidgets('edge-to-edge footer clears gesture bar without double insets', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    for (final alreadyInset in [false, true]) {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: MediaQuery(
+              data: const MediaQueryData(padding: EdgeInsets.only(bottom: 34)),
+              child: SafeArea(
+                bottom: alreadyInset,
+                top: false,
+                child: const MapAttributionFrame(child: SizedBox.expand()),
+              ),
+            ),
+          ),
+        ),
+      );
+      expect(tester.takeException(), isNull);
+      expect(tester.getRect(find.byType(TextButton)).bottom, 810);
+      await tester.tap(find.text('© OpenStreetMap contributors'));
+      await tester.pumpAndSettle();
+      expect(launcher.url, osmCopyrightUrl);
+    }
+  });
   for (final size in [const Size(320, 568), const Size(1024, 768)]) {
     for (final scale in [1.0, 3.0]) {
       testWidgets('readable accessible footer $size scale $scale', (
