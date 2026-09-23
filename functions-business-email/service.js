@@ -436,6 +436,7 @@ function createService({db,authority,provider,providers,key,project,now=Date.now
     if(op==='enrollOutboundPreparation')return require('./outbound_enrollment').create({db,now}).enroll(a,input);
     if(op==='recordAssistanceDataReview')return require('./pilot_enrollment').createEnrollment({db,now}).recordDataReview(a,input);
     if(op==='prepareAssistanceEnrollment')return require('./pilot_enrollment').createEnrollment({db,now}).prepare(a,input);
+    if(op==='extendNonModelAssistanceTerms')return require('./non_model_term_extension').create({db,now}).apply(a,input);
     if(op==='loadAssistance')return assistance.load(a);
     if(op==='manageAssistance')return assistance.mutate(a,input);
     if(op==='recordRecipientPermission')return pilot.recordPermission(a,input);

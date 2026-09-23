@@ -80,3 +80,32 @@ test('101 immutable revisions of few ideas do not exhaust content supply or omit
  const after=await rows('socialContentVersions',f.uid);assert.equal(after.length,102);
  for(const old of before)assert.deepEqual(after.find(v=>v.id===old.id),old);
 });
+
+test('exhausted starter supply progresses into unused maintained planning angles once, preserving all old jobs and media',async()=>{
+ const f=await fixture(),profile=(await db.doc('businessGrowthProfiles/'+f.uid).get()).data(),geo=(await db.doc('discoveryPreferences/'+f.uid).get()).data();
+ const scope=require('../functions-social-operations/growth_geography').serviceAreaScope(geo,f.uid),connections=f.policy.providers.map(provider=>({provider,status:'connected_write',tokenHealth:'healthy'}));
+ const starter=require('../functions-social-operations/social_customer_plan').prepare({uid:f.uid,planId:'managed_growth',profile,scope,connections,now:f.now});
+ // Production-shaped exhausted history: all initial captions already exist, and
+ // the upkeep angle was consumed by Instagram's earlier bounded correction.
+ const batch=db.batch();
+ for(const [i,item]of starter.record.items.entries()){
+  const id=f.planId+'_old_'+i;batch.set(db.doc('socialContentVersions/'+id+'_v1'),{businessUid:f.uid,pillar:item.pillar,variants:item.variants,mediaRevisionId:'preserved'});
+ }
+ const upkeep=require('../functions-social-operations/social_managed_content_recovery').topics('decks',profile.businessName)[0];
+ batch.set(db.doc('socialContentVersions/'+f.uid+'_recovery'),{businessUid:f.uid,recoveryTopic:upkeep.key,pillar:upkeep.pillar,variants:[{provider:'instagram',copy:upkeep.copy}]});
+ const protectedJob={businessUid:f.uid,status:'scheduled',provider:'facebook',versionId:'protected_v7',scheduledFor:new Date(f.now+86400000).toISOString(),binding:{source:'original'}};
+ batch.set(db.doc('socialGrowthJobs/'+f.uid+'_protected'),protectedJob);await batch.commit();
+ const before=await rows('socialContentVersions',f.uid);
+ const results=await Promise.all([supply.replenish({db,uid:f.uid,now:f.now}),supply.replenish({db,uid:f.uid,now:f.now})]);
+ const created=results.find(r=>r.status==='draft_created');assert.equal(created.topicId,'service_planning:access_logistics');assert.equal(results.filter(r=>r.status==='draft_created').length,1);
+ assert.equal((await supply.replenish({db,uid:f.uid,now:f.now})).status,'existing_drafts');
+ const after=await rows('socialContentVersions',f.uid);for(const v of before)assert.deepEqual(after.find(x=>x.id===v.id),v);
+ assert.deepEqual((await db.doc('socialGrowthJobs/'+f.uid+'_protected').get()).data(),protectedJob);
+ assert.equal((await rows('generatedMediaJobs',f.uid)).length,0);assert.equal((await rows('socialGrowthApprovals',f.uid)).length,0);
+ const draft=after.find(v=>v.id===created.itemId+'_v1');assert.equal(draft.variants.length,2);assert.equal(draft.variants[0].copy,draft.variants[1].copy);assert.equal(draft.variants[0].mediaRevisionId??null,null);
+ // Exhaust every maintained angle. Changing service labels or renewing a policy
+ // must not turn the same concepts into a new supply of filler.
+ const all=require('../functions-social-operations/social_managed_content_recovery').topics('decks',profile.businessName);
+ const exhausted=supply.choose({uid:f.uid,policy:f.policy,plan:f.plan,profile,scope,connections,items:[],versions:[...before,...all.map(t=>({pillar:t.pillar,recoveryTopic:t.key,variants:connections.map(c=>({provider:c.provider,copy:t.copy}))}))],jobs:[],now:f.now});
+ assert.equal(exhausted.status,'fresh_topics_exhausted');assert.equal(exhausted.diagnostics.starterTemplatesExhausted,true);
+});

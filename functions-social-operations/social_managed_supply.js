@@ -50,7 +50,24 @@ function choose({uid,policy,plan,profile,scope,connections,items,versions,jobs,n
       return {status:'draft_created',itemId,item,service};
     }
   }
-  return {status:'fresh_topics_exhausted'};
+  // The starter plan is finite. Continue with the already-maintained, distinct
+  // service-planning angles used by bounded content recovery. A different service
+  // name or renewed policy does not make an exhausted angle fresh again.
+  const fresh=require('./social_managed_content_recovery').topics;
+  const diagnostics={starterTemplatesExhausted:true,eligibleAngles:0,repeatedAngles:0};
+  for(const service of policy.services.filter(s=>(profile.servicesOffered||[]).some(v=>normalize(v)===normalize(s)))){
+    for(const idea of fresh(service,reviewed.businessName)){
+      const topicId='service_planning:'+idea.key;
+      if(items.some(i=>i.managedTopicId===topicId)||versions.some(v=>v.recoveryTopic===idea.key||normalize(v.pillar)===normalize(idea.pillar)))continue;
+      diagnostics.eligibleAngles++;
+      const variants=slots.filter(s=>connections.some(c=>c.provider===s.provider&&social.connectionHealth(c).healthy)).map(s=>({provider:s.provider,format:'feed',copy:idea.copy,callToAction:plan.items?.flatMap(i=>i.variants||[]).find(v=>v.callToAction)?.callToAction||'Learn more',destinationUrl:policy.destinations[0],mediaRequirement:`Prepare a relevant ${service} illustration for: ${idea.pillar}. Do not imply completed Business work. Unrelated-creative cooldown and existing generation allowance apply.`})).filter(v=>!bounded.internalCopy.test(v.copy)&&!bounded.unsupportedClaim.test(v.copy)&&!social.repetitionAssessment({variant:v,recentVariants:versions.flatMap(x=>(x.variants||[]).filter(y=>y.provider===v.provider))}).repeated);
+      if(!variants.length){diagnostics.repeatedAngles++;continue;}
+      const itemKey='managed_topic_'+hash({uid,topicId}).slice(0,32),itemId=policy.planId+'_'+itemKey;
+      if(items.some(i=>i.id===itemId))continue;
+      return {status:'draft_created',itemId,service,topicId,item:{itemKey,pillar:idea.pillar,goal:idea.goal,scheduledFor:slots.find(s=>s.provider===variants[0].provider).at,variants}};
+    }
+  }
+  return {status:'fresh_topics_exhausted',diagnostics,message:'The maintained starter topics and distinct service-planning angles are exhausted or repetitive. Add a specific supported Business topic; no filler or extra spending is authorized.'};
 }
 async function replenish({db,uid,now=Date.now()}) {
   return db.runTransaction(async tx=>{
@@ -89,7 +106,7 @@ async function replenish({db,uid,now=Date.now()}) {
     }
     const supplyRef=db.doc('socialManagedSupplyStatus/'+uid);
     if(result.status!=='draft_created'){
-      if(profile?.internalSocialContext)tx.set(supplyRef,{businessUid:uid,policyId:policy.id,checkedAt:now,...result});
+      tx.set(supplyRef,{businessUid:uid,policyId:policy.id,checkedAt:now,...result});
       return result;
     }
     const {itemId,item,service}=result;
@@ -103,7 +120,7 @@ async function replenish({db,uid,now=Date.now()}) {
     tx.create(db.doc('socialManagedDraftAudit/'+itemId),{businessUid:uid,policyId:policy.id,strategyDigest:policy.strategyDigest,
       itemId,service,...(result.topicId?{topicId:result.topicId}:{}),createdAt:now,source:'recurring_strategy_preparation',approvalCreated:false,schedulingCreated:false});
     const saved={status:'draft_created',itemId,...(result.constraints?{constraints:result.constraints}:{}),...(result.topicId?{topicId:result.topicId}:{}),...(result.coverage?{coverage:result.coverage}:{}),message:'One fresh topic prepared. Final creative and quality checks still apply; no post has been scheduled by replenishment.'};
-    if(profile?.internalSocialContext)tx.set(supplyRef,{businessUid:uid,policyId:policy.id,checkedAt:now,...saved});
+    tx.set(supplyRef,{businessUid:uid,policyId:policy.id,checkedAt:now,...saved});
     return saved;
   });
 }
