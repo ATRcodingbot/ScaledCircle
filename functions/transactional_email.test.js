@@ -114,6 +114,8 @@ test("Scaler finalization atomically creates profile and exactly two determinist
   assert.match(welcome.html, /alt="ScaledCircle"/);
   assert.match(welcome.text, /REAL_CODE/);
   assert.equal(welcome.trustedHtml, true);
+  assert.equal(db.documents.get("users/scaler-1").active, false);
+  assert.equal(db.documents.get("users/scaler-1").betaAccess, "pending");
 });
 
 test("finalization retry is idempotent", async () => {
@@ -257,10 +259,8 @@ test("historical pending template is prepared without pretending it is a new sig
   assert.doesNotMatch(value.text, /Your Scaler account has been created/);
 });
 
-// Opening admission is prepared, but production remains held until Founder GO.
-test('prepared public Core signup is idempotent, preserves existing records and never creates paid access',async t=>{
- const availability=require('./product_availability');
- t.mock.method(availability,'publicSignupAccess',role=>role==='business'?{active:true,betaAccess:'approved',accessSource:'public_core_signup'}:{active:false,betaAccess:'pending'});
+// Founder opening admits only Business accounts; paid access still requires reconciliation.
+test('public Core signup is idempotent, preserves existing records and never creates paid access',async()=>{
  const {db,value}=service(),request={uid:'core-owner',authUser,data:{...signup,role:'business',companyName:'Fixture Business'}};
  await value.finalize(request);await value.finalize(request);
  assert.equal(db.documents.get('users/core-owner').active,true);

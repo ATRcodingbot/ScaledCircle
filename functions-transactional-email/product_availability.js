@@ -4,9 +4,9 @@ const PRIVATE=new Set(['business_assistant','growth_department','postcards']);
 // not consult this gate; existing approved service operation is unchanged.
 const COMING_SOON=new Set(['managed_growth','business_assistant','lead_generation_research','growth_department']);
 const PUBLIC_PLANS=Object.freeze(['starter','growth','scale']);
-// Prepared public Core launch. Founder opening approval is still required.
+// Founder-authorized public Core Business opening, September 23, 2026.
 // This controls NEW Business account admission, never paid entitlement.
-const PUBLIC_CORE_SIGNUP_OPEN=false;
+const PUBLIC_CORE_SIGNUP_OPEN=true;
 function publicSignupAccess(role){
  return PUBLIC_CORE_SIGNUP_OPEN&&role==='business'
   ? {active:true,betaAccess:'approved',accessSource:'public_core_signup'}

@@ -24,13 +24,16 @@ test('enrollment gates do not rewrite provider terms or comped/paid entitlement 
  assert.equal(typeof ent,'object');
  const sync=fs.readFileSync(__dirname+'/workspace_subscription_sync.js','utf8');assert(!sync.includes('assertPurchase'));
 });
-test('opening is held; prepared opening admits only new Business accounts, never paid access or Scalers',()=>{
- assert.equal(a.PUBLIC_CORE_SIGNUP_OPEN,false);assert.equal(a.publicSignupAccess('business').active,false);
- const source=fs.readFileSync(__dirname+'/product_availability.js','utf8').replace('const PUBLIC_CORE_SIGNUP_OPEN=false;','const PUBLIC_CORE_SIGNUP_OPEN=true;');
- const module={exports:{}};vm.runInNewContext(source,{module,require});const open=module.exports;
- assert.equal(open.publicSignupAccess('business').active,true);assert.equal(open.publicSignupAccess('scaler').active,false);assert.equal(open.publicSignupAccess('admin').active,false);
- assert.equal(open.publicSignupAccess('business').plan,undefined);
+test('public opening admits only new Business accounts, never paid access or Scalers',()=>{
+ assert.equal(a.PUBLIC_CORE_SIGNUP_OPEN,true);
+ assert.deepEqual(a.publicSignupAccess('business'),{active:true,betaAccess:'approved',accessSource:'public_core_signup'});
+ for(const role of ['scaler','admin','Business','',undefined])assert.deepEqual(a.publicSignupAccess(role),{active:false,betaAccess:'pending'});
+ assert.equal(a.publicSignupAccess('business').plan,undefined);
+ const source=fs.readFileSync(__dirname+'/product_availability.js','utf8').replace('const PUBLIC_CORE_SIGNUP_OPEN=true;','const PUBLIC_CORE_SIGNUP_OPEN=false;');
+ const module={exports:{}};vm.runInNewContext(source,{module,require});
+ assert.equal(module.exports.publicSignupAccess('business').active,false);
 });
+
 test('maintained purchase handlers gate new selection before provider calls; recovery and events remain independent',()=>{
  const source=fs.readFileSync(__dirname+'/index.js','utf8');const checkout=source.slice(source.indexOf('exports.createSubscriptionCheckoutSession ='),source.indexOf('exports.createBillingPortalSession ='));
  assert(checkout.indexOf('assertPurchase')<checkout.indexOf('stripe.checkout.sessions.create'));
