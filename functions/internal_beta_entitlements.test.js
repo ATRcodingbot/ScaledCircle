@@ -61,6 +61,57 @@ const grantInput = (target = {businessUid: "business-one"}) => ({...target,
 const reviewInput = () => ({businessUid: "business-one", plan: "starter", source: "internal_qa",
   purpose: "store_review", durationDays: 30, reason: "Founder-approved isolated store review"});
 
+const durableReview = (expectedExpiresAtMillis) => ({businessUid:'business-one',plan:'scale',source:'internal_qa',
+  purpose:'store_review',accessTerm:'until_revoked',expectedExpiresAtMillis,reason:'Founder-approved durable Core review'});
+
+test('durable Core conversion preserves original audit, is revocable and never starts billing or providers', async()=>{
+  let current=NOW;
+  const env=fakeEnvironment({now:()=>current});
+  const finite=await env.service.grant(reviewInput(),{uid:'admin-one'});
+  const oldAudit=env.writes.find(w=>w.path.startsWith('entitlementAuditEvents/'));
+  await env.service.grant(durableReview(finite.expiresAtMillis),{uid:'admin-one'});
+  const record=env.documents.get('businessSubscriptions/business-one');
+  assert.equal(record.plan,'scale');assert.equal(record.expiresAt,null);
+  assert.equal(record.accessTerm,'until_revoked');assert.equal(record.paidProviderUsageAllowed,false);
+  assert.equal(record.automaticRenewal,false);
+  assert.equal(env.documents.get(oldAudit.path),oldAudit.value);
+  current=Date.parse('2050-01-01T00:00:00Z');
+  assert.equal(entitlements.hasActiveScaleEntitlement(record,{nowMillis:current}),true);
+  assert.equal(entitlements.hasActiveManagedGrowthEntitlement(record,{nowMillis:current}),false);
+  for(const product of ['business_assistant','lead_generation_research']) assert.equal(entitlements.hasActiveProductEntitlement(record,product,{nowMillis:current}),false);
+  assert.equal(require('./business_workspace').seats(record,current),5);
+  const count=env.writes.length;
+  assert.equal((await env.service.grant(durableReview(finite.expiresAtMillis),{uid:'admin-two'})).idempotentReplay,true);
+  assert.equal(env.writes.length,count);
+  const wallet=env.documents.get('wallets/business-one');assert.equal(wallet.subscriptionExpiresAt,null);
+  assert.equal(wallet.subscriptionAccessTerm,'until_revoked');assert.equal(wallet.subscriptionPaidProviderUsageAllowed,false);
+  for(const field of ['stripeSubscriptionId','stripeCustomerId','balance','availableCredits','earnings','addons','productEntitlements']){
+    assert.equal(Object.hasOwn(record,field),false);assert.equal(Object.hasOwn(wallet,field),false);
+  }
+  await env.service.revoke({businessUid:'business-one',reason:'Administrative review access revocation'},{uid:'admin-one'});
+  assert.equal(entitlements.hasActiveScaleEntitlement(env.documents.get('businessSubscriptions/business-one'),{nowMillis:current}),false);
+  const revokedCount=env.writes.length;
+  assert.equal((await env.service.grant(durableReview(finite.expiresAtMillis),{uid:'admin-two'})).granted,false);
+  assert.equal(env.writes.length,revokedCount);
+});
+
+test('durable conversion is Core-only, conditional on exact prior term and preserves unrelated entitlements',async()=>{
+  for(const patch of [{plan:'managed_growth'},{plan:'growth_department'},{durationDays:30},{expiresAt:new Date(EXPIRY).toISOString()},{source:'stripe'}])
+    assert.throws(()=>beta.validateGrantInput({...durableReview(),...patch},NOW));
+  const env=fakeEnvironment();const first=await env.service.grant(reviewInput(),{uid:'admin-one'});
+  await assert.rejects(env.service.grant(durableReview(first.expiresAtMillis+1),{uid:'admin-one'}),/existing_entitlement_preserved/);
+  assert.equal(env.writes.length,3);
+  await env.service.revoke({businessUid:'business-one',reason:'Owner revoked'},{uid:'admin-one'});
+  await assert.rejects(env.service.grant(durableReview(first.expiresAtMillis),{uid:'admin-one'}),/existing_entitlement_preserved/);
+  for(const prior of [{plan:'managed_growth',source:'internal_qa',status:'active'},
+    {plan:'scale',source:'stripe',status:'active',stripeSubscriptionId:'sub_existing'}]){
+    const f=fakeEnvironment({existingSubscription:prior});
+    if(prior.source==='stripe')assert.equal((await f.service.grant(durableReview(),{uid:'admin-one'})).preservedPaidEntitlement,true);
+    else await assert.rejects(f.service.grant(durableReview(),{uid:'admin-one'}),/existing_entitlement_preserved/);
+    assert.equal(f.writes.length,0);
+  }
+});
+
 test("review grant uses the existing Core resolver, finite term and audit without premium or money", async () => {
   const env = fakeEnvironment();
   await env.service.grant(reviewInput(), {uid: "admin-one"});

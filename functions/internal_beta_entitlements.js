@@ -11,6 +11,7 @@ const MAXIMUM_GRANT_DAYS = 365;
 const MANAGED_GROWTH_LIST_PRICE = 999;
 const STORE_REVIEW_PURPOSE = "store_review";
 const STORE_REVIEW_DAYS = 30;
+const CORE_REVIEW_PLANS = {starter: 99, growth: 299, scale: 499};
 
 function cleanText(value, maximum = 500) {
   return typeof value === "string" ? value.trim().slice(0, maximum) : "";
@@ -36,6 +37,8 @@ function entitlementSummary(record = {}) {
     source: cleanText(record.source, 60) || null,
     billingStatus: cleanText(record.billingStatus, 40) || null,
     expiresAtMillis: Number.isFinite(millis(record.expiresAt)) ? millis(record.expiresAt) : null,
+    accessTerm: record.accessTerm || "fixed",
+    paidProviderUsageAllowed: record.paidProviderUsageAllowed !== false,
   };
 }
 
@@ -65,26 +68,30 @@ function validateGrantInput(input, nowMillis) {
   const plan = cleanText(input?.plan, 40).toLowerCase();
   const purpose = cleanText(input?.purpose, 60);
   const storeReview = purpose === STORE_REVIEW_PURPOSE;
+  const durable = storeReview && input?.accessTerm === "until_revoked";
+  if (input?.accessTerm != null && !durable) throw new Error("invalid_store_review_term");
   if (purpose && !storeReview) throw new Error("unsupported_internal_entitlement_purpose");
-  if (!ALLOWED_PLANS.has(plan) && !(storeReview && plan === "starter")) {
+  if (!ALLOWED_PLANS.has(plan) && !(storeReview && (durable ? CORE_REVIEW_PLANS[plan] : plan === "starter"))) {
     throw new Error("unsupported_internal_beta_plan");
   }
   const reason = cleanText(input?.reason, 500);
   if (!reason) throw new Error("internal_beta_reason_required");
   const source = cleanText(input?.source, 60).toLowerCase() || SOURCE;
-  if (storeReview && (plan !== "starter" || source !== QA_SOURCE ||
-      input?.durationDays !== STORE_REVIEW_DAYS || input?.expiresAt != null)) {
+  if (storeReview && (source !== QA_SOURCE || input?.expiresAt != null ||
+      (durable ? (!CORE_REVIEW_PLANS[plan] || input?.durationDays != null) :
+        (plan !== "starter" || input?.durationDays !== STORE_REVIEW_DAYS)))) {
     throw new Error("invalid_store_review_term");
   }
-  const expiresAtMillis = storeReview ? nowMillis + STORE_REVIEW_DAYS * 86400000 : millis(input?.expiresAt);
+  const expiresAtMillis = durable ? null : storeReview ? nowMillis + STORE_REVIEW_DAYS * 86400000 : millis(input?.expiresAt);
   const maximum = nowMillis + MAXIMUM_GRANT_DAYS * 24 * 60 * 60 * 1000;
-  if (!Number.isFinite(expiresAtMillis) || expiresAtMillis <= nowMillis || expiresAtMillis > maximum) {
+  if (!durable && (!Number.isFinite(expiresAtMillis) || expiresAtMillis <= nowMillis || expiresAtMillis > maximum)) {
     throw new Error("finite_internal_beta_expiry_required");
   }
   if (![SOURCE, QA_SOURCE].includes(source)) {
     throw new Error("unsupported_internal_entitlement_source");
   }
-  return {businessUid, businessEmail, plan, reason, expiresAtMillis, source, storeReview};
+  return {businessUid, businessEmail, plan, reason, expiresAtMillis, source, storeReview, durable,
+    expectedExpiresAtMillis: input?.expectedExpiresAtMillis};
 }
 
 function validateRevokeInput(input) {
@@ -123,12 +130,13 @@ function createInternalBetaEntitlementService({db, auth, FieldValue, Timestamp, 
     const nowMillis = now();
     const valid = validateGrantInput(input, nowMillis);
     const business = await resolveBusiness(valid);
-    const expiresAt = Timestamp.fromMillis(valid.expiresAtMillis);
+    const expiresAt = valid.durable ? null : Timestamp.fromMillis(valid.expiresAtMillis);
     const subscriptionRef = db.collection("businessSubscriptions").doc(business.uid);
     const walletRef = db.collection("wallets").doc(business.uid);
     // One review term per Business. A retry (even by another Admin or after
     // expiry/revocation) must not start another clock or restore access.
-    const auditId = valid.storeReview ? eventId(["grant", business.uid, STORE_REVIEW_PURPOSE, SCHEMA_VERSION]) :
+    const auditId = valid.storeReview ? eventId(["grant", business.uid,
+      valid.durable ? "store_review_until_revoked" : STORE_REVIEW_PURPOSE, SCHEMA_VERSION]) :
       eventId(["grant", business.uid, valid.plan, valid.reason,
         valid.expiresAtMillis, actor.uid, SCHEMA_VERSION]);
     const auditRef = db.collection("entitlementAuditEvents").doc(auditId);
@@ -145,14 +153,23 @@ function createInternalBetaEntitlementService({db, auth, FieldValue, Timestamp, 
       }
       if (auditSnapshot.exists) {
         if (valid.storeReview) return {granted: previous.status === "active" &&
-          previous.purpose === STORE_REVIEW_PURPOSE && millis(previous.expiresAt) > nowMillis,
+          previous.purpose === STORE_REVIEW_PURPOSE &&
+          (require('./subscription_entitlements').hasNonExpiringComplimentaryTerm(previous) || millis(previous.expiresAt) > nowMillis),
         idempotentReplay: true, businessUid: business.uid, plan: previous.planId || previous.plan,
-        status: previous.status, expiresAtMillis: millis(auditSnapshot.data().expiresAt)};
+        status: previous.status, accessTerm: previous.accessTerm || 'fixed',
+        expiresAtMillis: auditSnapshot.data().expiresAt == null ? null : millis(auditSnapshot.data().expiresAt)};
         return {granted: true, idempotentReplay: true, businessUid: business.uid,
           plan: valid.plan, expiresAtMillis: valid.expiresAtMillis};
       }
       if (valid.storeReview && subscriptionSnapshot.exists) {
-        throw new Error("store_review_existing_entitlement_preserved");
+        if (!valid.durable || previous.purpose !== STORE_REVIEW_PURPOSE || previous.source !== QA_SOURCE ||
+            previous.comped !== true || previous.status !== 'active' ||
+            previous.revokedAt != null ||
+            !Number.isFinite(valid.expectedExpiresAtMillis) ||
+            millis(previous.expiresAt) !== valid.expectedExpiresAtMillis ||
+            !CORE_REVIEW_PLANS[previous.planId || previous.plan]) {
+          throw new Error("store_review_existing_entitlement_preserved");
+        }
       }
       const serverTimestamp = FieldValue.serverTimestamp();
       const authoritative = {
@@ -161,16 +178,19 @@ function createInternalBetaEntitlementService({db, auth, FieldValue, Timestamp, 
         grantedBy: actor.uid, grantedAt: serverTimestamp, expiresAt,
         revokedAt: null, revokedBy: null, revocationReason: null, updatedAt: serverTimestamp,
         ...(valid.storeReview ? {purpose: STORE_REVIEW_PURPOSE,
-          startsAt: Timestamp.fromMillis(nowMillis), automaticRenewal: false} : {}),
+          startsAt: previous.startsAt || Timestamp.fromMillis(nowMillis), automaticRenewal: false} : {}),
+        ...(valid.durable ? {accessTerm: 'until_revoked', paidProviderUsageAllowed: false} : {}),
       };
       transaction.set(subscriptionRef, authoritative, {merge: false});
       transaction.set(walletRef, {
         ownerId: business.uid, ownerType: "business", subscriptionPlan: valid.plan,
-        subscriptionPrice: valid.storeReview ? 99 : MANAGED_GROWTH_LIST_PRICE,
+        subscriptionPrice: valid.storeReview ? CORE_REVIEW_PLANS[valid.plan] : MANAGED_GROWTH_LIST_PRICE,
         subscriptionStatus: "active", subscriptionComped: true,
         subscriptionSource: valid.source, subscriptionBillingStatus: BILLING_STATUS,
         subscriptionExpiresAt: expiresAt, subscriptionUpdatedAt: serverTimestamp,
         updatedAt: serverTimestamp,
+        ...(valid.durable ? {subscriptionAccessTerm: 'until_revoked', subscriptionPurpose: STORE_REVIEW_PURPOSE,
+          subscriptionPaidProviderUsageAllowed: false} : {}),
       }, {merge: true});
       transaction.create(auditRef, {
         schemaVersion: SCHEMA_VERSION, eventType: "internal_beta_granted",
@@ -179,12 +199,13 @@ function createInternalBetaEntitlementService({db, auth, FieldValue, Timestamp, 
         expiresAt, grantedBy: actor.uid, occurredAt: serverTimestamp,
         previousEntitlement: entitlementSummary(previous),
         newEntitlement: entitlementSummary({...authoritative, expiresAt}),
-        ...(valid.storeReview ? {purpose: STORE_REVIEW_PURPOSE, durationDays: STORE_REVIEW_DAYS,
+        ...(valid.storeReview ? {purpose: STORE_REVIEW_PURPOSE, durationDays: valid.durable ? null : STORE_REVIEW_DAYS,
           startsAt: Timestamp.fromMillis(nowMillis), additionalSpendingUsd: 0,
           automaticRenewal: false} : {}),
+        ...(valid.durable ? {accessTerm: 'until_revoked', paidProviderUsageAllowed: false} : {}),
       });
       return {granted: true, idempotentReplay: false, businessUid: business.uid,
-        plan: valid.plan, expiresAtMillis: valid.expiresAtMillis};
+        plan: valid.plan, expiresAtMillis: valid.expiresAtMillis, ...(valid.durable ? {accessTerm:'until_revoked'} : {})};
     });
   }
 

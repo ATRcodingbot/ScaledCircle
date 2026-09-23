@@ -4,6 +4,20 @@ const SCALE_PLAN_ID = "scale";
 const MANAGED_GROWTH_PLAN_ID = "managed_growth";
 const PROPERTY_INTELLIGENCE_FEATURE = "property_intelligence";
 const PAID_BUSINESS_PLANS = new Set(["starter", "growth", "scale", MANAGED_GROWTH_PLAN_ID]);
+const CORE_PLANS = new Set(["starter", "growth", "scale"]);
+
+function hasNonExpiringComplimentaryTerm(record) {
+  return !!record && CORE_PLANS.has(record.planId || record.plan) &&
+    record.comped === true && record.billingStatus === "comped" &&
+    ["internal_qa", "internal_beta"].includes(record.source) &&
+    record.accessTerm === "until_revoked" && record.expiresAt == null && record.revokedAt == null;
+}
+
+function hasCurrentMembershipTerm(record, nowMillis) {
+  if (hasNonExpiringComplimentaryTerm(record)) return true;
+  const expiry = timestampMillis(record?.expiresAt);
+  return Number.isFinite(expiry) && expiry > nowMillis;
+}
 
 function timestampMillis(value) {
   if (value && typeof value.toMillis === "function") return value.toMillis();
@@ -16,9 +30,8 @@ function hasActiveScaleEntitlement(record, {nowMillis = Date.now()} = {}) {
   if (!record || typeof record !== "object") return false;
   const plan = String(record.planId || record.plan || "").trim().toLowerCase();
   const status = String(record.status || "").trim().toLowerCase();
-  const expiresAtMillis = timestampMillis(record.expiresAt);
   return [SCALE_PLAN_ID, MANAGED_GROWTH_PLAN_ID].includes(plan) && status === "active" &&
-    Number.isFinite(expiresAtMillis) && expiresAtMillis > nowMillis;
+    hasCurrentMembershipTerm(record, nowMillis);
 }
 
 function hasActiveManagedGrowthEntitlement(record, options = {}) {
@@ -31,9 +44,8 @@ function hasActivePaidBusinessEntitlement(record, {nowMillis = Date.now()} = {})
   if (!record || typeof record !== "object") return false;
   const plan = String(record.planId || record.plan || "").trim().toLowerCase();
   const status = String(record.status || "").trim().toLowerCase();
-  const expiresAtMillis = timestampMillis(record.expiresAt);
   return PAID_BUSINESS_PLANS.has(plan) && status === "active" &&
-    Number.isFinite(expiresAtMillis) && expiresAtMillis > nowMillis;
+    hasCurrentMembershipTerm(record, nowMillis);
 }
 
 function hasActiveProductEntitlement(record, product, options = {}) {
@@ -52,4 +64,6 @@ module.exports = {
   hasActiveManagedGrowthEntitlement,
   hasActivePaidBusinessEntitlement,
   hasActiveProductEntitlement,
+  hasNonExpiringComplimentaryTerm,
+  hasCurrentMembershipTerm,
 };

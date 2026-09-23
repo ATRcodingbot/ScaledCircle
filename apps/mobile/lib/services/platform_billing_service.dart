@@ -1,4 +1,5 @@
 import 'business_workspace_service.dart';
+import 'subscription_plan_service.dart';
 import '../config/native_membership_policy.dart';
 import '../config/app_environment.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -308,18 +309,6 @@ class PlatformBillingService {
       return false;
     }
 
-    final status = data['subscriptionStatus']?.toString().toLowerCase();
-
-    final expires = data['subscriptionExpiresAt'];
-
-    if (status != 'active') {
-      return false;
-    }
-
-    if (expires is! Timestamp) {
-      return false;
-    }
-
-    return expires.toDate().isAfter(DateTime.now());
+    return SubscriptionPlanService.hasActiveMembership(data);
   }
 }

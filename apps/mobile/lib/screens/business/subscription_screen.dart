@@ -7,6 +7,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../../services/platform_billing_service.dart';
+import '../../services/subscription_plan_service.dart';
 import '../../widgets/billing_selection_editor.dart';
 import '../../widgets/starter_intro_offer_card.dart';
 
@@ -258,10 +259,6 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
 
                   final walletData = snapshot.data?.data() ?? {};
 
-                  final subscriptionStatus = walletData['subscriptionStatus']
-                      ?.toString()
-                      .toLowerCase();
-
                   final currentPlan = walletData['subscriptionPlan']
                       ?.toString()
                       .toLowerCase();
@@ -272,9 +269,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                       walletData['subscriptionSource'] == 'admin_comp';
 
                   final subscriptionActive =
-                      subscriptionStatus == 'active' &&
-                      expiresAt is Timestamp &&
-                      expiresAt.toDate().isAfter(DateTime.now());
+                      SubscriptionPlanService.hasActiveMembership(walletData);
 
                   return ListView(
                     padding: const EdgeInsets.all(20),
@@ -345,7 +340,11 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                                       const SizedBox(height: 4),
 
                                       Text(
-                                        'Active until ${_formatDate(expiresAt)}',
+                                        SubscriptionPlanService.hasNonExpiringComplimentaryTerm(
+                                              walletData,
+                                            )
+                                            ? 'Complimentary access · No expiry · Administratively revocable'
+                                            : 'Active until ${_formatDate(expiresAt)}',
                                       ),
                                     ],
                                   ),

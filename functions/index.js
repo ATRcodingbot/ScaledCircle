@@ -5257,6 +5257,10 @@ async function requireScaleIntelligenceBusiness(request, trace) {
     );
   }
   trace.mark("SCALE_ENTITLEMENT_VERIFIED");
+  if (entitlement.paidProviderUsageAllowed === false) {
+    throw new HttpsError("failed-precondition",
+      "Paid model processing is not authorized for this workspace. Your Core tools remain available.");
+  }
   return context;
 }
 

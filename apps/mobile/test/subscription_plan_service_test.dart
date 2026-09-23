@@ -3,6 +3,49 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_app/services/subscription_plan_service.dart';
 
 void main() {
+  test(
+    'durable complimentary Core projection remains active after October 23 and revocation locks it',
+    () {
+      final wallet = <String, dynamic>{
+        'subscriptionPlan': 'scale',
+        'subscriptionStatus': 'active',
+        'subscriptionComped': true,
+        'subscriptionBillingStatus': 'comped',
+        'subscriptionSource': 'internal_qa',
+        'subscriptionAccessTerm': 'until_revoked',
+        'subscriptionExpiresAt': null,
+      };
+      final plans = SubscriptionPlanService();
+      final future = DateTime.utc(2050);
+      expect(
+        SubscriptionPlanService.hasActiveMembership(wallet, now: future),
+        isTrue,
+      );
+      expect(plans.hasActiveScaleEntitlement(wallet, now: future), isTrue);
+      expect(plans.hasActiveManagedGrowth(wallet, now: future), isFalse);
+      for (final patch in <Map<String, dynamic>>[
+        {'subscriptionStatus': 'revoked'},
+        {'subscriptionSource': 'stripe'},
+        {'subscriptionComped': false},
+        {'subscriptionAccessTerm': null},
+        {'subscriptionPlan': 'managed_growth'},
+        {
+          'subscriptionExpiresAt': Timestamp.fromDate(
+            DateTime.utc(2026, 10, 23),
+          ),
+        },
+      ]) {
+        expect(
+          SubscriptionPlanService.hasActiveMembership({
+            ...wallet,
+            ...patch,
+          }, now: future),
+          isFalse,
+        );
+      }
+    },
+  );
+
   group('Weather Intelligence entitlement', () {
     final plans = SubscriptionPlanService();
 

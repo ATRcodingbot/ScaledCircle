@@ -139,7 +139,9 @@ class _BusinessMembershipScreenState extends State<BusinessMembershipScreen> {
                   if (!scheduled && !ended)
                     Text(
                       data['complimentary'] == true
-                          ? 'Complimentary access through $_end. No recurring charge.'
+                          ? data['accessTerm'] == 'until_revoked'
+                                ? '${data['membershipPurpose'] == 'store_review' ? 'Store-review' : 'Complimentary'} access has no expiry. An administrator can revoke it. No recurring charge.'
+                                : 'Complimentary access through $_end. No recurring charge.'
                           : 'Next renewal: $_recurring on $_end',
                     ),
                   const SizedBox(height: 24),
@@ -478,7 +480,9 @@ class _BusinessMembershipScreenState extends State<BusinessMembershipScreen> {
                   if (data['paidAccess'] == true)
                     Text(
                       data['complimentary'] == true
-                          ? 'Complimentary access through $_end. No recurring charge.'
+                          ? data['accessTerm'] == 'until_revoked'
+                                ? '${data['membershipPurpose'] == 'store_review' ? 'Store-review' : 'Complimentary'} access has no expiry. An administrator can revoke it. No recurring charge.'
+                                : 'Complimentary access through $_end. No recurring charge.'
                           : data['cancelAtPeriodEnd'] == true
                           ? 'Cancellation scheduled. Access through $_end.'
                           : 'Next renewal: $_recurring on $_end',
@@ -638,7 +642,9 @@ class _BusinessMembershipScreenState extends State<BusinessMembershipScreen> {
                   ],
                   Text(
                     data['complimentary'] == true
-                        ? 'Complimentary access through $_end. No automatic renewal charge.'
+                        ? data['accessTerm'] == 'until_revoked'
+                              ? '${data['membershipPurpose'] == 'store_review' ? 'Store-review' : 'Complimentary'} access has no expiry. An administrator can revoke it. No recurring charge.'
+                              : 'Complimentary access through $_end. No automatic renewal charge.'
                         : data['cancelAtPeriodEnd'] == true
                         ? 'Cancellation Scheduled · Access through $_end. No further subscription renewal is scheduled.'
                         : 'Next renewal: $_recurring on $_end',

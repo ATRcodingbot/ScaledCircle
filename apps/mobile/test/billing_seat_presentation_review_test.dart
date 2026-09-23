@@ -60,7 +60,58 @@ class UnavailableReviewService extends ReviewService {
   ]) async => throw Exception('private provider diagnostic');
 }
 
+class DurableReviewService extends ComplimentaryReviewService {
+  @override
+  Future<Map<String, dynamic>> call(
+    String name, [
+    Map<String, dynamic> input = const {},
+  ]) async => {
+    ...await super.call(name, input),
+    'plan': 'scale',
+    'planName': 'Scale',
+    'accessTerm': 'until_revoked',
+    'membershipPurpose': 'store_review',
+    'periodEndMs': null,
+    'seatLimit': 5,
+    'seatsAvailable': 4,
+  };
+}
+
 void main() {
+  testWidgets(
+    'durable Core reviewer is truthful about zero charge, no expiry and ordinary seat limit',
+    (tester) async {
+      await tester.binding.setSurfaceSize(const Size(390, 1800));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      await tester.pumpWidget(
+        MaterialApp(
+          home: BusinessMembershipScreen(
+            service: DurableReviewService(),
+            businessId: 'isolated-owner',
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Scale'), findsOneWidget);
+      expect(find.text('1 of 5 seats used'), findsOneWidget);
+      expect(find.text('4 seats available · Owner included'), findsOneWidget);
+      expect(
+        find.textContaining('Store-review access has no expiry.'),
+        findsOneWidget,
+      );
+      expect(
+        find.textContaining('administrator can revoke it'),
+        findsOneWidget,
+      );
+      expect(
+        find.textContaining('verified end of your paid period'),
+        findsNothing,
+      );
+      expect(find.text('Cancel Membership'), findsNothing);
+      expect(find.text('Reactivate Membership'), findsNothing);
+      expect(tester.takeException(), isNull);
+    },
+  );
   testWidgets(
     'complimentary cancellation deep link returns plan management without a fake cancel',
     (tester) async {

@@ -1427,17 +1427,11 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
 
         final data = snapshot.data?.data();
 
-        final status =
-            data?['subscriptionStatus']?.toString().toLowerCase() ?? 'inactive';
-
         final plan = data?['subscriptionPlan']?.toString().toLowerCase();
 
         final expiresAt = data?['subscriptionExpiresAt'];
 
-        final isActive =
-            status == 'active' &&
-            expiresAt is Timestamp &&
-            expiresAt.toDate().isAfter(DateTime.now());
+        final isActive = SubscriptionPlanService.hasActiveMembership(data);
 
         final planLabel = _subscriptionPlanLabel(plan);
 
@@ -1499,12 +1493,18 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
                 if (isActive) ...[
                   if (price != null)
                     Text(
-                      '\$${price.toStringAsFixed(0)} / month',
+                      data?['subscriptionComped'] == true
+                          ? 'Complimentary access · No recurring charge'
+                          : '\$${price.toStringAsFixed(0)} / month',
                       style: const TextStyle(fontWeight: FontWeight.w600),
                     ),
                   if (price != null) const SizedBox(height: 4),
                   Text(
-                    expirationLabel.isEmpty
+                    SubscriptionPlanService.hasNonExpiringComplimentaryTerm(
+                          data,
+                        )
+                        ? 'No expiry · Administratively revocable'
+                        : expirationLabel.isEmpty
                         ? 'Subscription active'
                         : 'Active until $expirationLabel',
                   ),

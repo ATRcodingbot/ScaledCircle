@@ -1,6 +1,38 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 class SubscriptionPlanService {
+  static bool hasNonExpiringComplimentaryTerm(Map<String, dynamic>? wallet) {
+    if (wallet == null) return false;
+    return const [
+          'starter',
+          'growth',
+          'scale',
+        ].contains(wallet['subscriptionPlan']) &&
+        wallet['subscriptionComped'] == true &&
+        wallet['subscriptionBillingStatus'] == 'comped' &&
+        const [
+          'internal_qa',
+          'internal_beta',
+        ].contains(wallet['subscriptionSource']) &&
+        wallet['subscriptionAccessTerm'] == 'until_revoked' &&
+        wallet['subscriptionExpiresAt'] == null &&
+        wallet['subscriptionRevokedAt'] == null;
+  }
+
+  static bool hasActiveMembership(
+    Map<String, dynamic>? wallet, {
+    DateTime? now,
+  }) {
+    if (wallet?['subscriptionStatus']?.toString().trim().toLowerCase() !=
+        'active') {
+      return false;
+    }
+    if (hasNonExpiringComplimentaryTerm(wallet)) return true;
+    final expiresAt = wallet?['subscriptionExpiresAt'];
+    return expiresAt is Timestamp &&
+        expiresAt.toDate().isAfter(now ?? DateTime.now());
+  }
+
   static const Map<String, Map<String, dynamic>> plans = {
     'starter': {
       'name': 'Starter',
@@ -10,7 +42,10 @@ class SubscriptionPlanService {
       'unlimitedCampaigns': false,
       'unlimitedScalers': false,
       'features': [
-        'customers_leads', 'business_schedule', 'internal_jobs', 'business_tasks',
+        'customers_leads',
+        'business_schedule',
+        'internal_jobs',
+        'business_tasks',
         'campaign_mapping',
         'gps_verification',
         'completion_verification',
@@ -28,7 +63,10 @@ class SubscriptionPlanService {
       'unlimitedCampaigns': false,
       'unlimitedScalers': false,
       'features': [
-        'customers_leads', 'business_schedule', 'internal_jobs', 'business_tasks',
+        'customers_leads',
+        'business_schedule',
+        'internal_jobs',
+        'business_tasks',
         'campaign_mapping',
         'gps_verification',
         'completion_verification',
@@ -53,7 +91,10 @@ class SubscriptionPlanService {
       'unlimitedCampaigns': true,
       'unlimitedScalers': true,
       'features': [
-        'customers_leads', 'business_schedule', 'internal_jobs', 'business_tasks',
+        'customers_leads',
+        'business_schedule',
+        'internal_jobs',
+        'business_tasks',
         'campaign_mapping',
         'gps_verification',
         'completion_verification',
@@ -86,7 +127,10 @@ class SubscriptionPlanService {
       'unlimitedCampaigns': true,
       'unlimitedScalers': true,
       'features': [
-        'customers_leads', 'business_schedule', 'internal_jobs', 'business_tasks',
+        'customers_leads',
+        'business_schedule',
+        'internal_jobs',
+        'business_tasks',
         'campaign_mapping',
         'gps_verification',
         'completion_verification',
@@ -173,16 +217,8 @@ class SubscriptionPlanService {
   }) {
     if (wallet == null) return false;
     final plan = wallet['subscriptionPlan']?.toString().trim().toLowerCase();
-    final status = wallet['subscriptionStatus']
-        ?.toString()
-        .trim()
-        .toLowerCase();
-    final expiresAt = wallet['subscriptionExpiresAt'];
-    final referenceTime = now ?? DateTime.now();
     return (plan == 'scale' || plan == 'managed_growth') &&
-        status == 'active' &&
-        expiresAt is Timestamp &&
-        expiresAt.toDate().isAfter(referenceTime);
+        hasActiveMembership(wallet, now: now);
   }
 
   bool hasActiveManagedGrowth(Map<String, dynamic>? wallet, {DateTime? now}) {

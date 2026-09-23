@@ -64,7 +64,9 @@ function createBillingService({db,FieldValue,workspace,stripe,planForPrice,price
     const w=(await db.doc('wallets/'+access.businessId).get()).data()||{};
     if(e.stripeSubscriptionId||w.stripeSubscriptionId||w.pendingSubscriptionRequestId)error('failed-precondition','Membership billing needs reconciliation.');
     const view={businessId:access.businessId,plan,planName:PLANS[plan].name,price:0,monthlyCents:0,
-      complimentary:true,periodEndMs:e.expiresAt.toMillis(),paidAccess:true,status:'active',
+      complimentary:true,periodEndMs:e.expiresAt?.toMillis?.() ?? null,
+      accessTerm:e.accessTerm || 'fixed',membershipPurpose:e.purpose || null,
+      paidAccess:true,status:'active',
       canCancel:false,canWithdrawCancellation:false,cancelAtPeriodEnd:false,addons:[],
       billingHistory:[],billingHistoryStatus:'complimentary',seatLimit:PLANS[plan].seats};
     try {const inv=await workspace.inventory(access.businessId),used=1+inv.members.filter(m=>m.status==='active').length,

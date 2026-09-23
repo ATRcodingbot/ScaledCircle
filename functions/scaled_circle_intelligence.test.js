@@ -10,6 +10,24 @@ const functionsRoot = __dirname;
 const repositoryRoot = path.join(__dirname, "..");
 const indexSource = fs.readFileSync(path.join(functionsRoot, "index.js"), "utf8");
 
+test('workspace paid-model restriction is enforced by the real authority before provider preparation', async()=>{
+  const vm=require('node:vm'),parser=require('@babel/parser');
+  const node=parser.parse(indexSource).program.body.find(n=>n.type==='FunctionDeclaration'&&n.id.name==='requireScaleIntelligenceBusiness');
+  assert.ok(node);
+  let record={plan:'scale',status:'active',comped:true,billingStatus:'comped',source:'internal_qa',accessTerm:'until_revoked',expiresAt:null,paidProviderUsageAllowed:false};
+  const markers=[];
+  class HttpsError extends Error {constructor(code,message){super(message);this.code=code;}}
+  const context={HttpsError,authenticatedUserContext:async()=>({uid:'isolated-owner',role:'business',isAdmin:false}),
+    isLocalScaleIntelligenceEmulator:()=>false,subscriptionEntitlements:require('./subscription_entitlements'),
+    db:{collection:name=>{assert.equal(name,'businessSubscriptions');return {doc:uid=>{assert.equal(uid,'isolated-owner');return {get:async()=>({data:()=>record})};}};}}};
+  vm.createContext(context);
+  const authorize=vm.runInContext(indexSource.slice(node.start,node.end)+';requireScaleIntelligenceBusiness;',context);
+  await assert.rejects(authorize({auth:{uid:'isolated-owner'}},{mark:x=>markers.push(x)}),{code:'failed-precondition',message:'Paid model processing is not authorized for this workspace. Your Core tools remain available.'});
+  record={plan:'scale',status:'active',expiresAt:{toMillis:()=>Date.now()+86400000},source:'stripe'};
+  assert.equal((await authorize({auth:{uid:'ordinary-owner'}},{mark:()=>{}})).role,'business');
+  assert.ok(markers.includes('SCALE_ENTITLEMENT_VERIFIED'));
+});
+
 function propertyFacts(overrides = {}) {
   return {
     analysisId: "a".repeat(64), geometryDigest: "b".repeat(64),
