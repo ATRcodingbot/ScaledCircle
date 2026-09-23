@@ -113,3 +113,26 @@ test('read-only picker uses exact workspace Schedule, optional staff and same tr
  const member=createService({db,FieldValue:admin.firestore.FieldValue,now:()=>at,authority:async()=>({businessId:'owner',isOwner:false,permissions:['scheduleView','communicationsRead']})});
  await assert.rejects(member.execute({data:{businessId:'owner',operation:'appointmentOptions',input:{}}}),{code:'permission-denied'});
 });
+
+test('controlled inquiry offer preserves exclusion through confirmation, replay and cancellation without conversion outcomes',async()=>{
+ await db.doc('businessMailboxes/owner/operations/op').update({controlledTest:true,controlledTestDesignation:'exact-inquiry'});
+ await db.doc('businessOperations/owner/customers/customer').update({emailOperationIds:['op']});
+ const prepared=await call('saveItem',{expectedVersion:0,item:item(),emailConversation:emailConversation()},'controlled_offer_123');
+ const ref=db.doc('businessOperations/owner/items/'+prepared.itemId),tentative=(await ref.get()).data();
+ assert.equal(tentative.emailLink.controlledTest,true);assert.equal(tentative.emailLink.controlledTestDesignation,'exact-inquiry');assert.match(tentative.title,/^Controlled test — /);assert.equal(tentative.status,'tentative');
+ const input={itemId:prepared.itemId,expectedVersion:1,item:{...item(),status:'scheduled'},emailConversation:{...emailConversation(),acceptanceReplyId:'reply',ownerConfirmsAcceptance:true}};
+ await call('saveItem',input,'controlled_confirm_123');assert.equal((await call('saveItem',input,'controlled_confirm_123')).duplicate,true);
+ const confirmed=(await ref.get()).data();assert.equal(confirmed.status,'scheduled');assert.equal(confirmed.emailLink.controlledTest,true);assert.equal(confirmed.emailLink.confirmationEmailState,'not_requested');
+ assert.equal((await db.doc('businessOperations/owner/customers/customer').get()).data().stage,'replied');assert.equal((await db.collection('businessMailboxes/owner/outcomes').get()).size,0);assert.equal((await db.collection('businessOperations/owner/items').get()).size,1);
+ await call('removeItem',{itemId:prepared.itemId,expectedVersion:2,removalAction:'cancel'},'controlled_cancel_123');const canceled=(await ref.get()).data();assert.equal(canceled.status,'canceled');assert.equal(canceled.emailLink.controlledTest,true);
+});
+
+test('controlled exact-slot acceptance also stays excluded in the recurring Schedule path',async()=>{
+ await db.doc('businessMailboxes/owner/operations/op').update({controlledTest:true,controlledTestDesignation:'controlled-original'});
+ await db.doc('businessMailboxes/owner').update({generation:'g1'});
+ await db.doc('agentPermissions/owner_lead_generator/authorizations/business_email').set({businessId:'owner',status:'active',connectionGeneration:'g1',policy:{expiresAt:at+86400000,bookingEnabled:true,availabilityRevision:1}});
+ const offered=await call('saveItem',{expectedVersion:0,item:item(),emailConversation:{...emailConversation(),authorizeAcceptedSlot:true}},'controlled_auto_offer');
+ await db.doc('businessMailboxes/owner/replies/accepted').set({...reply,id:'accepted',providerMessageId:'real-fixture-acceptance',receivedAt:at,body:'Please book '+offered.acceptanceCode});
+ await svc.acceptEmailOffer({auth:{uid:'owner'},data:{businessId:'owner'}});await svc.acceptEmailOffer({auth:{uid:'owner'},data:{businessId:'owner'}});
+ const saved=(await db.doc('businessOperations/owner/items/'+offered.itemId).get()).data();assert.equal(saved.status,'scheduled');assert.equal(saved.version,2);assert.equal(saved.emailLink.controlledTest,true);assert.equal((await db.doc('businessOperations/owner/customers/customer').get()).data().stage,'replied');assert.equal((await db.collection('businessMailboxes/owner/outcomes').get()).size,0);
+});

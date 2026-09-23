@@ -53,7 +53,7 @@ async function binding({db,tx,businessId,input,item,current,availability,now,aut
    m.fail('failed-precondition','Review the customer’s acceptance of this exact time before confirming.');
  }
  const expanded=checkSlot(item,availability,now);
- return {expanded,link:{operationId,recipient:op.recipient,inboundDigest:input.inboundDigest,availabilityVersion:availability.version,
+ return {expanded,link:{...(op.controlledTest===true||current?.emailLink?.controlledTest===true?{controlledTest:true,controlledTestDesignation:op.controlledTestDesignation||current?.emailLink?.controlledTestDesignation||null}:{}),operationId,recipient:op.recipient,inboundDigest:input.inboundDigest,availabilityVersion:availability.version,
   acceptanceReplyId:item.status==='scheduled'?input.acceptanceReplyId:null,bufferMinutes:availability.settings.bufferMinutes,confirmationEmailState:'not_requested',
   ...(input.authorizeAcceptedSlot===true?{acceptanceCode:m.hash([businessId,operationId,item.startMs,item.assignedPeople,availability.version,now]).slice(0,16)}:{}),
   approvalSource:item.status==='scheduled'?(automaticAcceptance?'owner_authorized_exact_slot_acceptance':'owner_reviewed_customer_acceptance'):'owner_offered_tentative_slot'}};
