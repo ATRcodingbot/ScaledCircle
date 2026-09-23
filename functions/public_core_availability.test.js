@@ -27,8 +27,9 @@ test('enrollment gates do not rewrite provider terms or comped/paid entitlement 
 test('public opening admits only new Business accounts, never paid access or Scalers',()=>{
  assert.equal(a.PUBLIC_CORE_SIGNUP_OPEN,true);
  assert.deepEqual(a.publicSignupAccess('business'),{active:true,betaAccess:'approved',accessSource:'public_core_signup'});
- for(const role of ['scaler','admin','Business','',undefined])assert.deepEqual(a.publicSignupAccess(role),{active:false,betaAccess:'pending'});
+ for(const role of ['admin','Business','',undefined])assert.deepEqual(a.publicSignupAccess(role),{active:false,betaAccess:'pending'});
  assert.equal(a.publicSignupAccess('business').plan,undefined);
+ assert.deepEqual(a.publicSignupAccess('scaler'),{active:false,betaAccess:'pending',accessSource:'public_maryland_scaler_registration'});
  const source=fs.readFileSync(__dirname+'/product_availability.js','utf8').replace('const PUBLIC_CORE_SIGNUP_OPEN=true;','const PUBLIC_CORE_SIGNUP_OPEN=false;');
  const module={exports:{}};vm.runInNewContext(source,{module,require});
  assert.equal(module.exports.publicSignupAccess('business').active,false);

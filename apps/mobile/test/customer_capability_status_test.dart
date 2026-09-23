@@ -14,10 +14,10 @@ void main() {
       ),
     );
     for (final title in [
-      'Social Manager — Private Beta / Invite Only',
-      'Lead Generation Research — Private Beta',
-      'Business Assistant — Beta / Coming Soon',
-      'Ad Manager — Beta',
+      'Managed Social — Coming Soon for new purchases',
+      'Lead Generation — Coming Soon for new purchases',
+      'Business Assistant — Coming Soon',
+      'Managed Ad planning — Coming Soon for new purchases',
       'Printing — Coming Soon',
       'Postcard Campaigns — Private Beta',
     ]) {

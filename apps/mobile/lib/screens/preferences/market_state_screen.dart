@@ -10,6 +10,11 @@ String marketStatusMessage(
   if (value['stateConfirmed'] != true) {
     return 'Choose your state to see marketplace availability.';
   }
+  if (!business &&
+      (value['state'] as Map?)?['code'] == 'MD' &&
+      value['status'] == 'ACTIVE') {
+    return 'Maryland Scaler registration is open. Paid assignments remain unavailable until the current activation hold is cleared. Payout setup does not prove a completed withdrawal.';
+  }
   if (value['status'] == 'ACTIVE') {
     return 'Your state is active. Job alerts still follow your saved service areas. Paid work remains subject to account and payment readiness.';
   }

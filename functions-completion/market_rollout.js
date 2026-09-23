@@ -78,16 +78,36 @@ function createService({db, FieldValue, getUser, requireAdmin}) {
   }
   async function save(uid,input) {
     const user = await actor(uid);
+    const auth = await getUser(uid);
     if (!input || Object.keys(input).some(key=>!["stateId","launchNotifications"].includes(key)) ||
       !stateById(input.stateId) || typeof input.launchNotifications !== "boolean")
       fail("invalid-argument", "Choose a listed state and notification preference.");
     const state = stateById(input.stateId), ref=db.doc(`${PROFILES}/${uid}`);
     await db.runTransaction(async tx=>{
-      const previous=await tx.get(ref);
+      const userRef=db.doc(`users/${uid}`), auditRef=db.doc(`marketRolloutAudit/scaler_registration_${uid}`);
+      const [previous,currentUser,config,priorAdmission]=await Promise.all([
+        tx.get(ref),tx.get(userRef),tx.get(db.doc(CONFIG)),tx.get(auditRef)]);
+      const current=currentUser.data();
+      const admit=require('./product_availability').PUBLIC_MD_SCALER_REGISTRATION_OPEN &&
+        state.code==='MD' && statusFor(config.data(),state.id)==='ACTIVE' &&
+        current?.role==='scaler' && current.active===false && current.betaAccess==='pending' &&
+        current.accessSource==='public_maryland_scaler_registration' && !priorAdmission.exists;
+      if(admit){
+        if(auth.disabled || auth.emailVerified!==true)fail('permission-denied','Verify your email before activating Maryland registration.');
+        try { await require('./legal_consent').createLegalConsentService({db,FieldValue}).requireCurrent({
+          uid,agreementTypes:['terms','privacy','scaler_work'],transaction:tx}); }
+        catch(error){if(error.message==='legal_consent_required')fail('failed-precondition','Review and accept the current account agreements before activating registration.');throw error;}
+      }
       tx.set(ref,{schemaVersion:VERSION,uid,role:user.role,stateId:state.id,
         stateName:state.name,geographicId:state.geographicId,selectionSource:"explicit_user_selection",
         launchNotifications:input.launchNotifications,updatedAt:stamp(),
         createdAt:previous.data()?.createdAt || stamp()});
+      if(admit){
+        tx.update(userRef,{active:true,betaAccess:'approved',updatedAt:stamp()});
+        tx.create(auditRef,{action:'public_scaler_registration',actorUid:uid,stateId:state.id,
+          marketRevision:config.data().revision,authority:'founder_maryland_registration_20260923',
+          paidWorkAuthorized:false,createdAt:stamp()});
+      }
     });
     return load(uid);
   }

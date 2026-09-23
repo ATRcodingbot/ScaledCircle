@@ -15,7 +15,7 @@ class ScalerFunnelScreen extends StatelessWidget {
         eyebrow: 'FOR SCALERS',
         title: 'LOCAL WORK. CLEAR FROM THE START.',
         body:
-            'See the area, the task, the materials, and the pay before you apply.',
+            'Maryland Scaler registration is open. Set up your profile, work areas and payout details. Paid assignments remain unavailable until the current activation hold is cleared.',
         primaryLabel: 'Join as a Scaler',
         secondaryLabel: 'Join Scaler Waitlist',
         accent: scalerBlue,
@@ -87,7 +87,7 @@ class ScalerFunnelScreen extends StatelessWidget {
         primary: 'Join as a Scaler',
         accent: scalerBlue,
         supportingCopy:
-            "Set up your account and saved work areas. Opportunities depend on local availability; work is not guaranteed.",
+            "Maryland registration is open. Paid assignments remain unavailable until the current activation hold is cleared. Opportunities depend on local availability; work is not guaranteed.",
         waitlistLabel: 'Join Scaler Waitlist',
         onPrimary: () => openPublicAccountRegistration(context, 'scaler'),
         onWaitlist: () => openPublicWaitlist(context, 'scaler'),

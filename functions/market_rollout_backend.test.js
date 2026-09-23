@@ -12,7 +12,7 @@ before(async()=>{
   app=initializeApp({projectId},projectId);db=getFirestore(app);
   env=await initializeTestEnvironment({projectId,firestore:{rules:fs.readFileSync(require("node:path").join(__dirname,"../firestore.production.rules"),"utf8")}});
   await env.clearFirestore();
-  service=market.createService({db,FieldValue,getUser:async uid=>({disabled:uid==="disabled"}),requireAdmin:async r=>{
+  service=market.createService({db,FieldValue,getUser:async uid=>({disabled:uid==="disabled",emailVerified:uid!=="unverified-registration"}),requireAdmin:async r=>{
     if(r.auth?.uid!=="admin")throw Object.assign(Error("Denied"),{code:"permission-denied"});}});
   for(const [uid,role]of[["md","business"],["pa","business"],["scaler","scaler"],["disabled","scaler"],["admin","admin"]])
     await db.doc(`users/${uid}`).set({role,active:true,accountType:role,activeView:role});
@@ -57,6 +57,41 @@ test("activation preserves accounts and preferences; concurrent stale Admin upda
   assert.equal((await db.collection("outboundEmailJobs").get()).size,0);
   const next=await service.catalog();
   await service.administer({auth:{uid:"admin"},data:{action:"setStatus",stateId:id("PA"),status:"PRELAUNCH",expectedRevision:next.revision}});
+});
+test('ordinary Maryland registration activates once after verified email/current consent, without paid-work authority',async()=>{
+  const email=require('./transactional_email'),legal=require('./legal_consent');
+  const signup=email.createService({db,FieldValue,auth:{generateEmailVerificationLink:async()=>
+    'https://example.test/__/auth/action?oobCode=fixture-only'}});
+  const uid='public-md',authUser={email:'fixture@example.test',emailVerified:true,disabled:false};
+  await signup.finalize({uid,authUser,data:{role:'scaler',displayName:'Fixture Scaler',postalCode:'21234',discoverySource:'search_engine'}});
+  assert.equal((await db.doc('users/'+uid).get()).data().active,false);
+  await assert.rejects(service.save(uid,{stateId:id('MD'),launchNotifications:false}),/current account agreements/);
+  await legal.createLegalConsentService({db,FieldValue}).accept({uid,role:'scaler',data:{agreementTypes:['terms','privacy','scaler_work'],source:'account_creation'}});
+  await Promise.all([service.save(uid,{stateId:id('MD'),launchNotifications:false}),service.save(uid,{stateId:id('MD'),launchNotifications:false})]);
+  assert.equal((await db.doc('users/'+uid).get()).data().active,true);
+  const audit=(await db.doc('marketRolloutAudit/scaler_registration_'+uid).get()).data();
+  assert.equal(audit.actorUid,uid);assert.equal(audit.paidWorkAuthorized,false);
+  const saved=(await db.doc('users/'+uid).get()).data();await service.save(uid,{stateId:id('MD'),launchNotifications:false});
+  assert.deepEqual((await db.doc('users/'+uid).get()).data(),saved);
+  assert.throws(()=>require('./paid_work_launch_gate').assertNewPaidWork({project:'scaled-circle',enabled:'false'}),/Paid work is not open/);
+  for(const collection of ['wallets','campaigns','earnings'])assert.equal((await db.collection(collection).get()).size,1);
+  assert.equal((await db.collection('businessSubscriptions').get()).size,0);
+  // A later maintained account hold cannot be reversed by repeating state selection.
+  await db.doc('users/'+uid).update({active:false,betaAccess:'pending'});
+  await service.save(uid,{stateId:id('MD'),launchNotifications:false});
+  assert.equal((await db.doc('users/'+uid).get()).data().active,false);
+});
+test('Maryland-only registration fails closed for unsupported states, missing config, unverified email and old held accounts',async()=>{
+  const pending={role:'scaler',active:false,betaAccess:'pending',accessSource:'public_maryland_scaler_registration'};
+  for(const uid of ['public-pa','unverified-registration','old-pending','missing-config'])await db.doc('users/'+uid).set({...pending,...(uid==='old-pending'?{accessSource:'manual_review'}:{})});
+  await service.save('public-pa',{stateId:id('PA'),launchNotifications:false});
+  assert.equal((await db.doc('users/public-pa').get()).data().active,false);
+  await assert.rejects(service.save('unverified-registration',{stateId:id('MD'),launchNotifications:false}),/Verify your email/);
+  await service.save('old-pending',{stateId:id('MD'),launchNotifications:false});
+  assert.equal((await db.doc('users/old-pending').get()).data().active,false);
+  const config=(await db.doc(market.CONFIG).get()).data();await db.doc(market.CONFIG).delete();
+  try{await service.save('missing-config',{stateId:id('MD'),launchNotifications:false});assert.equal((await db.doc('users/missing-config').get()).data().active,false);}
+  finally{await db.doc(market.CONFIG).set(config);}
 });
 test("Rules reject forged state/config/aggregate writes and PRELAUNCH draft creation; ACTIVE draft allowed",async()=>{
   await service.save("md",{stateId:id("MD"),launchNotifications:false});

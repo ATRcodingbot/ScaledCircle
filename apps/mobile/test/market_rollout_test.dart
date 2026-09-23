@@ -51,6 +51,19 @@ void main() {
       );
     },
   );
+  test(
+    'Maryland registration is separate from paid assignments and bank receipt',
+    () {
+      final message = marketStatusMessage({
+        'stateConfirmed': true,
+        'status': 'ACTIVE',
+        'state': {'code': 'MD'},
+      });
+      expect(message, contains('registration is open'));
+      expect(message, contains('Paid assignments remain unavailable'));
+      expect(message, contains('does not prove a completed withdrawal'));
+    },
+  );
   testWidgets(
     'explicit state choice, unchecked launch preference, authoritative success then continue',
     (tester) async {
@@ -177,7 +190,10 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      await tester.scrollUntilVisible(find.text('Unknown — state not confirmed'), 250);
+      await tester.scrollUntilVisible(
+        find.text('Unknown — state not confirmed'),
+        250,
+      );
       expect(find.textContaining('3 Businesses · 4 Scalers'), findsOneWidget);
       await tester.scrollUntilVisible(find.text('Pennsylvania'), 250);
       expect(tester.takeException(), isNull);

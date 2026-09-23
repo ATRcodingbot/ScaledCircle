@@ -181,7 +181,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   ),
                   const SizedBox(height: 8),
                   const Text(
-                    'Choose how you will use ScaledCircle. You can sign up in any state. Marketplace access depends on state availability and account approval.',
+                    'Choose how you will use ScaledCircle. Maryland Scaler registration is open; other states remain pending. Paid assignments are not yet available. Business account signup is open.',
                   ),
                   const SizedBox(height: 24),
                   SegmentedButton<UserRole>(
