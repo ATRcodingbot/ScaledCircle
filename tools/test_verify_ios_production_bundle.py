@@ -35,7 +35,8 @@ class IpaGateTest(unittest.TestCase):
             archive.writestr('Payload/Runner.app/Info.plist', plistlib.dumps(info))
             archive.writestr('Payload/Runner.app/GoogleService-Info.plist', plistlib.dumps(config))
             archive.writestr('Payload/Runner.app/Frameworks/App.framework/App',
-                             (host + 'socialOAuthXCallbackV1').encode())
+                             (host + ('socialOAuthXCallbackV1' if bad == 'legacy_only'
+                                      else 'mobileNotificationsV1')).encode())
             if bad == 'production_marker':
                 archive.writestr('Payload/Runner.app/extra', b'1010956217112')
             if bad == 'rejection_guard':
@@ -62,7 +63,7 @@ class IpaGateTest(unittest.TestCase):
             self.assertEqual(inspect(path, '1.0.0', '1')['content_gate'], 'PASS')
             with self.assertRaises(ValueError):
                 inspect(path, '1.0.0', '2')
-            for bad in ['permission', 'firebase', 'staging', 'path', 'duplicate', 'nested_firebase']:
+            for bad in ['permission', 'firebase', 'staging', 'path', 'duplicate', 'nested_firebase', 'legacy_only']:
                 self.fixture(path, bad)
                 with self.assertRaises(ValueError):
                     inspect(path, '1.0.0', '1')

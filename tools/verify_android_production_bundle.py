@@ -65,7 +65,7 @@ def inspect(path, build_number=2):
                  "http://127.0.0.1:5000", "http://127.0.0.1:5001"]
     markers = forbidden + ["localhost", "127.0.0.1",
                           "us-east1-scaled-circle.cloudfunctions.net",
-                          "socialOAuthXCallbackV1", "scaled-circle"]
+                          "mobileNotificationsV1", "scaled-circle"]
     hits = {marker: [] for marker in markers}
     with zipfile.ZipFile(path) as bundle:
         for entry in bundle.infolist():
@@ -83,7 +83,7 @@ def inspect(path, build_number=2):
         for abi in abis:
             data = bundle.read(abi)
             for marker in ("us-east1-scaled-circle.cloudfunctions.net",
-                           "socialOAuthXCallbackV1", "scaled-circle"):
+                           "mobileNotificationsV1", "scaled-circle"):
                 if marker.encode() not in data:
                     raise ValueError(f"Missing production marker {marker} in {abi}")
     errors = [f"Forbidden production marker: {marker}" for marker in forbidden if hits[marker]]

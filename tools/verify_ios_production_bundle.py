@@ -56,7 +56,7 @@ def inspect(path, version, build, environment='production'):
             raise ValueError('Private Apple key must never be packaged')
         forbidden = ['scaledcircle-staging', 'demo-scaledcircle', '10.0.2.2',
                      'http://127.0.0.1:5000', 'http://127.0.0.1:5001']
-        required = ['https://us-east1-scaled-circle.cloudfunctions.net/', 'socialOAuthXCallbackV1']
+        required = ['https://us-east1-scaled-circle.cloudfunctions.net/', 'mobileNotificationsV1']
         if environment == 'staging':
             # The runtime rejection guard deliberately names the forbidden
             # production project. Reject production configuration/origins,
@@ -67,7 +67,7 @@ def inspect(path, version, build, environment='production'):
                          'us-east1-scaled-circle.cloudfunctions.net', 'demo-scaledcircle',
                          '10.0.2.2', 'http://127.0.0.1:5000', 'http://127.0.0.1:5001']
             required = ['https://us-east1-scaledcircle-staging.cloudfunctions.net/',
-                        'socialOAuthXCallbackV1']
+                        'mobileNotificationsV1']
         found = set()
         generic = set()
         for name in names:
@@ -80,7 +80,7 @@ def inspect(path, version, build, environment='production'):
             if b'localhost' in data or b'127.0.0.1' in data:
                 generic.add(name)
         if found != set(required):
-            raise ValueError('Production callback evidence missing from application binary')
+            raise ValueError('Environment origin or Core notification authority missing from application binary')
     return {'environment': environment, 'sha256': hashlib.sha256(Path(path).read_bytes()).hexdigest(),
             'content_gate': 'PASS', 'signature_gate': 'NOT_VERIFIED_REQUIRES_MACOS',
             'generic_loopback_entries_require_review': sorted(generic)}
