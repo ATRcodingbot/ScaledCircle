@@ -70,9 +70,9 @@ test('staging compatibility boundary preserves ordinary billing and rejects unin
  assert.equal(calls,3);
 });
 
-test('available Managed Growth and Lead Generation need no private grant but do not grant other addons',async()=>{
+test('new premium purchases are closed without altering their entitlement definitions',async()=>{
  const db={doc(){throw Error('No invitation lookup should be required');}};
- await availability.assertPurchase({db,businessId:'owner',selection:{plan:'managed_growth',addons:['lead_generation_research']}});
+ await assert.rejects(availability.assertPurchase({db,businessId:'owner',selection:{plan:'managed_growth',addons:['lead_generation_research']}}),{code:'failed-precondition'});
  const c=require('./subscription_contract');
  assert.deepEqual(c.selectionTerms({plan:'managed_growth'}).entitlements,['managed_growth']);
  assert.equal(c.selectionTerms({plan:'managed_growth',addons:['lead_generation_research']}).monthlyCents,169800);

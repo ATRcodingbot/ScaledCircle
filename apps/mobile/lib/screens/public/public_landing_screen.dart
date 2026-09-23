@@ -515,11 +515,11 @@ class _Pricing extends StatelessWidget {
   static const _order = ['starter', 'growth', 'scale', 'managed_growth'];
 
   static const _descriptions = <String, String>{
-    'starter': 'For local businesses starting with field campaigns.',
+    'starter': 'Core Business OS for one owner.',
     'growth':
-        'For growing teams that want stronger planning, content, and response tracking.',
+        'Core Business OS for a team of up to three, including the owner.',
     'scale':
-        'For businesses operating advanced local intelligence and recurring growth.',
+        'Core Business OS for up to five, with Property and supported Weather Intelligence.',
     'managed_growth':
         'For businesses that want ScaledCircle helping prepare and coordinate ongoing marketing.',
   };
@@ -550,22 +550,17 @@ class _Pricing extends StatelessWidget {
         'customers_leads',
         'business_schedule',
         'campaign_mapping',
-        'gps_verification',
-        'basic_ai_planning',
       ],
       'growth' => const [
         'customers_leads',
         'business_schedule',
         'advanced_analytics',
-        'ai_content_creation',
-        'lead_tracking',
       ],
       'scale' => const [
         'customers_leads',
         'business_schedule',
         'property_intelligence',
         'weather_intelligence',
-        'priority_scaler_matching',
       ],
       _ => const [
         'customers_leads',
@@ -599,9 +594,7 @@ class _Pricing extends StatelessWidget {
             key: Key('public-plan-$planId'),
             name: name.toUpperCase(),
             price: '\$${price.toStringAsFixed(0)}/month',
-            badge: planId == 'managed_growth'
-                ? 'PRIVATE BETA / INVITE ONLY'
-                : null,
+            badge: planId == 'managed_growth' ? 'COMING SOON' : null,
             body: _descriptions[planId]!,
             features: _highlights(planId, plan),
             onGetStarted: planId == 'managed_growth' ? null : onGetStarted,
@@ -614,7 +607,7 @@ class _Pricing extends StatelessWidget {
           eyebrow: 'SIMPLE PRICING',
           title: 'Choose how much help you want.',
           subtitle:
-              'Every paid plan includes Customers & Leads, Schedule, Jobs, Tasks, Crew tools and campaign tools. Seats include the owner. Campaign costs are approved separately.',
+              'Starter, Growth and Scale include Customers & Leads, internal Schedule, Jobs, Tasks, Team/Crew and campaign planning. Total seats: 1, 3 and 5, including the owner. Managed Social, Business Email, Email Campaigns, automatic lead discovery and Business Assistant are not included. Transactional notifications and receipts remain included.',
         ),
         const SizedBox(height: 22),
         _PricingGrid(children: cards),
@@ -630,7 +623,7 @@ class _Pricing extends StatelessWidget {
             _Price(
               name: 'BUSINESS ASSISTANT',
               price: '+\$399/month',
-              badge: 'BETA / COMING SOON',
+              badge: 'COMING SOON',
               body:
                   'Review business information, recommendations and next actions. Your approval stays in control.',
               features: const [
@@ -643,7 +636,7 @@ class _Pricing extends StatelessWidget {
             _Price(
               name: 'LEAD GENERATION RESEARCH',
               price: '+\$699/month',
-              badge: 'PRIVATE BETA',
+              badge: 'COMING SOON',
               body:
                   'Prospect research, evidence, qualification and drafts. Research never authorizes contact.',
               features: const [
@@ -659,14 +652,14 @@ class _Pricing extends StatelessWidget {
         _Price(
           name: 'GROWTH DEPARTMENT',
           price: '\$2,000/month',
-          badge: 'PRIVATE BETA',
+          badge: 'COMING SOON',
           body:
-              'Managed Growth, Business Assistant and Lead Generation in one workspace. Private Beta access is controlled.',
+              'Managed Growth, Business Assistant and Lead Generation in one workspace. New purchases are Coming Soon; existing authorized access is unchanged.',
           features: const [
             '10 total workspace users, including the owner',
             '\$2,097 separately · save \$1,164/year',
             'One bundle replaces the three individual recurring charges',
-            'Included growth tools remain Private Beta',
+            'New premium purchases are Coming Soon',
           ],
           onGetStarted: null,
         ),
@@ -677,7 +670,7 @@ class _Pricing extends StatelessWidget {
         ),
         const SizedBox(height: 16),
         const Text(
-          'Campaign compensation and platform fees are shown before funding. Paid advertising needs separate approval. Printing is Coming Soon. Postcards are Private Beta for selected Businesses while real-world fulfillment testing is completed.',
+          'Paid Scaler execution is held pending legitimate LIVE cash-out certification. Planning does not activate paid field work. Campaign costs are separate. Paid advertising needs separate approval. Printing is Coming Soon. Postcards are Private Beta for selected Businesses while real-world fulfillment testing is completed.',
           style: TextStyle(color: _muted),
           textAlign: TextAlign.center,
         ),

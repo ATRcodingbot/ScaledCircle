@@ -91,14 +91,16 @@ function welcomeTemplate({role, displayName, verificationUrl}) {
   if (!PUBLIC_ROLES.has(role)) throw new Error("public_role_required");
   const greeting = firstName(displayName);
   const verify = button("VERIFY MY EMAIL", verificationUrl);
+  const businessNextStep = require("./product_availability").publicSignupAccess(role).active
+    ? "After verification, complete your Business profile and choose Starter, Growth or Scale. Paid features require an active membership."
+    : "Business access is rolling out in stages. Verifying now keeps your account secure and ready for the next step.";
   const profile = role === "scaler" ? button("COMPLETE MY SCALER PROFILE", PROFILE_ROUTE, "#0c9f73") : "";
   const scalerDetails = role === "scaler" ? `<h2 style="font-size:18px;color:#10243e">2. COMPLETE YOUR SCALER PROFILE</h2>` +
     `<p style="font-size:15px;line-height:1.6">Tell us where you want to work, how far you will travel, ` +
     `the work that interests you, vehicle information, other interests, and whether you want email alerts.</p>${profile}` +
     `<p style="font-size:15px;line-height:1.6">You can complete this while access is pending. ` +
     `No platform fees are charged to Scalers for taking jobs through ScaledCircle.</p>` :
-    `<p style="font-size:15px;line-height:1.6">We are rolling out Business access in stages. ` +
-    `Verifying now keeps your account secure and ready for the next step.</p>`;
+    `<p style="font-size:15px;line-height:1.6">${escapeHtml(businessNextStep)}</p>`;
   const bodyHtml = `<p style="font-size:16px;line-height:1.6">Your ${role === "scaler" ? "Scaler" : "Business"} ` +
     `account has been created.</p><h2 style="font-size:18px;color:#10243e">${role === "scaler" ? "GET READY IN TWO STEPS" : "VERIFY YOUR EMAIL"}</h2>` +
     `<h2 style="font-size:18px;color:#10243e">1. VERIFY YOUR EMAIL</h2>` +
@@ -113,7 +115,7 @@ function welcomeTemplate({role, displayName, verificationUrl}) {
   ].join("\n") : [
     "WELCOME TO SCALEDCIRCLE", `Hi ${greeting},`, "", "Your Business account has been created.",
     "Verify your email to secure your account:", verificationUrl, "",
-    "Business access is rolling out in stages.", "", `Questions? ${SUPPORT_EMAIL}`, "https://scaledcircle.com",
+    businessNextStep, "", `Questions? ${SUPPORT_EMAIL}`, "https://scaledcircle.com",
   ].join("\n");
   return {
     subject: "Welcome to ScaledCircle — Verify Your Email",
@@ -129,16 +131,17 @@ function welcomeTemplate({role, displayName, verificationUrl}) {
 
 function adminTemplate({uid, role, displayName, email, source, created}) {
   const label = role === "scaler" ? "Scaler" : "Business";
+  const accessStatus = require("./product_availability").publicSignupAccess(role).active ? "Core account enabled; verification and paid membership required" : "Pending Review";
   const rows = [
     ["Name", displayName || "Not provided"], ["Email", email], ["Role", label],
-    ["Email Verified", "No"], ["Access Status", "Pending"], ["Created", created],
+    ["Email Verified", "No"], ["Access Status", accessStatus], ["Created", created],
     ["Source / Platform", source],
   ];
   const table = rows.map(([key, value]) => `<tr><td style="padding:6px 10px;color:#60758a">${escapeHtml(key)}</td>` +
     `<td style="padding:6px 10px;color:#10243e">${escapeHtml(value)}</td></tr>`).join("");
   const bodyHtml = `<h2 style="font-size:17px">ACCOUNT</h2><table role="presentation">${table}</table>` +
     `${role === "scaler" ? `<h2 style="font-size:17px">WORK PROFILE</h2><p>Not completed yet</p>` : ""}` +
-    `<h2 style="font-size:17px">STATUS</h2><p>Pending Review</p><p style="font-size:12px;color:#7a8c9e">Firebase UID: ${escapeHtml(uid)}</p>`;
+    `<h2 style="font-size:17px">STATUS</h2><p>${escapeHtml(accessStatus)}</p><p style="font-size:12px;color:#7a8c9e">Firebase UID: ${escapeHtml(uid)}</p>`;
   return {
     subject: `New ScaledCircle Signup — ${label}`,
     text: rows.map(([key, value]) => `${key}: ${value}`).concat(role === "scaler" ? ["Work Profile: Not completed yet"] : [], [`Firebase UID: ${uid}`]).join("\n"),
@@ -301,7 +304,7 @@ function createService({db, auth, FieldValue, now = () => Date.now()}) {
         } else {
           transaction.create(userRef, {email, displayName: input.displayName, companyName: input.companyName,
             postalCode: input.postalCode, contactNumber: input.contactNumber, role: input.role,
-            accountType: input.role, activeView: input.role, active: false, betaAccess: "pending",
+            accountType: input.role, activeView: input.role, ...require('./product_availability').publicSignupAccess(input.role),
             earlyAccessSource: "public_account_creation", discoverySource: input.discoverySource,
             referrerName: input.referrerName, createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp()});
         }

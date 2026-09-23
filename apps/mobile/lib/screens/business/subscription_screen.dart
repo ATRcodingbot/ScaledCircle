@@ -429,19 +429,15 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                         plan: 'starter',
                         title: 'Starter',
                         price: 99,
-                        subtitle: 'For small local businesses getting started.',
+                        subtitle:
+                            'Core Business OS for one owner. 1 total workspace seat.',
                         currentPlan: currentPlan,
                         subscriptionActive: subscriptionActive,
                         features: const [
-                          'Up to 2 active campaigns',
-                          'Up to 3 Scalers per campaign',
-                          'Campaign zone mapping',
-                          'GPS verified distribution',
-                          'Completion verification',
-                          'Scaler marketplace access',
-                          'Scaler earnings tracking (cash-out coming soon)',
-                          'Basic campaign analytics',
-                          'Basic AI campaign planning',
+                          'Customers & Leads, internal Schedule, Jobs and Tasks',
+                          'Campaign planning and zone mapping',
+                          '1 total workspace seat, including the owner',
+                          'Paid Scaler execution is held pending live cash-out certification',
                         ],
                       ),
 
@@ -458,19 +454,10 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                         currentPlan: currentPlan,
                         subscriptionActive: subscriptionActive,
                         features: const [
-                          'Everything in Starter',
-                          'Up to 10 active campaigns',
-                          'Up to 15 Scalers per campaign',
-                          'Up to 5 business locations',
-                          'Advanced AI campaign planning',
-                          'AI flyer and content creation',
-                          'QR and link tracking',
-                          'Lead tracking — Coming Soon',
-                          'Call tracking — Coming Soon',
-                          'Campaign landing pages — Coming Soon',
-                          'Advanced analytics and ROI reporting',
-                          '3 total workspace users, including the owner',
-                          'Exportable reports',
+                          'Core Business OS: Customers & Leads, Schedule, Jobs and Tasks',
+                          '3 total workspace seats, including the owner',
+                          'Team/Crew access with maintained role permissions',
+                          'Campaign planning; paid field-work execution remains held',
                         ],
                       ),
 
@@ -486,21 +473,10 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                         currentPlan: currentPlan,
                         subscriptionActive: subscriptionActive,
                         features: const [
-                          'Everything in Growth',
-                          'Unlimited active campaigns',
-                          'Unlimited Scalers',
-                          'Unlimited business locations',
-                          '5 total workspace users, including the owner',
-                          'Priority Scaler matching',
-                          'Advanced reporting',
-                          'API and integrations',
-                          'CRM integrations',
-                          'Recurring campaign automation',
-                          'AI Property Intelligence',
-                          'AI Weather Intelligence and Maryland alerts',
-                          'Combined Property + Weather opportunity analysis',
-                          'Franchise and multi-location management',
-                          'Priority support',
+                          'Core Business OS: Customers & Leads, Schedule, Jobs and Tasks',
+                          '5 total workspace seats, including the owner',
+                          'Property Intelligence and supported Maryland Weather Intelligence',
+                          'Campaign planning; paid field-work execution remains held',
                         ],
                       ),
 
@@ -508,13 +484,13 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
 
                       _planCard(
                         plan: 'managed_growth',
-                        title: 'Managed Growth — Beta',
+                        title: 'Managed Growth — Coming Soon',
                         price: 999,
                         subtitle:
                             'For 3–5 initial Businesses building one coordinated digital + physical growth system.',
                         currentPlan: currentPlan,
                         subscriptionActive: subscriptionActive,
-                        availableForPurchase: true,
+                        availableForPurchase: false,
                         features: const [
                           'Everything in Scale',
                           'AI Business Growth Analysis',
@@ -558,10 +534,9 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
 
                               Expanded(
                                 child: Text(
-                                  'Use the secure billing portal to '
-                                  'change or cancel an active plan. Checkout '
-                                  'shows any proration and the next renewal '
-                                  'amount before a plan change is confirmed.',
+                                  'Use Billing / Plan to review membership changes or cancellation. '
+                                  'The secure billing portal provides invoices and payment methods. '
+                                  'Review the effective date and recurring total before confirming.',
                                 ),
                               ),
                             ],

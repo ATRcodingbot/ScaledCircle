@@ -13220,6 +13220,7 @@ exports.previewBusinessMembershipChange = workspaceEndpoint(async(request,servic
     }
     await service.authority({uid:request.auth.uid,businessId:request.data?.businessId,permission:'billing',allowExpired:true});
     let chosen;try{chosen=require('./subscription_contract').selectionTerms(request.data?.selection);}catch(_){throw new HttpsError('invalid-argument','Choose a valid membership selection.');}
+    await require('./product_availability').assertPurchase({db,businessId:request.data?.businessId||request.auth.uid,selection:chosen});
     let monthlyCents=0;const stripe=subscriptionStripeClient();
     for(const item of chosen.items){const verified=await require('./subscription_contract').certifyPrice(stripe,stripePriceForPlan(item),{...subscriptionConfiguration(),requireActive:true});monthlyCents+=verified.price.unit_amount;}
     return {selection:require('./subscription_contract').selection(chosen),monthlyCents,seatLimit:chosen.seats,planName:chosen.name||chosen.plan,providerVerified:true};

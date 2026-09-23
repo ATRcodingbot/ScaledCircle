@@ -30,7 +30,7 @@ def content():
     plans = (ROOT / 'apps/mobile/lib/services/subscription_plan_service.dart').read_text(encoding='utf-8')
     prices = re.findall(r"'name': '([^']+)',\s*'price': ([0-9.]+)", plans)
     assert len(prices) == 4
-    pricing = [(name + (' — Private Beta / Invite Only' if name == 'Managed Growth' else ''),
+    pricing = [(name + (' — Coming Soon for new purchases' if name == 'Managed Growth' else ''),
                 '$' + format(float(price), '.0f') + '/month') for name, price in prices]
     def heading(name):
         section = landing.split('class ' + name + ' ')[1].split('\nclass ')[0]
@@ -53,13 +53,13 @@ def content():
             '/how-it-works': [('From a local campaign to work you can review.', 'One clear workflow for the Business and the Scaler.'), *steps],
             '/pricing': [('Choose your plan', 'One Business workspace. Total users including the owner: Starter 1, Growth 3, Scale 5, Managed Growth 10.'), *pricing,
                          ('Controlled premium access', 'These capabilities are not generally available for purchase. Access requires an invitation; add-ons never add seats.'),
-                         ('Business Assistant — Beta / Coming Soon', 'Planned recurring price: $399/month. Business information and recommended next steps.'),
-                         ('Lead Generation Research — Private Beta', '$699/month when authorized. Prospect research, evidence and drafts. Research does not authorize outreach.'),
+                         ('Business Assistant — Coming Soon', 'Planned recurring price: $399/month. Business information and recommended next steps.'),
+                         ('Lead Generation — Coming Soon', '$699/month when authorized. Prospect research, evidence and drafts. Research does not authorize outreach.'),
                          ('Email Campaigns — Private Beta', 'Controlled campaign preparation is available to invited Businesses. General campaign sending is not available. Account messages, billing receipts and Growth reports continue normally.'),
                          ('YouTube — Coming Soon', 'Customer YouTube management is not available at launch.'),
                          ('Supported Social channels', 'Facebook and Instagram support Business connection and permission review. Publishing requires separate approved content and execution authority. Customer X is Coming Soon.'),
                          ('Postcards — Private Beta', 'Choose an area, create and approve a design, and arrange fulfillment with ScaledCircle. General ordering is held until physical fulfillment certification.'),
-                         ('Growth Department — Private Beta', '$2,000/month when authorized. Managed Growth, Business Assistant and Lead Generation Research; 10 total users. No public purchase is enabled.')]}
+                         ('Growth Department — Coming Soon', '$2,000/month when authorized. Managed Growth, Business Assistant and Lead Generation Research; 10 total users. No public purchase is enabled.')]}
 
 
 def documents(*, staging=False):
@@ -80,9 +80,9 @@ def documents(*, staging=False):
                 if index == 1:
                     blocks.append('<h2>Available now</h2><section class="plans" aria-label="Available Business plans">')
                 if index == 4:
-                    blocks.append('</section><h2>Private Beta / Invite Only</h2><section class="plans" aria-label="Private Beta plans">')
+                    blocks.append('</section><h2>Coming Soon for new purchases</h2><section class="plans" aria-label="Coming Soon plans">')
                 seats = [1, 3, 5, 10][index - 1]
-                blocks.append(f'<article><h2>{html.escape(title)}</h2><p class="price">{html.escape(body)}</p><p>{seats} total Business {"user" if seats == 1 else "users"}, including the owner.</p><p>Customers &amp; leads, schedule, jobs and tasks included.</p><p>{"Invite Only" if index == 4 else "Available"}</p></article>')
+                blocks.append(f'<article><h2>{html.escape(title)}</h2><p class="price">{html.escape(body)}</p><p>{seats} total Business {"user" if seats == 1 else "users"}, including the owner.</p><p>Customers &amp; leads, schedule, jobs and tasks included.</p><p>{"Coming Soon" if index == 4 else "Available"}</p></article>')
                 if index == 4:
                     blocks.append('</section>')
                 continue
@@ -104,7 +104,7 @@ def documents(*, staging=False):
         if route == '/':
             blocks.append('<section><h2>Pricing</h2><p>Subscription access and campaign costs are separate. Review compensation and platform fees before funding.</p><div class="capabilities">' + ''.join(
                 f'<article><h3>{html.escape(name)}</h3><p>{html.escape(price)}</p></article>'
-                for name, price in content()['/pricing'][1:5]) + '</div><p>Managed Growth and premium tools have controlled access. No add-on is included unless your plan or subscription explicitly includes it.</p><a href="/pricing">Compare plans and availability</a></section>')
+                for name, price in content()['/pricing'][1:5]) + '</div><p>Starter, Growth and Scale provide Core Business OS access. Managed Social, Business Email, Email Campaigns, automatic lead discovery and paid Business Assistant are not included. Premium purchases are Coming Soon. Paid Scaler execution is held pending LIVE cash-out certification; planning does not activate paid field work. Transactional notifications and receipts remain included.</p><a href="/pricing">Compare plans and availability</a></section>')
         blocks.append(cta('Join as a Scaler' if route == '/scalers' else 'Create Business Account'))
         picture = ''
         body = '<body><main id="marketing"><nav aria-label="Main">' + navigation + '<a class="cta" href="/#/businesses">Choose Your Account</a></nav>' + ''.join(blocks) + picture + '''

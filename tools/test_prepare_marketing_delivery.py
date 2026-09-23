@@ -56,7 +56,7 @@ for(const pathname of ['/','/pricing']) for(const ref of ['abc234','invalid-secr
             self.assertIn("location.pathname !== '/' && location.pathname !== '/login'", value)
         self.assertEqual([x[1] for x in content()['/pricing'][1:5]], ['$99/month', '$299/month', '$499/month', '$999/month'])
         pricing = docs['/pricing']
-        for text in ['Choose the plan that fits your business', 'Add more growth power', '+$399', '+$699', '$2,000', '10 total Business users', 'Request Access']:
+        for text in ['Choose the plan that fits your business', 'Add more growth power', '+$399', '+$699', '$2,000', '10 total Business users', 'Express interest']:
             self.assertIn(text, pricing)
         self.assertNotIn('Controlled premium access', pricing)
         self.assertNotIn('Grow My Business', pricing)
@@ -71,7 +71,7 @@ for(const pathname of ['/','/pricing']) for(const ref of ['abc234','invalid-secr
             self.assertNotIn('href="/#pricing"', nav)
             self.assertNotIn('href="/#how-it-works"', nav)
         self.assertIn('Available Business plans', documents()['/pricing'])
-        self.assertIn('Private Beta / Invite Only', documents()['/pricing'])
+        self.assertIn('Coming Soon for new purchases', documents()['/pricing'])
         self.assertIn('residential photos are not required', documents()['/scalers'])
 
     def test_staging_indexing_and_truthful_conversion_paths(self):
@@ -79,7 +79,7 @@ for(const pathname of ['/','/pricing']) for(const ref of ['abc234','invalid-secr
         self.assertIn('noindex,nofollow', home)
         self.assertIn('A contractor has a neighborhood in mind.', home)
         self.assertIn('Create Business Account', home)
-        self.assertIn('Social Manager — Private Beta / Invite Only', home)
+        self.assertIn('Managed Social — Coming Soon for new purchases', home)
         self.assertIn('Printing — Coming Soon', home)
         self.assertIn('This explains the workflow; it does not promise leads', home)
         self.assertIn('Know the work and pay before you apply.', home)
@@ -104,7 +104,7 @@ for(const pathname of ['/','/pricing']) for(const ref of ['abc234','invalid-secr
                      'Tracking + Attribution', 'Growth Intelligence',
                      'A workflow example, not a case study', 'properly completed work',
                      'where recorded', 'platform fees before funding',
-                     'Private Beta / Invite Only', 'Coming Soon']:
+                     'Coming Soon for new purchases', 'Coming Soon']:
             self.assertIn(copy, page)
         body = page.split('<body', 1)[1].split('<script>', 1)[0]
         self.assertEqual(body.count('class="button primary"'), 2)

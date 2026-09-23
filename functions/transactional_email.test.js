@@ -256,3 +256,18 @@ test("historical pending template is prepared without pretending it is a new sig
   assert.match(value.text, /Thanks for getting in early/);
   assert.doesNotMatch(value.text, /Your Scaler account has been created/);
 });
+
+// Opening admission is prepared, but production remains held until Founder GO.
+test('prepared public Core signup is idempotent, preserves existing records and never creates paid access',async t=>{
+ const availability=require('./product_availability');
+ t.mock.method(availability,'publicSignupAccess',role=>role==='business'?{active:true,betaAccess:'approved',accessSource:'public_core_signup'}:{active:false,betaAccess:'pending'});
+ const {db,value}=service(),request={uid:'core-owner',authUser,data:{...signup,role:'business',companyName:'Fixture Business'}};
+ await value.finalize(request);await value.finalize(request);
+ assert.equal(db.documents.get('users/core-owner').active,true);
+ assert.equal(db.documents.size,3);
+ assert.equal(db.documents.has('businessSubscriptions/core-owner'),false);
+ assert.match(db.documents.get('outboundEmailJobs/welcome-user_core-owner').text,/choose Starter, Growth or Scale/);
+ db.documents.get('users/core-owner').active=false;
+ await value.finalize(request);assert.equal(db.documents.get('users/core-owner').active,false);
+ assert.equal(db.documents.size,3);
+});

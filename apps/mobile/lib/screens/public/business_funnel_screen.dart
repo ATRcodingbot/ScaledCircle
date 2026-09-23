@@ -654,7 +654,7 @@ class _BusinessPricing extends StatelessWidget {
               ),
               if (id == 'managed_growth')
                 const Text(
-                  'PRIVATE BETA / INVITE ONLY',
+                  'COMING SOON',
                   style: TextStyle(
                     color: businessGreen,
                     fontWeight: FontWeight.w800,
@@ -669,7 +669,7 @@ class _BusinessPricing extends StatelessWidget {
               OutlinedButton(
                 onPressed: id == 'managed_growth' ? null : onStart,
                 child: Text(
-                  id == 'managed_growth' ? 'Invite Only' : 'Get Started',
+                  id == 'managed_growth' ? 'Coming Soon' : 'Get Started',
                 ),
               ),
             ],
@@ -713,9 +713,10 @@ class _BusinessPricing extends StatelessWidget {
   }
 
   static const _planCopy = {
-    'starter': 'Start running clear, verified local campaigns.',
-    'growth': 'Add stronger planning, content, and response tracking.',
-    'scale': 'Use advanced local intelligence and operating capability.',
+    'starter': 'Core Business OS. 1 total seat, including the owner.',
+    'growth': 'Core Business OS. 3 total seats, including the owner.',
+    'scale':
+        'Core Business OS plus Property and supported Weather Intelligence. 5 total seats, including the owner.',
     'managed_growth': 'Have ScaledCircle help prepare ongoing marketing.',
   };
 }

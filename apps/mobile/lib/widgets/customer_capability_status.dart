@@ -7,22 +7,22 @@ class CustomerCapabilityStatus extends StatelessWidget {
 
   static const capabilities = <({String title, String description})>[
     (
-      title: 'Social Manager — Private Beta / Invite Only',
+      title: 'Managed Social — Coming Soon for new purchases',
       description:
           'Invited Businesses can plan content, review recommendations, and approve supported publishing. Results are still being measured.',
     ),
     (
-      title: 'Lead Generation Research — Private Beta',
+      title: 'Lead Generation — Coming Soon for new purchases',
       description:
           'Prospect research, evidence, qualification and drafts. Research does not authorize outreach; delivered leads and sales are not guaranteed.',
     ),
     (
-      title: 'Business Assistant — Beta / Coming Soon',
+      title: 'Business Assistant — Coming Soon',
       description:
           'Review business information and suggested next steps. Recommendations need your judgment and approval.',
     ),
     (
-      title: 'Ad Manager — Beta',
+      title: 'Managed Ad planning — Coming Soon for new purchases',
       description:
           'Prepare advertising strategy, draft creative, and proposed budgets. Planning does not launch ads or authorize spend.',
     ),

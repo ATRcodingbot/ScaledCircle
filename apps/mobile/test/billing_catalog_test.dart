@@ -56,7 +56,12 @@ void main() {
         ),
       );
       expect(find.text('Choose your plan'), findsOneWidget);
-      expect(find.text('Add more intelligence'), findsOneWidget);
+      expect(find.text('Coming Soon for new purchases'), findsOneWidget);
+      final plans = tester.widget<DropdownButton<String>>(
+        find.byType(DropdownButton<String>),
+      );
+      expect(plans.items!.where((p) => p.enabled).map((p) => p.value),
+          ['starter', 'growth', 'scale']);
       expect(
         find.textContaining('You review outbound communication'),
         findsOneWidget,
@@ -69,10 +74,7 @@ void main() {
         find.byType(CheckboxListTile),
       )) {
         expect(tile.value, false);
-        expect(
-          tile.onChanged == null,
-          (tile.title as Text).data!.startsWith('Business Assistant'),
-        );
+        expect(tile.onChanged == null, true);
       }
       expect(find.textContaining('Save \$97/month'), findsOneWidget);
       expect(tester.takeException(), isNull);
@@ -114,7 +116,7 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Growth — \$299/month · 3 users').last);
+      await tester.tap(find.text('Growth — \$299/month · 3 total seats').last);
       await tester.pumpAndSettle();
       await tester.ensureVisible(find.text('Review Plan & Add-on Changes'));
       await tester.tap(find.text('Review Plan & Add-on Changes'));
