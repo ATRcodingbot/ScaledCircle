@@ -1,0 +1,21 @@
+# Template: copy to root codemagic.yaml ONLY in an isolated capture CI branch.
+# Codemagic does not discover this nested path. Preserve the release branch root.
+workflows:
+  ipad-reviewer-capture:
+    name: iPad simulator screenshots - source 4834e69 - no distribution
+    instance_type: mac_mini_m2
+    max_build_duration: 30
+    environment:
+      flutter: 3.44.8
+      xcode: 26.6
+      groups:
+        - ipad_capture_reviewer
+    scripts:
+      - name: Capture current Core screens from pinned source
+        script: |
+          set -eu
+          bash "$CM_BUILD_DIR/tools/ipad_capture/run.sh"
+    artifacts:
+      - /tmp/sc-ipad-capture-output/*.png
+      - /tmp/sc-ipad-capture-output/manifest.json
+# No signing integration, publishing, App Store upload, or build-number increment.
