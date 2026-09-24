@@ -7,6 +7,10 @@ import os
 import subprocess
 import sys
 import shutil
+import tempfile
+import json
+import struct
+import time
 
 HERE = Path(__file__).resolve().parent
 spec = importlib.util.spec_from_file_location('capture', HERE / 'run.py')
@@ -15,6 +19,102 @@ spec.loader.exec_module(capture)
 
 
 class CaptureTests(unittest.TestCase):
+    def test_invalid_command_json_is_failed_within_named_stage(self):
+        secret = 'private-invalid-json-sentinel'
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory)
+            output = []
+            runner = capture.StageRunner(path / 'status.json', path / 'private', emit=output.append)
+            with self.assertRaises(capture.StageFailure):
+                runner.run('verify-flutter-sdk', [sys.executable, '-c', f'print("{secret}")'],
+                           3, capture=True, transform=json.loads)
+            stage = runner.data['stages'][0]
+            self.assertEqual(stage['status'], 'failed')
+            self.assertEqual(stage['exitCode'], 0)
+            self.assertEqual(stage['failureCategory'], 'validation_failed')
+            self.assertNotIn(secret, (path / 'status.json').read_text() + '\n'.join(output))
+
+    def test_hanging_child_deadline_is_recorded_and_process_is_stopped(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory)
+            output = []
+            runner = capture.StageRunner(path / 'status.json', path / 'private', budget=3, emit=output.append)
+            started = time.monotonic()
+            with self.assertRaises(capture.StageFailure):
+                runner.run('compile-simulator', [sys.executable, '-c', 'import time; time.sleep(30)'], .2)
+            runner.finish(False)
+            self.assertLess(time.monotonic() - started, 7)
+            stage = json.loads((path / 'status.json').read_text())['stages'][0]
+            self.assertEqual(stage['status'], 'timeout')
+            self.assertIsNotNone(stage['exitCode'])
+            for name in ['startedAtUtc', 'endedAtUtc', 'deadlineAtUtc']:
+                self.assertTrue(stage[name])
+            self.assertLessEqual(stage['timeoutSeconds'], .2)
+
+    def test_child_stdout_stderr_and_exception_cannot_enter_safe_artifacts(self):
+        secret = 'private-sentinel-must-not-export'
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory)
+            output = []
+            runner = capture.StageRunner(path / 'status.json', path / 'private', emit=output.append)
+            script = f'import sys;print("error: {secret}");sys.stderr.write("No such module {secret}");sys.exit(2)'
+            with self.assertRaises(capture.StageFailure):
+                runner.run('compile-simulator', [sys.executable, '-c', script], 3)
+            try:
+                with runner.step('prepare-harness', 1):
+                    raise ValueError(secret)
+            except ValueError:
+                pass
+            runner.finish(False)
+            exported = (path / 'status.json').read_text() + '\n'.join(output)
+            self.assertNotIn(secret, exported)
+            self.assertIn('module_unavailable', exported)
+            self.assertIn('reported_error', exported)
+            self.assertNotIn('dart_compile_error', exported)
+            self.assertEqual(runner.data['stages'][0]['exitCode'], 2)
+
+    def test_completed_home_is_retained_after_later_schedule_failure(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory)
+            source = path / 'private'
+            source.mkdir()
+            output = path / 'export'
+            png = b'\x89PNG\r\n\x1a\n' + b'\x00' * 8 + struct.pack('>II', 2064, 2752) + b'\x00' * 20 + b'\x00\x00\x00\x00IEND\xaeB`\x82'
+            (source / 'business-home.png').write_bytes(png)
+            (source / 'schedule.png').write_bytes(png[:-12])
+            events = [{'stage': name, 'outcome': 'success'} for name in
+                      ['app-startup', 'authenticate', 'business-home-readiness', 'business-home-capture']]
+            allowed = capture.approved_screens(events)
+            first = capture.preserve_screens(source, output, {}, allowed)
+            self.assertEqual([x['name'] for x in first], ['business-home.png'])
+            (source / 'business-home.png').unlink()
+            second = capture.preserve_screens(source, output, {}, allowed, 'partial_failed')
+            self.assertEqual(first, second)
+            self.assertTrue((output / 'business-home.png').exists())
+            self.assertFalse((output / 'schedule.png').exists())
+            self.assertEqual(json.loads((output / 'manifest.json').read_text())['status'], 'partial_failed')
+
+    def test_login_or_unready_screenshot_is_not_promoted(self):
+        self.assertFalse(capture.approved_screens([{'stage': 'business-home-capture', 'outcome': 'success'}]))
+        self.assertFalse(capture.approved_screens([
+            {'stage': 'app-startup', 'outcome': 'success'},
+            {'stage': 'authenticate', 'outcome': 'success'},
+            {'stage': 'business-home-readiness', 'outcome': 'failed'},
+            {'stage': 'business-home-capture', 'outcome': 'success'}]))
+
+    def test_driver_event_allowlist_strips_untrusted_fields(self):
+        secret = 'private-sentinel-must-not-export'
+        event = {'protocol': 2, 'stage': 'authenticate', 'outcome': 'failed', 'category': 'auth_failed',
+                 'startedAtUtc': '2026-09-24T14:00:00Z', 'endedAtUtc': '2026-09-24T14:00:01Z',
+                 'deadlineAtUtc': '2026-09-24T14:01:00Z', 'timeoutSeconds': 60,
+                 'completedScreens': [], 'error': secret, 'request': secret}
+        self.assertNotIn(secret, json.dumps(capture.safe_driver_event(event)))
+        self.assertIsNone(capture.safe_driver_event({**event, 'category': secret}))
+        self.assertIsNone(capture.safe_driver_event({**event, 'stage': {}}))
+        self.assertEqual(capture.safe_driver_event({**event, 'timeoutSeconds': 60.0})['timeoutSeconds'], 60.0)
+        self.assertIsNone(capture.safe_driver_event({**event, 'timeoutSeconds': float('nan')}))
+        self.assertIsNone(capture.safe_driver_event({**event, 'timeoutSeconds': True}))
+
     def test_fixed_input_diagnostics_all_missing_and_empty_never_expose_values(self):
         sentinel = 'synthetic-private-value-do-not-print'
         full = {name: sentinel for name in capture.REQUIRED_INPUTS}
