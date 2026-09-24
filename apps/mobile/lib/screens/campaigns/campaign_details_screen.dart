@@ -13,6 +13,8 @@ import '../../services/completion_payout_service.dart';
 import '../../services/platform_billing_service.dart';
 import '../../services/secure_function_service.dart';
 import '../../widgets/legal_consent_prompt.dart';
+import '../../widgets/material_work_scope.dart';
+import '../../widgets/campaign_planning_cost.dart';
 
 import '../../services/wallet_service.dart';
 import '../../navigation/app_routes.dart';
@@ -2146,6 +2148,13 @@ class _CampaignDetailsScreenState extends State<CampaignDetailsScreen> {
                             'Campaign funded and ready to publish.',
                           ),
                         )
+                      : status == 'draft' &&
+                            maximumWorkerBudget > 0 &&
+                            fundingStatus != 'reserved'
+                      ? CampaignPlanningCost(
+                          workerBudget: maximumWorkerBudget,
+                          load: _billingService.campaignCostQuote,
+                        )
                       : maximumWorkerBudget <= 0 || fundingStatus == 'reserved'
                       ? ListTile(
                           contentPadding: EdgeInsets.zero,
@@ -2255,8 +2264,10 @@ class _CampaignDetailsScreenState extends State<CampaignDetailsScreen> {
 
               _infoCard(
                 Icons.home,
-                'Estimated Campaign Homes',
-                estimatedHomes > 0 ? estimatedHomes.toString() : 'Pending',
+                'Target-specific home estimate',
+                estimatedHomes > 0
+                    ? estimatedHomes.toString()
+                    : 'Not established. Regional Census context is shown in Zones; it is not a target-specific stop count.',
               ),
 
               if (compensation.isGroupCampaign)
@@ -2514,12 +2525,17 @@ class _CampaignDetailsScreenState extends State<CampaignDetailsScreen> {
   ) {
     final logistics = MaterialLogisticsDraft.fromCampaign(data);
     final locked = data['materialLogisticsLockedAt'] != null;
-    final label = switch (logistics.fulfillmentType) {
-      MaterialLogisticsDraft.scalerPickupPrintShop => 'Printing Shop Pickup',
-      MaterialLogisticsDraft.scalerPickupBusiness => 'Business Pickup',
-      MaterialLogisticsDraft.businessDelivery => 'Business Delivery',
-      _ => 'No Physical Materials Required',
-    };
+    final label =
+        data['materialFulfillmentType'] == null &&
+            data['materialHandoffMethod'] == null
+        ? 'Pickup or delivery plan not selected'
+        : switch (logistics.fulfillmentType) {
+            MaterialLogisticsDraft.scalerPickupPrintShop =>
+              'Printing Shop Pickup',
+            MaterialLogisticsDraft.scalerPickupBusiness => 'Business Pickup',
+            MaterialLogisticsDraft.businessDelivery => 'Business Delivery',
+            _ => 'No Physical Materials Required',
+          };
     return Card(
       margin: const EdgeInsets.only(bottom: 14),
       child: Padding(
@@ -2538,6 +2554,10 @@ class _CampaignDetailsScreenState extends State<CampaignDetailsScreen> {
               ],
             ),
             const SizedBox(height: 10),
+            if (data['materialQuantity'] != null) ...[
+              Text(materialWorkScopeSummary(data)),
+              const SizedBox(height: 12),
+            ],
             Text(label, style: Theme.of(context).textTheme.titleMedium),
             if (logistics.printingShopName.isNotEmpty)
               Text('Printing shop: ${logistics.printingShopName}'),

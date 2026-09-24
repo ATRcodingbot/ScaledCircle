@@ -782,38 +782,6 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
     }
   }
 
-  bool get _targetExceedsKnownMaterialCapacity {
-    final quantity = widget.materialQuantity;
-    final analyzedHomes = _propertyIntelligence?.propertyCount ?? 0;
-    return quantity != null && quantity > 0 && analyzedHomes > quantity * 2;
-  }
-
-  Future<bool> _confirmKnownSizeMismatch() async {
-    if (!_targetExceedsKnownMaterialCapacity) return true;
-    await showDialog<void>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text(
-          'This target looks much larger than your flyer quantity.',
-        ),
-        content: const Text(
-          'Reduce the target before saving so the campaign area better matches the materials available.',
-        ),
-        actions: [
-          FilledButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('Reduce Target'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('Keep Editing'),
-          ),
-        ],
-      ),
-    );
-    return false;
-  }
-
   Future<void> _saveArea() async {
     final latestSnapshot = widget.pendingZoneData == null
         ? await widget.campaignReference.get()
@@ -852,7 +820,8 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
       return;
     }
 
-    if (!await _confirmKnownSizeMismatch() || !mounted) return;
+    // Regional property aggregates are not accessible stops within this target.
+    // Material quantity must not silently force a redraw or a coverage claim.
 
     final metrics = _calculateZoneMetrics();
 

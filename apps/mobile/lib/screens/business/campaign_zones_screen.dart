@@ -1,3 +1,4 @@
+import '../../services/platform_billing_service.dart';
 import 'package:flutter_app/navigation/authenticated_app_bar.dart';
 import '../../config/app_environment.dart';
 
@@ -77,7 +78,9 @@ class _SmartZoneEntryState extends State<_SmartZoneEntry> {
     if (hours == null || hours < 0.5 || hours > 192) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Enter estimated work from 30 minutes (0.5 hours) to 192 hours.'),
+          content: Text(
+            'Enter estimated work from 30 minutes (0.5 hours) to 192 hours.',
+          ),
         ),
       );
       return;
@@ -171,7 +174,9 @@ class _SmartZoneEntryState extends State<_SmartZoneEntry> {
               icon: const Icon(Icons.business_outlined),
               label: const Text('Use My Service Area'),
             ),
-            Text('Draw a campaign territory within ${widget.savedAreaName}. Your service area is a search boundary, not one campaign.'),
+            Text(
+              'Draw a campaign territory within ${widget.savedAreaName}. Your service area is a search boundary, not one campaign.',
+            ),
           ],
           const SizedBox(height: 4),
           TextButton.icon(
@@ -284,6 +289,30 @@ class CampaignZonesScreen extends StatelessWidget {
     AddressSuggestion? selectedArea,
     double desiredHours = 5,
   }) async {
+    if (!PlatformBillingService.authoritativeCampaignFundingAvailable) {
+      await showDialog<void>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('Route planning needs a reviewed work area'),
+          content: const SingleChildScrollView(
+            child: Text(
+              'Your saved territory and any existing analysis are preserved. '
+              'Route queries are bounded to 25 km²; there is no automatic tiled route query for a larger target. '
+              'For a real campaign, review distribution scope and a smaller work area before changing the target. Edit Target requires an explicit save; no change is needed merely to preserve this draft. '
+              'The existing workload planner is limited to six hours per Zone and 32 Zones; these limits do not prove accessible stops or determine a Scaler count. '
+              'Automatic route approval/application remains unavailable while new paid contracts are held.',
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Keep saved territory'),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
     final messenger = ScaffoldMessenger.of(context);
     try {
       final functions = FirebaseFunctions.instanceFor(region: 'us-east1');
@@ -563,7 +592,7 @@ class CampaignZonesScreen extends StatelessWidget {
         SnackBar(
           content: Text(
             (error.message ??
-                "We couldn't analyze this area yet. Try a smaller area or Draw My Own Area.")
+                    "We couldn't analyze this area yet. Try a smaller area or Draw My Own Area.")
                 .replaceAll(RegExp(r'\s*\[\d{3}\]'), ''),
           ),
         ),
@@ -1862,7 +1891,7 @@ class CampaignZonesScreen extends StatelessWidget {
                         children: [
                           _campaignMetricRow(
                             icon: Icons.home_work_outlined,
-                            label: 'Estimated Homes',
+                            label: 'Target-specific home estimate',
                             value: totalEstimatedHomes > 0
                                 ? '$totalEstimatedHomes'
                                 : anyHomeEstimatePending
@@ -1916,16 +1945,15 @@ class CampaignZonesScreen extends StatelessWidget {
                   Card(
                     child: ListTile(
                       leading: const Icon(Icons.auto_fix_high),
-                      title: const Text('Need a workable split?'),
+                      title: const Text('Work area and route readiness'),
                       subtitle: const Text(
-                        'Re-plan from the selected Service Area. Applying the plan '
-                        'replaces only unassigned draft Zones and reruns server checks.',
+                        'Review supported planning options before changing the saved territory. Regional housing estimates do not establish a route or worker count.',
                       ),
                       trailing: TextButton(
                         onPressed: _serviceAreaBoundary.length < 3
                             ? null
                             : () => _reviewSmartZonePlan(context),
-                        child: const Text('Auto-Fix'),
+                        child: const Text('Review route options'),
                       ),
                     ),
                   ),

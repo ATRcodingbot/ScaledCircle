@@ -6,6 +6,56 @@ import 'package:flutter_app/screens/preferences/market_state_screen.dart';
 
 void main() {
   testWidgets(
+    'regional zero, unavailable and small-area estimates retain scope on narrow large-text layouts',
+    (tester) async {
+      tester.view.physicalSize = const Size(390, 844);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      for (final count in <int?>[0, null, 1402]) {
+        await tester.pumpWidget(
+          MaterialApp(
+            home: MediaQuery(
+              data: const MediaQueryData(textScaler: TextScaler.linear(1.4)),
+              child: Scaffold(
+                body: SingleChildScrollView(
+                  child: ZoneIntelligenceCard(
+                    zoneName: 'Fixture',
+                    data: {
+                      'targetPlanning': {
+                        'status': count == null ? 'partial' : 'complete',
+                        'sourceVersion': 'ACS_2024_5YR_B25034',
+                        'censusGeographiesUsed': ['a', 'a', 'b'],
+                        'residentialProperties': count,
+                        'checkedAtMs': 100,
+                      },
+                    },
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+        expect(
+          find.text(
+            count == 0
+                ? '0 units'
+                : count == null
+                ? 'Unavailable'
+                : '1,402 units',
+          ),
+          findsOneWidget,
+        );
+        expect(find.textContaining('2 Census block groups'), findsOneWidget);
+        expect(
+          find.textContaining('includes locations outside'),
+          findsOneWidget,
+        );
+        expect(tester.takeException(), isNull);
+      }
+    },
+  );
+  testWidgets(
     'completed Census planning takes precedence over unavailable exact-home legacy field',
     (tester) async {
       await tester.pumpWidget(
@@ -23,6 +73,21 @@ void main() {
                         'Housing units in intersecting Census block groups',
                     'source': 'U.S. Census Bureau ACS 5-Year',
                     'dataDate': '2024',
+                    'sourceVersion': 'ACS_2024_5YR_B25034',
+                    'boundaryVersion':
+                        'TIGERweb_tigerWMS_ACS2024_BlockGroups_Layer10',
+                    'censusGeographiesUsed': [
+                      '1',
+                      '2',
+                      '3',
+                      '4',
+                      '5',
+                      '6',
+                      '7',
+                      '8',
+                      '9',
+                    ],
+                    'areaSquareMeters': 97263807,
                     'residentialProperties': 6237,
                     'materialsAvailable': 500,
                     'checkedAtMs': 100,
@@ -38,13 +103,15 @@ void main() {
           ),
         ),
       );
-      expect(find.text('6237'), findsOneWidget);
+      expect(find.text('6,237 units'), findsOneWidget);
+      expect(find.text('Regional housing estimate'), findsOneWidget);
+      expect(find.textContaining('9 Census block groups'), findsOneWidget);
+      expect(find.textContaining('includes locations outside'), findsOneWidget);
+      await tester.tap(find.text('Census source and uncertainty details'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('2020–2024'), findsOneWidget);
       expect(
-        find.text('Housing units in intersecting Census block groups'),
-        findsOneWidget,
-      );
-      expect(
-        find.textContaining('U.S. Census Bureau ACS 5-Year'),
+        find.textContaining('Margin-of-error variables were not retained'),
         findsOneWidget,
       );
       expect(find.text('500'), findsOneWidget);

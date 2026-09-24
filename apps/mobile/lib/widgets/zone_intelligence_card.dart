@@ -33,6 +33,17 @@ class ZoneIntelligenceCard extends StatelessWidget {
     final currentPlanning =
         planning != null &&
         (updatedMs == null || (checkedAt != null && checkedAt >= updatedMs));
+    final regional =
+        currentPlanning &&
+        (planning['geographicCoverageMethod'] ==
+                'all_housing_unit_counts_from_intersecting_block_groups_no_area_weighting' ||
+            planning['sourceVersion']?.toString().startsWith('ACS_') == true);
+    final geographies =
+        (planning?['censusGeographiesUsed'] as List? ?? const [])
+            .map((v) => v.toString())
+            .toSet()
+            .toList();
+    final regionalCount = planning?['residentialProperties'] as num?;
     final gpsCoverage =
         (data['gpsCoveragePercent'] as num?)?.toDouble() ??
         (data['completionPercentage'] as num?)?.toDouble();
@@ -83,21 +94,63 @@ class ZoneIntelligenceCard extends StatelessWidget {
               _MetricRow(
                 icon: Icons.home_work_outlined,
                 label: currentPlanning
-                    ? planning['metric']?.toString() ?? 'Property records'
-                    : 'Estimated Homes',
+                    ? regional
+                          ? 'Regional housing estimate'
+                          : planning['metric']?.toString() ?? 'Property records'
+                    : 'Target-specific home estimate',
                 value: currentPlanning
-                    ? planning['residentialProperties']?.toString() ??
+                    ? (regional && regionalCount != null
+                              ? '${regionalCount.toInt().toString().replaceAllMapped(RegExp(r'(\d)(?=(\d{3})+(?!\d))'), (m) => '${m[1]},')} units'
+                              : planning['residentialProperties']
+                                    ?.toString()) ??
                           'Unavailable'
                     : _homeLabel(estimatedHomes, homeStatus),
                 supportingText: currentPlanning
-                    ? '${planning['source'] ?? "Source unavailable"} · ${planning['dataDate'] ?? "Date unknown"}\n${planning['status'] == "partial" ? "Partial coverage" : planning['status']}\n${planning['reason'] ?? "Not an exact household or accessible-door count."}'
+                    ? regional
+                          ? 'Total for ${geographies.isEmpty ? "the returned" : geographies.length} Census block groups overlapping your boundary; includes locations outside the selected area. '
+                                'This is not a count of houses or accessible doors inside your target, or a guaranteed upper bound. '
+                                '${planning['status'] == "partial" ? "Partial source coverage. " : ""}'
+                          : '${planning['source'] ?? "Source unavailable"} · ${planning['dataDate'] ?? "Date unknown"}\n${planning['status'] == "partial" ? "Partial coverage" : planning['status']}\n${planning['reason'] ?? "Not an exact household or accessible-door count."}'
                     : _homeSupport(homeStatus, analysisStatus),
               ),
+              if (regional)
+                ExpansionTile(
+                  tilePadding: EdgeInsets.zero,
+                  title: const Text('Census source and uncertainty details'),
+                  children: [
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: SelectableText(
+                        [
+                          'Source: ${planning['source']}',
+                          'Dataset/table: ${planning['sourceVersion'] ?? "Not recorded"}',
+                          if (planning['sourceVersion'] ==
+                              'ACS_2024_5YR_B25034')
+                            'Estimate period: 2020–2024 (ACS 5-year). Housing-unit total: B25034_001E. This is not a 2024 point-in-time count.'
+                          else
+                            'Estimate period: Not recorded for this dataset.',
+                          'Boundary vintage: ${planning['boundaryVersion'] ?? "Not recorded"}',
+                          'Retrieved: ${checkedAt == null ? "Not recorded" : DateTime.fromMillisecondsSinceEpoch(checkedAt.toInt(), isUtc: true).toIso8601String()} (UTC)',
+                          'Geographic IDs (deduplicated): ${geographies.join(", ")}',
+                          'Uncertainty: Margin-of-error variables were not retained in this result. No numeric confidence interval is available.',
+                          'Method: Whole overlapping block-group totals; no area weighting or assumed uniform density.',
+                        ].join('\n\n'),
+                      ),
+                    ),
+                  ],
+                ),
               const Divider(),
-              const _MetricRow(
+              _MetricRow(
                 icon: Icons.route_outlined,
                 label: 'Route',
                 value: 'Not yet verified',
+                supportingText:
+                    currentPlanning &&
+                        (planning['areaSquareMeters'] as num? ?? 0) > 25000000
+                    ? 'Saved target: ${((planning['areaSquareMeters'] as num) / 1000000).toStringAsFixed(2)} km². Route queries support up to 25 km² per reviewed work area. '
+                          'Census analysis succeeded independently. Select and review a smaller work area before route analysis; the full territory remains saved until you explicitly edit it. '
+                          'Automatic tiled route subdivision is not supported. Query partitions do not determine Scaler count.'
+                    : null,
               ),
               const Divider(),
               _MetricRow(
@@ -114,16 +167,20 @@ class ZoneIntelligenceCard extends StatelessWidget {
                 const Divider(),
                 _MetricRow(
                   icon: Icons.inventory_2_outlined,
-                  label: 'Materials available',
+                  label: 'Entered campaign material quantity',
                   value:
                       planning['materialsAvailable']?.toString() ??
                       'Not entered',
-                  supportingText: planning['materialBasis']?.toString(),
+                  supportingText:
+                      'A draft input, not confirmed inventory or approved work. Scope, pieces per stop, spares and accessible stops remain unverified. No coverage percentage is inferred.',
                 ),
                 for (final limitation
                     in (planning['limitations'] as List? ?? const []))
                   Text(
-                    limitation.toString(),
+                    limitation.toString().replaceAll(
+                      'property_source_access_challenge',
+                      'Maryland parcel source unavailable: HTTP 403 access challenge. The Census fallback is separate.',
+                    ),
                     style: Theme.of(context).textTheme.bodySmall,
                   ),
               ],
@@ -203,35 +260,40 @@ class _MetricRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 10),
-      child: Row(
+      child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, size: 21),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(icon, size: 21),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
                   label,
                   style: const TextStyle(fontWeight: FontWeight.w600),
                 ),
-                if (supportingText != null)
-                  Text(
-                    supportingText!,
-                    style: TextStyle(color: Colors.grey.shade700, fontSize: 12),
-                  ),
-              ],
-            ),
+              ),
+              const SizedBox(width: 12),
+              Flexible(
+                child: Text(
+                  value,
+                  textAlign: TextAlign.right,
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ),
+            ],
           ),
-          const SizedBox(width: 12),
-          Flexible(
-            child: Text(
-              value,
-              textAlign: TextAlign.right,
-              style: const TextStyle(fontWeight: FontWeight.bold),
+          if (supportingText != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Text(
+                supportingText!,
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+              ),
             ),
-          ),
         ],
       ),
     );
