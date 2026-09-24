@@ -2,6 +2,7 @@ import 'package:flutter_app/navigation/authenticated_app_bar.dart';
 import 'package:flutter/material.dart';
 import '../../services/market_rollout_service.dart';
 import '../../widgets/authenticated_sign_out_button.dart';
+import '../../services/platform_billing_service.dart';
 
 String marketStatusMessage(
   Map<String, dynamic> value, {
@@ -16,6 +17,9 @@ String marketStatusMessage(
     return 'Maryland Scaler registration is open. Paid assignments remain unavailable until the current activation hold is cleared. Payout setup does not prove a completed withdrawal.';
   }
   if (value['status'] == 'ACTIVE') {
+    if (!PlatformBillingService.authoritativeCampaignFundingAvailable) {
+      return 'Business registration and campaign planning are available. Public paid campaign funding and assignments remain held while ScaledCircle completes payout readiness.';
+    }
     return 'Your state is active. Job alerts still follow your saved service areas. Paid work remains subject to account and payment readiness.';
   }
   if (value['status'] == 'PAUSED') {
@@ -48,7 +52,9 @@ class _MarketStateScreenState extends State<MarketStateScreen> {
   Future<void> _load() async {
     setState(() => _error = null);
     try {
-      final value = await (widget.load ?? MarketRolloutService.load)();
+      final value = await (widget.load ?? MarketRolloutService.load)().timeout(
+        const Duration(seconds: 20),
+      );
       if (mounted) {
         setState(() {
           _value = value;
@@ -190,8 +196,13 @@ class _MarketStatusCardState extends State<MarketStatusCard> {
   @override
   void initState() {
     super.initState();
-    _value = (widget.load ?? MarketRolloutService.load)();
+    _value = _load();
   }
+
+  Future<Map<String, dynamic>> _load() =>
+      (widget.load ?? MarketRolloutService.load)().timeout(
+        const Duration(seconds: 20),
+      );
 
   @override
   Widget build(BuildContext context) => FutureBuilder<Map<String, dynamic>>(
@@ -225,9 +236,7 @@ class _MarketStatusCardState extends State<MarketStatusCard> {
                   MaterialPageRoute(builder: (_) => const MarketStateScreen()),
                 );
                 if (mounted) {
-                  setState(
-                    () => _value = (widget.load ?? MarketRolloutService.load)(),
-                  );
+                  setState(() => _value = _load());
                 }
               },
               child: const Text('Your state & launch updates'),

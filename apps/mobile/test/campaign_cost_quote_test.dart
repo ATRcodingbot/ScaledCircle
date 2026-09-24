@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -99,7 +100,7 @@ void main() {
     );
   });
 
-  testWidgets('pay edits are debounced and preserve quote while updating', (
+  testWidgets('pay edits are debounced and clear stale quote while updating', (
     tester,
   ) async {
     final requested = <double>[];
@@ -118,7 +119,7 @@ void main() {
     await tester.enterText(pay, '6');
     await tester.enterText(pay, '60');
     expect(find.text('Updating total...'), findsOneWidget);
-    expect(find.text('PLATFORM FEE (20%)'), findsOneWidget);
+    expect(find.text('PLATFORM FEE (20%)'), findsNothing);
     await tester.pump(const Duration(milliseconds: 450));
     await tester.pump();
     expect(requested, [50, 60]);
@@ -152,7 +153,7 @@ void main() {
   });
 
   testWidgets(
-    'known-good quote remains visible when refresh temporarily fails',
+    'old quote is not presented as current when changed-input refresh fails',
     (tester) async {
       var fail = false;
       await tester.pumpWidget(
@@ -174,9 +175,47 @@ void main() {
       );
       await tester.pump(const Duration(milliseconds: 450));
       await tester.pump();
-      expect(find.text(r'$1.60'), findsOneWidget);
-      expect(find.text(r'$9.60'), findsOneWidget);
-      expect(find.text("Couldn't refresh — Retry"), findsOneWidget);
+      expect(find.text(r'$1.60'), findsNothing);
+      expect(find.text(r'$9.60'), findsNothing);
+      expect(
+        find.text('Unable to calculate the campaign total.'),
+        findsOneWidget,
+      );
+    },
+  );
+
+  test(
+    'money input uses cents and treats partial/invalid input explicitly',
+    () {
+      expect(campaignInputCents('50'), 5000);
+      expect(campaignInputCents('50.'), 5000);
+      expect(campaignInputCents('.50'), 50);
+      expect(campaignInputCents('', optional: true), 0);
+      for (final value in ['.', '-1', 'NaN', '1.234', '1e3']) {
+        expect(campaignInputCents(value), isNull);
+      }
+    },
+  );
+
+  testWidgets(
+    'late failed response cannot replace newer input or restart after clearing',
+    (tester) async {
+      final pending = Completer<CampaignCostQuote>();
+      await tester.pumpWidget(app((_) => pending.future));
+      await enterCompensation(tester, bonus: '');
+      await tester.pump(const Duration(milliseconds: 450));
+      await tester.enterText(
+        find.widgetWithText(TextFormField, 'Base Pay per Scaler (\$)'),
+        '',
+      );
+      pending.completeError(Exception('old request'));
+      await tester.pump();
+      expect(
+        find.text('Unable to calculate the campaign total.'),
+        findsNothing,
+      );
+      expect(find.text('Updating total...'), findsNothing);
+      expect(find.byKey(const Key('campaign-estimated-total')), findsNothing);
     },
   );
 

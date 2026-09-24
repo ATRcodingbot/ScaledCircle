@@ -24,6 +24,17 @@ import '../../../../../widgets/material_fulfillment_form.dart';
 import '../../../../../widgets/legal_consent_prompt.dart';
 import '../../../../../widgets/response_tracking_feature_card.dart';
 
+int? campaignInputCents(String raw, {bool optional = false}) {
+  final text = raw.trim();
+  if (text.isEmpty) return optional ? 0 : null;
+  if (!RegExp(r'^(\d+([.]\d{0,2})?|[.]\d{1,2})$').hasMatch(text)) return null;
+  final parts = text.split('.');
+  final whole = int.tryParse(parts[0].isEmpty ? '0' : parts[0]);
+  if (whole == null || whole > 1000000) return null;
+  final fraction = parts.length == 2 ? int.parse(parts[1].padRight(2, '0')) : 0;
+  return whole * 100 + fraction;
+}
+
 class FlyerCampaignScreen extends StatefulWidget {
   final String campaignType;
   final List<Map<String, double>> initialServiceArea;
@@ -213,7 +224,12 @@ class _FlyerCampaignScreenState extends State<FlyerCampaignScreen> {
               child: ListTile(
                 leading: const Icon(Icons.map_outlined),
                 title: Text(area.name),
-                subtitle: const Text('Use as a starting template'),
+                subtitle: Text(
+                  '${area.type.isEmpty ? "Mapped area" : area.type} · '
+                  '${area.polygon.first.latitude.toStringAsFixed(3)}, '
+                  '${area.polygon.first.longitude.toStringAsFixed(3)} · '
+                  '${area.polygon.length} boundary points\nUse as a starting template',
+                ),
               ),
             ),
         ],
@@ -304,16 +320,18 @@ class _FlyerCampaignScreenState extends State<FlyerCampaignScreen> {
   }
 
   double get _currentWorkerBudget {
-    final basePay = double.tryParse(payController.text.trim()) ?? 0;
-    final bonus = double.tryParse(bonusController.text.trim()) ?? 0;
+    final basePay = campaignInputCents(payController.text);
+    final bonus = campaignInputCents(bonusController.text, optional: true);
+    if (basePay == null || basePay <= 0 || bonus == null) return 0;
     final scalers = AppEnvironmentConfig.isLocal
         ? int.tryParse(scalerCountController.text.trim()) ?? 1
         : 1;
-    return (basePay + bonus) * scalers;
+    return (basePay + bonus) * scalers / 100;
   }
 
   void _scheduleCampaignCostQuote() {
     _quoteDebounce?.cancel();
+    ++_quoteRequestSequence;
     final workerBudget = _currentWorkerBudget;
     if (workerBudget <= 0) {
       setState(() {
@@ -324,6 +342,7 @@ class _FlyerCampaignScreenState extends State<FlyerCampaignScreen> {
       return;
     }
     setState(() {
+      _costQuote = null;
       _quoteUpdating = true;
       _quoteError = null;
     });
@@ -361,9 +380,8 @@ class _FlyerCampaignScreenState extends State<FlyerCampaignScreen> {
       if (!mounted || requestSequence != _quoteRequestSequence) return;
       setState(() {
         _quoteUpdating = false;
-        _quoteError = _costQuote == null
-            ? 'Unable to calculate the campaign total.'
-            : "Couldn't refresh — Retry";
+        _costQuote = null;
+        _quoteError = 'Unable to calculate the campaign total.';
       });
     }
   }
@@ -526,7 +544,7 @@ class _FlyerCampaignScreenState extends State<FlyerCampaignScreen> {
   String _campaignTypeDescription(String type) {
     switch (type) {
       case 'neighborhoodCanvassing':
-        return 'Speak with residents or businesses in the selected area. Route tracking verifies coverage.';
+        return 'Distribute approved materials in the selected area. Speaking with residents is not required. Route tracking provides reviewable coverage evidence.';
       case 'flyer_distribution':
         return 'Scalers distribute flyers throughout mapped neighborhoods.';
 
@@ -823,7 +841,10 @@ class _FlyerCampaignScreenState extends State<FlyerCampaignScreen> {
 
         final locationsSnapshot = await FirebaseFirestore.instance
             .collection('campaignLocations')
-            .where('businessId', isEqualTo: BusinessWorkspaceSession.businessIdFor(user.uid))
+            .where(
+              'businessId',
+              isEqualTo: BusinessWorkspaceSession.businessIdFor(user.uid),
+            )
             .where('campaignId', isEqualTo: campaignReference.id)
             .get();
 
@@ -935,7 +956,10 @@ class _FlyerCampaignScreenState extends State<FlyerCampaignScreen> {
 
       final zonesSnapshot = await FirebaseFirestore.instance
           .collection('campaignZones')
-          .where('businessId', isEqualTo: BusinessWorkspaceSession.businessIdFor(user.uid))
+          .where(
+            'businessId',
+            isEqualTo: BusinessWorkspaceSession.businessIdFor(user.uid),
+          )
           .where('campaignId', isEqualTo: campaignReference.id)
           .get();
 
@@ -1058,7 +1082,14 @@ class _FlyerCampaignScreenState extends State<FlyerCampaignScreen> {
 
     return Scaffold(
       appBar: AuthenticatedAppBar(
-        title: Text('Create ${_campaignTypeLabel(_campaignType)}'),
+        title: const Text('Plan campaign'),
+        actions: [
+          IconButton(
+            tooltip: 'Hide keyboard',
+            onPressed: () => FocusScope.of(context).unfocus(),
+            icon: const Icon(Icons.keyboard_hide),
+          ),
+        ],
         centerTitle: true,
       ),
       body: SafeArea(
@@ -1068,6 +1099,8 @@ class _FlyerCampaignScreenState extends State<FlyerCampaignScreen> {
             child: Form(
               key: _formKey,
               child: ListView(
+                keyboardDismissBehavior:
+                    ScrollViewKeyboardDismissBehavior.onDrag,
                 key: const Key('flyer-campaign-form-scroll'),
                 controller: _formScrollController,
                 padding: const EdgeInsets.all(20),
@@ -1574,6 +1607,19 @@ class _FlyerCampaignScreenState extends State<FlyerCampaignScreen> {
                           ],
 
                           const SizedBox(height: 8),
+
+                          _costRow(
+                            'TOTAL WORKER RESERVE',
+                            _currentWorkerBudget,
+                          ),
+                          const Text(
+                            'The platform fee applies to base compensation plus the reserved completion bonus. It is not deducted from Scaler pay.',
+                          ),
+                          if (!PlatformBillingService
+                              .authoritativeCampaignFundingAvailable)
+                            const Text(
+                              PlatformBillingService.paidWorkHoldMessage,
+                            ),
 
                           if (_costQuote != null)
                             _costRow(

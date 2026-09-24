@@ -53,7 +53,7 @@ class CreateCampaignScreen extends StatelessWidget {
             context,
             Icons.location_on,
             "Door-to-Door Outreach",
-            "Speak with residents or businesses in the selected area. Route tracking verifies coverage.",
+            "Distribute approved materials in the selected area. Speaking with residents is not required. Route tracking provides reviewable coverage evidence.",
             const CanvassingCampaignScreen(),
           ),
 

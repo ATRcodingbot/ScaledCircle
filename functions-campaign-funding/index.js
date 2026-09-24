@@ -109,6 +109,11 @@ function stripeClient() {
 }
 
 exports.quoteCampaignFunding = onCall({...OPTIONS, timeoutSeconds: 30}, async (request) => {
+  // Planning accepts an amount before a campaign exists. It never creates an
+  // offer, payment or checkout; campaign funding still follows the path below.
+  if (!request.data?.campaignId) {
+    return require('./campaign_planning_quote').quote({request, db, auth, FieldValue, Timestamp, HttpsError});
+  }
   const input = await ownedCampaign(request);
   await assertFundable(input);
   try { return lifecycle.quoteForCampaign(input.campaign); } catch (_) {

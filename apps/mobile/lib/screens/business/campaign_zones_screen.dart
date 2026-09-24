@@ -1866,7 +1866,7 @@ class CampaignZonesScreen extends StatelessWidget {
                             value: totalEstimatedHomes > 0
                                 ? '$totalEstimatedHomes'
                                 : anyHomeEstimatePending
-                                ? 'Analyzing...'
+                                ? 'Analysis needed'
                                 : 'Unavailable',
                           ),
                           const Divider(),

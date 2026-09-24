@@ -609,3 +609,4 @@ copyRequiredLocalModules(campaignFundingRoot, `require("./business_workspace");r
 copyRequiredLocalModules(campaignFundingRoot, `require("./campaign_reserve_settlement")`);
 copyRequiredLocalModules(campaignFundingRoot, `require("./paid_work_launch_gate")`);
 copyRequiredLocalModules(campaignFundingRoot, `require("./market_work_geography")`);
+copyRequiredLocalModules(campaignFundingRoot, `require("./campaign_planning_quote")`);

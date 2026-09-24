@@ -1082,11 +1082,7 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
 
     return Scaffold(
       appBar: AuthenticatedAppBar(
-        title: Text(
-          _mappingLocked
-              ? 'Campaign Area (Locked)'
-              : 'Step 3 of 4 — Choose the Area',
-        ),
+        title: Text(_mappingLocked ? 'Campaign Area (Locked)' : 'Choose area'),
         centerTitle: true,
       ),
       body: LayoutBuilder(
