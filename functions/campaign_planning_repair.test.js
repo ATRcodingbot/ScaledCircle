@@ -56,3 +56,15 @@ test('partial coverage is not an exact household count; changed geometry cannot 
 test('funded/assigned/workspace changes during lookup prevent a planning write',async()=>{
  for(const change of [{status:'funded'},{businessId:'other'}]){const {state,args}=fixture();await assert.rejects(mapping.analyzePlanning({...args,provider:{analyze:async()=>{Object.assign(state.campaign,change);return result;}}}));assert.equal(state.writes.length,0);}
 });
+test('public analysis entry under the paid-contract hold reaches bounded providers and saves unavailable, not contract approval',async()=>{
+ const {state,args}=fixture();const oldFetch=global.fetch,oldFlag=process.env.CANVASSING_NEW_CONTRACTS_ENABLED;let calls=0;
+ args.zoneRef.get=async()=>({data:()=>state.zone});args.campaignRef.get=async()=>({data:()=>state.campaign});
+ args.db.doc=p=>p.startsWith('campaignZones/')?args.zoneRef:args.campaignRef;
+ global.fetch=async()=>{calls++;return {ok:false,status:403};};process.env.CANVASSING_NEW_CONTRACTS_ENABLED='false';
+ try{const out=await mapping.analyze({db:args.db,FieldValue:args.FieldValue,zoneId:'z',uid:'owner'});
+ assert.equal(out.planningOnly,true);assert.equal(out.analysisStatus,'unavailable');assert.ok(calls>0&&calls<=2);assert.equal(state.zone.analysisStatus,'unavailable');
+ assert.equal(state.zone.coverageAuthority,undefined);assert.equal(state.campaign.completionPolicyVersion,undefined);
+ await assert.rejects(mapping.analyze({db:args.db,FieldValue:args.FieldValue,zoneId:'z',uid:'other'}),/owned_draft_zone_required/);
+ state.campaign.fundingStatus='funded';await assert.rejects(mapping.analyze({db:args.db,FieldValue:args.FieldValue,zoneId:'z',uid:'owner'}),/unworked_unfunded_zone_required/);
+ }finally{global.fetch=oldFetch;if(oldFlag===undefined)delete process.env.CANVASSING_NEW_CONTRACTS_ENABLED;else process.env.CANVASSING_NEW_CONTRACTS_ENABLED=oldFlag;}
+});
