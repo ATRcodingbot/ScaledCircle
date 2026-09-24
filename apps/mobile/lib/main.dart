@@ -36,6 +36,7 @@ import 'navigation/app_routes.dart';
 import 'screens/auth/complete_business_profile_screen.dart';
 import 'navigation/app_router.dart';
 import 'navigation/protected_route_gate.dart';
+import 'navigation/campaign_route_content.dart';
 import 'navigation/startup_session_gate.dart';
 import 'screens/business/business_dashboard.dart';
 import 'screens/business/property_intelligence_center_screen.dart';
@@ -557,43 +558,27 @@ class ScaledCircleApp extends StatelessWidget {
         builder: (_) => ProtectedRouteGate(
           routeName: settings.name!,
           audience: ProtectedRouteAudience.business,
-          builder: (user, profile) =>
-              FutureBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-                future: FirebaseFirestore.instance
-                    .collection('campaigns')
-                    .doc(campaignId)
-                    .get(),
-                builder: (context, snapshot) {
-                  final isAdmin =
-                      profile['role']?.toString().toLowerCase() == 'admin';
-                  final fallbackRoute = isAdmin
-                      ? AppRoutes.adminDashboard
-                      : AppRoutes.businessDashboard;
-                  if (snapshot.connectionState != ConnectionState.done) {
-                    return const Scaffold(
-                      body: Center(child: CircularProgressIndicator()),
-                    );
-                  }
-                  final campaign = snapshot.data;
-                  final data = campaign?.data();
-                  if (campaign == null || !campaign.exists) {
-                    return RouteRecoveryScreen(
-                      title: 'Campaign not available.',
-                      destination: fallbackRoute,
-                    );
-                  }
-                  if (!isAdmin && data?['businessId'] != user.uid) {
-                    return RouteRecoveryScreen(
-                      title: 'You don\'t have access to this campaign.',
-                      destination: fallbackRoute,
-                    );
-                  }
-                  return CampaignDetailsScreen(
-                    campaign: campaign,
-                    fallbackRoute: fallbackRoute,
-                  );
-                },
+          builder: (user, profile) {
+            final isAdmin =
+                profile['role']?.toString().toLowerCase() == 'admin';
+            final fallbackRoute = isAdmin
+                ? AppRoutes.adminDashboard
+                : AppRoutes.businessDashboard;
+            return CampaignRouteContent(
+              campaignId: campaignId,
+              actorUid: user.uid,
+              isAdmin: isAdmin,
+              fallbackRoute: fallbackRoute,
+              load: () => FirebaseFirestore.instance
+                  .collection('campaigns')
+                  .doc(campaignId)
+                  .get(),
+              builder: (campaign) => CampaignDetailsScreen(
+                campaign: campaign,
+                fallbackRoute: fallbackRoute,
               ),
+            );
+          },
         ),
       );
     }
