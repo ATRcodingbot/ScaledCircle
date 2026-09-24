@@ -567,6 +567,7 @@ class ScaledCircleApp extends StatelessWidget {
             return CampaignRouteContent(
               campaignId: campaignId,
               actorUid: user.uid,
+              workspaceId: profile['businessId']?.toString(),
               isAdmin: isAdmin,
               fallbackRoute: fallbackRoute,
               load: () => FirebaseFirestore.instance

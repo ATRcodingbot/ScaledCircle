@@ -129,12 +129,15 @@ class BusinessWorkspaceService {
     return Map<String, dynamic>.from(result.data as Map);
   }
 
-  Future<Map<String, dynamic>> context() async {
+  Future<Map<String, dynamic>> context({bool cacheSession = true}) async {
+    final actorUid = FirebaseAuth.instance.currentUser?.uid;
     final value = await call('getBusinessWorkspaceContext');
-    if (value['actorUid'] != FirebaseAuth.instance.currentUser?.uid) {
+    if (actorUid == null ||
+        value['actorUid'] != actorUid ||
+        actorUid != FirebaseAuth.instance.currentUser?.uid) {
       throw StateError('Session changed');
     }
-    BusinessWorkspaceSession.value = value;
+    if (cacheSession) BusinessWorkspaceSession.value = value;
     return value;
   }
 }

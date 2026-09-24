@@ -11,6 +11,7 @@ class CampaignRouteContent extends StatefulWidget {
     super.key,
     required this.campaignId,
     required this.actorUid,
+    this.workspaceId,
     required this.isAdmin,
     required this.fallbackRoute,
     required this.load,
@@ -18,6 +19,7 @@ class CampaignRouteContent extends StatefulWidget {
   });
 
   final String campaignId, actorUid, fallbackRoute;
+  final String? workspaceId;
   final bool isAdmin;
   final Future<DocumentSnapshot<Map<String, dynamic>>> Function() load;
   final Widget Function(DocumentSnapshot<Map<String, dynamic>>) builder;
@@ -39,7 +41,8 @@ class _CampaignRouteContentState extends State<CampaignRouteContent> {
   void didUpdateWidget(CampaignRouteContent oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.campaignId != widget.campaignId ||
-        oldWidget.actorUid != widget.actorUid) {
+        oldWidget.actorUid != widget.actorUid ||
+        oldWidget.workspaceId != widget.workspaceId) {
       _campaign = widget.load();
     }
   }
@@ -62,7 +65,9 @@ class _CampaignRouteContentState extends State<CampaignRouteContent> {
             );
           }
           if (!widget.isAdmin &&
-              campaign.data()?['businessId'] != widget.actorUid) {
+              (campaign.data()?['businessId'] != widget.actorUid ||
+                  (widget.workspaceId != null &&
+                      campaign.data()?['businessId'] != widget.workspaceId))) {
             return RouteRecoveryScreen(
               title: "You don't have access to this campaign.",
               destination: widget.fallbackRoute,
