@@ -2,7 +2,7 @@
 # Codemagic does not discover this nested path. Preserve the release branch root.
 workflows:
   ipad-reviewer-capture:
-    name: iPad simulator screenshots - source 4834e69 - no distribution
+    name: iPad simulator screenshots - source 26f2913 - no distribution
     instance_type: mac_mini_m2
     max_build_duration: 30
     environment:
@@ -18,4 +18,5 @@ workflows:
     artifacts:
       - /tmp/sc-ipad-capture-output/*.png
       - /tmp/sc-ipad-capture-output/manifest.json
+      - /tmp/sc-ipad-capture-status.json
 # No signing integration, publishing, App Store upload, or build-number increment.
