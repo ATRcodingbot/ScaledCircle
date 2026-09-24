@@ -69,8 +69,9 @@ Year Structure Built**, at block-group geography. Official variables
 `B25034_001E` through `B25034_011E` are retained. Results are explicitly labeled
 "Neighborhood estimate based on intersecting Census block groups." Approximate
 rolling-age metrics are disclosed because ACS publishes construction-year
-buckets, not parcel years. `CENSUS_API_KEY`, if configured, remains server-side;
-the Census API can also service low-volume requests without a key.
+buckets, not parcel years. The existing `CENSUS_API_KEY` remains server-side and
+is required for ACS data queries. Both zone analysis and Property Intelligence
+bind that existing secret; TIGERweb boundary requests do not receive the key.
 
 ## Provider and cache flow
 
@@ -121,7 +122,7 @@ signals together without hiding them inside one opaque score.
 ## Intersecting Census geography and precision
 
 The national fallback uses the official Census TIGERweb ACS 2024 Block Groups
-layer (`Tracts_Blocks/MapServer/8`) with `esriSpatialRelIntersects` against the
+layer (`tigerWMS_ACS2024/MapServer/10`) with `esriSpatialRelIntersects` against the
 saved campaign polygon. Every intersecting GEOID is retained in
 `censusGeographiesUsed`. The display says **Neighborhood estimate based on
 intersecting Census block groups.** No centroid-only lookup or invented
