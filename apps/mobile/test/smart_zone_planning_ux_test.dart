@@ -33,7 +33,8 @@ void main() {
       expect(source, contains('six-hour single-Scaler'));
       expect(source, contains('limit and validated again before funding'));
       expect(source, contains('Automatically split into workable Zones'));
-      expect(source, contains('Auto-Fix'));
+      expect(source, contains('Review mapped route'));
+      expect(source, contains('Retry Zone Analysis'));
       expect(source, contains('Search neighborhood, address or ZIP'));
       expect(source, contains('No saved Service Area is required.'));
       expect(source, contains("'areaSelection':"));

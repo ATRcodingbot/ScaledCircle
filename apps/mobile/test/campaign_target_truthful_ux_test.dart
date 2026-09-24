@@ -28,7 +28,9 @@ void main() {
     );
 
     expect(find.text('Target saved ✓'), findsOneWidget);
-    expect(find.text('Analyzing...'), findsOneWidget);
+    expect(find.text('Analysis needed'), findsOneWidget);
+    expect(find.text('Analyzing...'), findsNothing);
+    expect(find.textContaining('Run or retry analysis'), findsOneWidget);
     expect(find.text('Not yet verified'), findsOneWidget);
     expect(find.text('Not assigned'), findsOneWidget);
     expect(find.textContaining('Walking Distance'), findsNothing);
@@ -94,7 +96,7 @@ void main() {
   );
 
   test(
-    'persistence returns before optional analysis and fake formulas are gone',
+    'persistence precedes optional analysis and regional totals cannot force redraw',
     () {
       final source = File(
         'lib/screens/business/campaign_area_screen.dart',
@@ -119,8 +121,9 @@ void main() {
       expect(source, isNot(contains('preliminary pay')));
       expect(
         source,
-        contains('This target looks much larger than your flyer quantity.'),
+        isNot(contains('This target looks much larger than your flyer quantity.')),
       );
+      expect(source, isNot(contains('propertyCount > materialQty * 2')));
       expect(
         source,
         isNot(contains("'zoneAreaSquareMeters': metrics.areaSquareMeters")),
