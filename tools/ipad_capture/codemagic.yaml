@@ -11,10 +11,13 @@ workflows:
       groups:
         - ipad_capture_reviewer
     scripts:
-      - name: Capture current Core screens from pinned source
+      - name: Bounded simulator compile, install and Core capture
         script: |
           set -eu
           bash "$CM_BUILD_DIR/tools/ipad_capture/run.sh"
+    # The runner writes these during execution, with a 24-minute work budget.
+    # Reserve the remaining cap for bounded cleanup and provider artifact export.
+    # Hard termination can still prevent export; safe milestones also reach CI logs.
     artifacts:
       - /tmp/sc-ipad-capture-output/*.png
       - /tmp/sc-ipad-capture-output/manifest.json

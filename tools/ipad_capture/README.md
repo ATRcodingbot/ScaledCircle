@@ -1,201 +1,142 @@
-# Isolated iPad screenshot capture (corrected attempt prepared, not run)
+# Isolated iPad capture — instrumented proposal, not authorized to run
 
-This tooling captures real Core screens at 2064 × 2752 from an iPad Pro 13-inch
-(M4) simulator. It pins application source
-`26f29133fcd72edecf5c71497712674293228341` and Flutter 3.44.8 revision
-`058e0af2c2b57e369d905a03ac9748b0ebf543c6`. The source dependency lock is verified
-and every existing package version must remain unchanged after adding the
-disposable Flutter driver harness. No production Dart file is changed.
+Three actual Core screens at 2064 × 2752 on an installed iPad Pro 13-inch (M4)
+simulator. Application source remains `26f29133fcd72edecf5c71497712674293228341`
+(iOS36 / Android35), Flutter 3.44.8 revision
+`058e0af2c2b57e369d905a03ac9748b0ebf543c6`, application lock SHA-256
+`2d929b3279125c2a0732212aee86ebf51607aaff76f315c9a0ff51e0bbf8ea94`.
+Adding the disposable driver dependency must preserve every existing package
+version. No production app code, signed binary, build number or entitlement changes.
 
-## Historical failure and corrected preflight
+## What the previous attempt proves
 
-Run `6ab586168ba4d1c8416ef8ad` failed at the original generic input check after
-1m40s at $0, before compilation, reviewer sign-in or screenshots. The historical
-missing/empty variable cannot be identified from that message, and the temporary
-entries have since been removed. No claim is made about which value was absent.
+Run `6ab58bd5dfe09cbb7e50dd55`, capture overlay
+`ac27734b16ee306a2638e8ebb9f35969f8968d3c`, began September 24, 2026 at 4:45 PM
+Eastern and timed out after 30m01s. Retained detailed logs show all four inputs
+present, SDK/source/plist/lock verification, dependency resolution, installed
+runtime selection, simulator creation and boot, then
+`flutter-drive-build-and-capture [running]`. Reaching that command after sequential
+checked operations establishes boot and preceding prerequisites completed.
 
-The corrected preflight emits only these four fixed names, each with one of
-`absent`, `empty`, or `present`:
+The combined step ran 28m44s. Its internal output stayed private and was not
+exported. Available evidence does not establish compiler completion, a retained
+app, installation, launch, driver connection, login, navigation or capture.
+No exported artifact is listed. That does not prove no private image was captured,
+or that a recoverable app exists. The exact historical stall remains unknown.
 
-- `IPAD_REVIEWER_EMAIL`
-- `IPAD_REVIEWER_PASSWORD`
-- `IPAD_REVIEWER_UID`
-- `IPAD_FIREBASE_PLIST_BASE64`
+Earlier run `6ab586168ba4d1c8416ef8ad` failed generic input preflight after 1m40s;
+its exact missing/empty input was not retained. Both attempts cost $0. All four
+temporary entries were removed and verified absent after the latest attempt.
+Release Workflow Editor configuration was restored. These changes recreate no
+credentials and start no run.
 
-Any absent/empty input stops before dependency resolution, simulator creation or
-compilation, naming every failed input. No value, length, credential hash,
-environment dump or secret-bearing command is emitted. `run.sh --preflight-only`
-executes only this check; local tests use synthetic values through the actual
-Bash-to-Python wrapper. Flutter's maintained drive service starts the host Dart
-process with its inherited environment plus VM_SERVICE_URL; our driver disables
-both communication-printing and communication-file logging.
+## Bounded diagnostic design
 
-The workflow still imports exactly `environment.groups: [ipad_capture_reviewer]`.
-Before the one corrected run, verify all four encrypted entries are saved in that
-exact app-level group on the **same Codemagic application** selected for the run,
-and imported by its selected branch-root workflow. Workflow Editor-local values
-are not automatically inherited. Check name case/spelling and any launch/API
-variable overrides; an empty higher-precedence override can mask a saved value.
-Do not add credentials to YAML `vars`, CLI arguments, or logs. The email/password
-are the existing **ScaledCircle app reviewer** login, not underlying Gmail login.
-No password/account/entitlement changes are required.
+The runner records allowlisted stages, UTC start/end timestamps, elapsed time,
+deadline, numeric exit status and fixed failure categories, with live CI progress.
+Raw subprocess output remains private and temporary, never an artifact. Compilation,
+app validation, installation and prebuilt-app launch/driver are separate stages.
+Prebuilt Flutter drive may reinstall the same app but must not compile again.
+No artifact from the failed historical attempt is assumed.
 
-Founder authorized one corrected manual run, at most 30 minutes and $0 within
-existing free allowance, only after that wiring is verified. No retry, paid
-runner, subscription or automatic trigger is configured. After that attempt,
-remove only the temporary capture entries/configuration, including on failure.
+The app entrypoint, Firebase authentication, router, permissions and network
+protections remain unchanged. The harness verifies protocol, normal startup,
+verified expected reviewer identity, maintained route and bounded screen readiness.
+It does not approve native permission dialogs, disable enforcement, invent data or
+ignore auth failure. Indefinite driver connections, loading animations and native
+commands must end at their stage deadline. Native overlays remain a limitation to
+inspect, not permission to force a screen.
 
-`/tmp/sc-ipad-capture-status.json` records the pinned source, fixed input states,
-and safe current stage/status. A driver failure adds only allowlisted stage and
-outcome (connection/authentication/specific screen/readiness/capture), without
-exception text or request payload. A failed run never promotes partial PNGs to
-the artifact directory. Raw subprocess logs remain private and temporary.
+Each completed screenshot is independently dimension/hash checked and promoted
+immediately. A later Schedule failure retains already-completed Home PNGs. Safe
+status and partial manifest update during the attempt. Work stops at 24 minutes,
+cleanup is bounded, and the provider cap remains 30 minutes. Stage limits are
+clipped to the remaining work budget. Hard termination can still prevent provider
+artifact publishing; live milestones remain fallback evidence. Do not rely on a
+finalizer running after forced termination.
 
-## One operator setup, before any run
+Private files use a restricted temporary directory on the ephemeral CI worker.
+Simulator/worktree cleanup is bounded; any remaining private files are left for
+worker disposal rather than an unbounded recursive cleanup that could consume
+the export reserve. None is included in artifact paths.
 
-1. Verify the actual Codemagic account's available macOS minutes and whether a
-   30-minute maximum capture job stays within its allowance. Local records do not
-   establish an available allowance or authorize paid overage. Do not run until
-   that is resolved. This is an upper bound, not a duration/cost quote.
-2. Use the **capture-only CI branch root overlay** described below. The nested
-   YAML is a template, not a discoverable Codemagic configuration. Preserve the
-   production branch's root YAML and existing Workflow Editor configuration.
-3. Use the existing mac_mini_m2 worker/Xcode 26.6 configuration, Flutter 3.44.8,
-   CocoaPods and an **installed** available iOS simulator runtime with the
-   `iPad Pro 13-inch (M4)` device type. The script discovers the installed runtime
-   and fails closed if unavailable; it does not download an Xcode runtime.
-4. Create the secured Codemagic group `ipad_capture_reviewer` with encrypted
-   `IPAD_REVIEWER_EMAIL`, `IPAD_REVIEWER_PASSWORD`, `IPAD_REVIEWER_UID` for the
-   existing isolated Business review account. Enter secrets only in the protected
-   provider UI. No new account, custom token, entitlement, consent, or bypass is
-   created. The account must already be email verified and permitted to access
-   its current Business workspace. No Apple signing/API integration is needed.
-5. Reuse the existing Default Workflow's encrypted
-   `IOS_GOOGLE_SERVICE_INFO_PLIST_B64` Firebase iOS plist, securely mapped
-   as `IPAD_FIREBASE_PLIST_BASE64` in that group (single-line Base64). It is
-   intentionally not checked in. The script validates project, bundle and iOS
-   app identity, writes it only in the disposable checkout, then deletes it.
-   Do not substitute the staging plist. Existing CocoaPods support must be
-   available; Flutter creates its normal missing Podfile in the disposable tree.
+Screens remain Business Home, Schedule and Campaigns with isolated reviewer data.
+No login screenshot is taken. Each PNG still needs visual inspection for native
+overlays, loading/error state, truthful empty content, privacy and attribution
+before store upload. Captured does not automatically mean store-ready.
 
-Parent live account readback on September 24: Free macOS minutes displayed
-342/500, no subscription or billing transactions. Reconfirm whether that counter
-means consumed minutes before authorizing one manual run of at most 30 minutes;
-do not enable a subscription, paid runner, automatic triggers, or overage.
+## Next attempt — separate approval required
 
-## Exact Codemagic entrypoint
+Propose ONE instrumented diagnostic/capture attempt, not a guaranteed screenshot
+fix. Allow roughly 15–25 minutes if normal compile/startup succeeds; 24-minute
+work budget, maximum 30-minute provider run. No larger cap or automatic retry.
+Compilation is capped at 12 minutes and prebuilt launch/driver at 10 minutes,
+both clipped by the same 24-minute work budget; these are not additive grants.
 
-Official [YAML configuration documentation](https://docs.codemagic.io/yaml-basic-configuration/yaml-getting-started/)
-requires a committed repository-root `codemagic.yaml`. The
-[configuration scan instructions](https://docs.codemagic.io/partials/quickstart/create-yaml-intro/)
-explicitly support different configuration files in different branches. The
-[Builds API](https://docs.codemagic.io/rest-api/builds/) accepts `workflowId` plus
-`branch` or `tag`; its documented parameters do not include a custom YAML path.
-Do not attempt a nested-path API override.
+Read-only billing September 24, approximately 5:29 PM Eastern: 381/500 free macOS
+minutes consumed, **119 remaining**, no subscription and no billing transactions.
+Recheck before a separately approved start. Stop if payment, upgrade or purchase
+would be required.
 
-After the tooling is committed and the separate preparation is authorized:
+Exactly four temporary encrypted app-level entries in `ipad_capture_reviewer`
+on existing Codemagic application `6a9d446e630e3c47918cbb56` would be required:
 
-1. Create a separate Git worktree/CI-only branch, for example
-   `codex/ipad-capture-26f2913`, from the reviewed commit containing these tools.
-   Do not switch or overwrite the release worktree. Ensure the pinned application
-   commit is reachable in that branch's history; `run.py` checks it exists.
-   A normal full clone contains that ancestor. If CI clones shallowly, the script
-   fetches only the exact `26f29133fcd72edecf5c71497712674293228341` commit
-   from `origin` and verifies FETCH_HEAD before checkout. Repository read access
-   must permit that fetch; an unavailable commit stops capture, never falls
-   back to current HEAD.
-2. **In that separate capture worktree only**, copy
-   `tools/ipad_capture/codemagic.yaml` over its root `codemagic.yaml`. Commit only
-   this capture-branch overlay and push that branch. Do not merge it into the
-   release branch. The root contains only `ipad-reviewer-capture`, with no
-   triggering/publishing sections or signing integration.
-3. In the existing Codemagic app, select that capture branch and use **Check for
-   configuration file**. The workflow to select is `ipad-reviewer-capture`.
-   Confirm the preview has the 30-minute cap and artifact-only configuration.
-4. Only after the separate run/secure-group approval, manually start that workflow
-   on that branch. Do not select the production/recovery workflow or enable
-   webhooks. An API invocation, if later explicitly authorized, uses the existing
-   app ID, that branch, and `workflowId: ipad-reviewer-capture`; no request is
-   issued by this preparation.
+- `IPAD_REVIEWER_EMAIL`: existing `attractiveremodel+appreview@gmail.com` app login.
+- `IPAD_REVIEWER_PASSWORD`: its existing ScaledCircle app password, entered securely.
+- `IPAD_REVIEWER_UID`: verified Firebase Auth UID, checked without printing it.
+- `IPAD_FIREBASE_PLIST_BASE64`: existing production iOS Firebase plist, securely
+  mapped from maintained `IOS_GOOGLE_SERVICE_INFO_PLIST_B64` input.
 
-The CI checkout contains the tooling overlay; `run.py` compiles application code
-from a second detached worktree pinned to `26f2913`. The CI tooling commit and
-application commit are intentionally different and must not be represented as a
-new signed release.
+No Gmail access, new account, password, entitlement, consent, custom token or Admin
+access. Never put values into source, YAML vars, CLI arguments, screenshots or logs.
+Preflight prints only fixed names with absent/empty/present, no lengths or hashes.
+Check exact group/branch import and variable overrides: release Workflow Editor
+inputs are not inherited automatically. Remove the temporary capture entries after
+the attempt, including failure, preserving unrelated secrets and store credentials.
 
-### Existing secret names found locally
+Retained outputs: completed PNGs, partial source/runtime/hash manifest and safe
+stage report. No simulator app, raw log, credential file, VM transcript or environment
+dump is exported. A failed attempt may produce zero pictures; safe diagnostics must
+still identify its last observed boundary.
 
-Both current root YAML and the root YAML at `4834e69` contain only the historical
-`recover-ios33-upload-only` workflow. Its group is `ios33_artifact_recovery`, and
-its sole nonstandard environment reference is `IOS33_RECOVERY_ARTIFACT_TOKEN`.
-Neither YAML defines a production Firebase plist variable/group. Do **not** import
-the recovery token for capture. Parent verified the existing Default Workflow's
-masked, workflow-local variable name is `IOS_GOOGLE_SERVICE_INFO_PLIST_B64`; no
-shared group was shown. A root-YAML capture workflow cannot assume it inherits
-that workflow-local value. Securely copy/map it to `IPAD_FIREBASE_PLIST_BASE64` in
-the capture group through the protected UI, without logging or copying it into
-repository files. No secret values were inspected here.
+## Capture-only CI entrypoint
 
-## App Check and simulator startup disposition
+Codemagic requires repository-root `codemagic.yaml`; the nested file is a template.
+Preserve the separate capture worktree and branch
+`codex/ipad-capture-notifications-26f2913`. Do not overwrite or merge this overlay
+into the release root YAML. After separate approval, update that branch with the
+reviewed tools and put the template at its root. Select `ipad-reviewer-capture`
+in the existing app and verify cap, exact encrypted group and artifact-only config.
+No trigger, signing integration, publishing or store upload is configured.
 
-Read-only inspection of the pinned source found no `firebase_app_check`
-dependency in pubspec/lock and no Dart/native App Check, App Attest, DeviceCheck
-or debug-token setup. `main.dart`'s `_initializeIos` initializes Firebase with
-the normal production options, verifies project identity, and initializes Auth.
-`AppDelegate.swift` registers normal plugins and the existing tracking bridge;
-there is no simulator-specific App Check prerequisite in that startup path.
-The capture harness calls that unchanged startup path. It does not install a
-debug provider/token or disable any Firebase protection.
+Tooling checkout and detached application worktree pinned to `26f2913` are separate.
+An exact shallow fetch of that commit is allowed if needed; no fallback to HEAD.
+Validate production project, bundle and Firebase app identity before writing plist
+into the disposable checkout. Use installed simulator inventory; no runtime download.
+The release YAML's `ios33_artifact_recovery` group/token is unrelated: do not import
+it. Preserve the release Workflow Editor and distinguish tooling from app provenance.
 
-This is a source finding, not proof of current Firebase Console enforcement or
-successful simulator authentication. If live Auth/Firestore/Functions policy
-rejects the simulator, the capture must stop and the actual rejection must be
-reviewed separately; do not relax rules/enforcement to obtain images. APNs/FCM
-device registration may remain unavailable on a simulator; its maintained
-failure handling does not establish physical notification delivery, and this
-capture does not enable notification permission or attempt push certification.
+## Evidence limits and local checks
 
-## Runtime and authentication
+Pinned source has no App Check dependency/App Attest/debug-token startup path.
+That does not establish live console enforcement or simulator authentication.
+Runtime rejection remains failure; do not relax enforcement. Simulator APNs/FCM
+cannot prove physical push. Capture does not enable notifications, send checks or
+invoke GPS, financial, campaign mutation, mailbox or publishing actions. Normal
+signed-in app reads remain real behavior.
 
-`run.sh` executes `run.py`. It verifies source and toolchain, creates a disposable
-worktree and simulator, then runs `flutter drive` in debug simulator mode with
-`APP_ENV=production`. This compiles a simulator-compatible app with test-only
-driver wiring, **not another signed release pair**. No `--build-number`, IPA/AAB,
-store upload, distribution or schedule is configured.
+Run focused Python harness/preflight tests plus Dart driver tests/analyzer locally.
+They cover bounds, stage safety, partial preservation and input validation, not
+macOS compilation, native dialogs, production login or actual pictures. Label future
+images same-source iPad simulator captures with a debug harness, not physical-iPad
+or signed iOS36 runtime evidence. Public submission remains blocked.
 
-The host driver reads the encrypted environment values and passes them over the
-local Dart VM driver connection to Firebase's normal email/password sign-in.
-The exact expected UID and verified email are checked. Credentials are not Dart
-defines, app assets, source files or manifest fields. Driver command logging is
-disabled; worker stdout/stderr goes to a private temporary log deleted at exit.
-No login/account-entry screenshot is taken. The session is signed out and its
-disposable simulator is deleted on completion/failure.
+September 24 offline validation: 13 Python tests, six Dart driver tests and 30
+actual Dart-serialized synthetic event records accepted by Python. Analyzer had
+no issues in an isolated validation package with the existing dependency config.
+No simulator, production sign-in or CI run was used for this validation.
 
-The handler permits only `/business`, `/business/schedule`, and
-`/business/campaigns`. It uses maintained AppNavigation and normal route gates;
-it never constructs an ungated product screen. No create, update, analysis,
-publish, funding, send, or GPS action is invoked. Normal authenticated app reads
-and incidental session behavior remain real production behavior.
-
-## Artifacts and honest evidence
-
-Only three OS-native PNGs, a source/toolchain/runtime/hash manifest and a safe
-stage/input-status report are retained. Screenshots are taken only after authentication, expected screen
-presence, and loading-indicator checks. Their dimensions are verified without
-resizing. No simulator app, credential files, logs, or VM transcript is uploaded.
-Failure removes partial screenshot artifacts.
-
-Review every PNG before store upload for actual loaded state, error/empty-state
-accuracy, unrelated personal data, native restrictions and required map
-attribution. The automation cannot certify attractive or complete marketing
-content from widget presence alone. Preserve attribution; never substitute
-fabricated work, stretch phone captures or reuse Android images.
-
-Label these **same-source iPad simulator captures with a debug test harness**.
-They are not physical-iPad, physical-push, or signed iOS35 execution evidence.
-No existing distribution artifact is modified. Capture source must match the
-replacement pair at `26f2913`; its distribution build numbers are tracked separately.
-
-Local validation: `python tools/ipad_capture/test_capture.py`. Mac compilation,
-runtime availability, reviewer sign-in and screenshots remain unexecuted until
-the isolated CI job is authorized and run.
+- `python tools/ipad_capture/test_capture.py`
+- From `apps/mobile`: `flutter test --no-pub ../../tools/ipad_capture/capture_driver_test.dart`
+- `capture_driver_test.dart` optionally writes the synthetic protocol fixture to
+  `IPAD_TEST_EVENT_FIXTURE`; this is a local test-only input, not a CI credential.
