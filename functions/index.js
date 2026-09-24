@@ -4188,6 +4188,7 @@ exports.analyzeCampaignZone = onCall(
   {
     enforceAppCheck: false,
     maxInstances: 5,
+    secrets: [CENSUS_API_KEY],
   },
   businessOperation("analyzeCampaignZone", async (request) => {
     if (!request.auth) {

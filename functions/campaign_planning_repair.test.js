@@ -68,3 +68,12 @@ test('public analysis entry under the paid-contract hold reaches bounded provide
  state.campaign.fundingStatus='funded';await assert.rejects(mapping.analyze({db:args.db,FieldValue:args.FieldValue,zoneId:'z',uid:'owner'}),/unworked_unfunded_zone_required/);
  }finally{global.fetch=oldFetch;if(oldFlag===undefined)delete process.env.CANVASSING_NEW_CONTRACTS_ENABLED;else process.env.CANVASSING_NEW_CONTRACTS_ENABLED=oldFlag;}
 });
+test('held analysis passes the bound key through the maintained fallback and persists complete sourced planning',async()=>{
+ const {state,args}=fixture(),property=require('./property_intelligence');const oldFetch=global.fetch,oldKey=process.env.CENSUS_API_KEY,oldFlag=process.env.CANVASSING_NEW_CONTRACTS_ENABLED;const urls=[];
+ args.zoneRef.get=async()=>({data:()=>state.zone});args.campaignRef.get=async()=>({data:()=>state.campaign});args.db.doc=p=>p.startsWith('campaignZones/')?args.zoneRef:args.campaignRef;
+ process.env.CENSUS_API_KEY='fixture-bound-key';process.env.CANVASSING_NEW_CONTRACTS_ENABLED='false';
+ global.fetch=async(url)=>{urls.push(new URL(url));if(url.includes('maryland.gov'))return new Response('challenge',{status:403,headers:{'cf-mitigated':'challenge'}});
+  const data=url.includes('tigerweb')?{features:[{properties:{GEOID:'240338008001',BLKGRP:'1'}}]}:[['NAME',...property.ACS_FIELDS,'state','county','tract','block group'],['fixture','100','100',...Array(9).fill('0'),'24','033','800800','1']];return new Response(JSON.stringify(data),{headers:{'content-type':'application/json'}});};
+ try{const out=await mapping.analyze({db:args.db,FieldValue:args.FieldValue,zoneId:'z',uid:'owner'});assert.equal(out.analysisStatus,'complete');assert.equal(out.targetPlanning.residentialProperties,100);assert.equal(out.targetPlanning.materialsAvailable,500);assert.equal(out.targetPlanning.deliveryStops,null);assert.equal(out.targetPlanning.workloadMinutes,null);assert.equal(urls[2].searchParams.get('key'),'fixture-bound-key');assert.equal(urls[1].searchParams.has('key'),false);assert.equal(state.zone.completionPolicyVersion,undefined);assert.equal(state.writes.length,1);}
+ finally{global.fetch=oldFetch;for(const [k,v] of [['CENSUS_API_KEY',oldKey],['CANVASSING_NEW_CONTRACTS_ENABLED',oldFlag]]){if(v===undefined)delete process.env[k];else process.env[k]=v;}}
+});

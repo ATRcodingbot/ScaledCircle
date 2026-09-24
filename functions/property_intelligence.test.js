@@ -81,7 +81,7 @@ test("TIGERweb parser retains one or multiple intersecting official block groups
 
 test("Census provider intersects polygon and aggregates only returned block groups", async () => {
   const requested = [];
-  const provider = new property.CensusPropertyProvider({fetchJson: async (url) => {
+  const provider = new property.CensusPropertyProvider({apiKey: 'fixture-key', fetchJson: async (url) => {
     requested.push(url);
     if (url.includes("tigerweb")) return {features: [
       {properties: {GEOID: "240276011011", BLKGRP: "1"}},
@@ -93,7 +93,7 @@ test("Census provider intersects polygon and aggregates only returned block grou
   const result = await provider.analyze({geometry: polygon});
   assert.equal(result.intersectingGeographyCount, 2);
   assert.deepEqual(result.censusGeographiesUsed, ["240276011011", "240276011012"]);
-  assert.match(requested[0], /MapServer\/8\/query/);
+  assert.match(requested[0], /tigerWMS_ACS2024\/MapServer\/10\/query/);
   assert.match(decodeURIComponent(requested[0]), /esriSpatialRelIntersects/);
   assert.equal(result.propertyCount, 400);
 });

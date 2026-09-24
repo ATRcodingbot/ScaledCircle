@@ -45,11 +45,12 @@ async function analyze({db,FieldValue,zoneId,uid,reviewDigest,endpoint,estimateH
  return {success:true,zoneId,analysisStatus:'complete',routeReviewRequired:!reviewed,routeReviewDigest:digest,
    routePreview:{...authority,geometry:zone.serviceArea,name:zone.zoneName||'Mapped Zone'}};
 }
-async function analyzePlanning({db,FieldValue,zoneRef,campaignRef,zone,campaign,eligible,provider}) {
+async function analyzePlanning({db,FieldValue,zoneRef,campaignRef,zone,campaign,eligible,provider,apiKey=process.env.CENSUS_API_KEY||''}) {
  const property=require('./property_intelligence');
  const digest=hash(zone.serviceArea);
  const previous=zone.targetPlanning;
  if(previous?.geometryDigest===digest && previous.status==='complete' &&
+    previous.sourceBundleVersion===property.DATA_SOURCE_BUNDLE_VERSION &&
     previous.materialsAvailable===(Number(campaign.materialQuantity)||null) &&
     Number.isFinite(previous.checkedAtMs) && Date.now()>=previous.checkedAtMs && Date.now()-previous.checkedAtMs<86400000) {
   return {success:true,zoneId:zoneRef.id,analysisStatus:'complete',planningOnly:true,targetPlanning:previous};
@@ -61,16 +62,15 @@ async function analyzePlanning({db,FieldValue,zoneRef,campaignRef,zone,campaign,
   const deadline=Date.now()+35000;
   const fetchJson=async(url,{timeoutMs=10000}={})=>{
    const remaining=deadline-Date.now();if(remaining<=0)throw Error('property_source_time_budget_reached');
-   const response=await fetch(url,{signal:AbortSignal.timeout(Math.min(remaining,timeoutMs)),headers:{'User-Agent':'ScaledCircle Planning support@scaledcircle.com'}});
-   if(!response.ok)throw Error('property_source_http_'+response.status);
-   return response.json();
+   return require('./property_source_http').fetchJson(url,{timeoutMs:Math.min(remaining,timeoutMs),
+    onDiagnostic:details=>console.info(JSON.stringify({event:'campaign_planning_source',zoneId:zoneRef.id,...details}))});
   };
   const data=provider ? await provider.analyze({geometry}) : await property.analyzeWithFallback({geometry,providers:[
-   new property.MarylandPropertyProvider({fetchJson}),new property.CensusPropertyProvider({fetchJson})]});
+   new property.MarylandPropertyProvider({fetchJson}),new property.CensusPropertyProvider({fetchJson,apiKey})]});
   result=planningResult({zone,campaign,data});
  }catch(error){result={status:'unavailable',reason:String(error.message||'property_source_unavailable').slice(0,160),residentialProperties:null,
    limitations:['Target preserved. No reliable delivery-stop or workload count is available. Retry analysis or select a smaller planning target.']};}
- const targetPlanning={...result,geometryDigest:digest,checkedAtMs:Date.now(),version:'CampaignTargetPlanningV1'};
+ const targetPlanning={...result,geometryDigest:digest,checkedAtMs:Date.now(),version:'CampaignTargetPlanningV2',sourceBundleVersion:property.DATA_SOURCE_BUNDLE_VERSION};
  await db.runTransaction(async tx=>{
   const [z,c]=await Promise.all([tx.get(zoneRef),tx.get(campaignRef)]);
   eligible(c.data(),z.data()||{});
@@ -86,6 +86,7 @@ function planningResult({zone,campaign,data}) {
   limitations:[...(data?.limitations||[]),...(data?.providerFailures||[]),'No household, material-demand or workload total inferred from acreage.']};
  return {status:data.partialCoverage?'partial':'complete',source:data.source,sourceVersion:data.sourceVersion,dataDate:data.dataUpdatedAt||null,
   residentialProperties:data.residentialStructureCount,metric:data.geographyType==='census_block_group'?'Housing units in intersecting Census block groups':'Residential property records',coverage:data.providerPagination||null,
+  boundaryVersion:data.boundaryVersion||null,censusGeographiesUsed:data.censusGeographiesUsed||[],geographicCoverageMethod:data.geographicCoverageMethod||null,
   areaSquareMeters,areaAcres:areaSquareMeters/4046.8564224,deliveryStops:null,materialsAvailable:Number(campaign.materialQuantity)||null,
   materialBasis:'Confirm accessible delivery stops and pieces per stop before treating materials on hand as sufficient. Spare allowance is not assumed.',
   workloadMinutes:null,workloadReason:areaSquareMeters>geography.MAX_QUERY_AREA_SQUARE_METERS?'Target exceeds the bounded route-analysis area; plan smaller worker-sized Zones without changing the saved Business territory.':'A serviceable route and accessible stops are required to estimate workload.',

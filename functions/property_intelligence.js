@@ -6,7 +6,7 @@ const ANALYSIS_VERSION = "PropertyIntelligenceV2";
 const SIGNAL_VERSION = "PropertyAgeSignalV1";
 const ACS_SOURCE_VERSION = "ACS_2024_5YR_B25034";
 const MARYLAND_SOURCE_VERSION = "MD_OPEN_DATA_ed4q-f8tm";
-const CENSUS_BOUNDARY_VERSION = "TIGERweb_ACS2024_BlockGroups_Layer8";
+const CENSUS_BOUNDARY_VERSION = "TIGERweb_tigerWMS_ACS2024_BlockGroups_Layer10";
 const DATA_SOURCE_BUNDLE_VERSION = `${MARYLAND_SOURCE_VERSION}__${ACS_SOURCE_VERSION}__${CENSUS_BOUNDARY_VERSION}`;
 const CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const MAX_GEOMETRY_POINTS = 250;
@@ -14,7 +14,7 @@ const MAX_BOUNDING_BOX_SQ_KM = 200;
 const MAX_PARCELS = 5000;
 const MARYLAND_PAGE_SIZE = 1000;
 const MAX_CENSUS_GEOGRAPHIES = 100;
-const TIGERWEB_BLOCK_GROUP_LAYER = 8;
+const TIGERWEB_BLOCK_GROUP_LAYER = 10;
 const ACS_REFERENCE_YEAR = 2024;
 const ASSISTANT_CONTEXT_VERSION = "ScaledCircleIntelligenceContextV1";
 const ASSISTANT_PROMPT_VERSION = "ScaledCircleIntelligencePromptV1";
@@ -115,6 +115,9 @@ function arcGisPolygon(geometry) {
 }
 
 function parseTigerwebBlockGroups(payload) {
+  if (!Array.isArray(payload?.features) || payload.error || payload.exceededTransferLimit === true) {
+    throw new Error("census_geography_response_invalid_or_truncated");
+  }
   const features = Array.isArray(payload?.features) ? payload.features : [];
   const byId = new Map();
   for (const feature of features) {
@@ -175,10 +178,17 @@ function deduplicateParcels(records) {
 function parseCensusB25034(payload) {
   if (!Array.isArray(payload) || payload.length < 2 || !Array.isArray(payload[0])) throw new Error("Malformed Census B25034 response.");
   const header = payload[0];
+  if (![...ACS_FIELDS, 'state', 'county', 'tract', 'block group'].every(field => header.includes(field))) {
+    throw new Error('census_schema_missing_fields');
+  }
   const output = [];
   for (const row of payload.slice(1)) {
     const value = Object.fromEntries(header.map((name, index) => [name, row[index]]));
-    const count = (field) => Math.max(0, Number.parseInt(value[field], 10) || 0);
+    const count = (field) => {
+      const raw = value[field]; const n = Number(raw);
+      if (raw === null || raw === '' || !Number.isSafeInteger(n) || n < 0) throw new Error('census_count_unavailable');
+      return n;
+    };
     output.push({geographyId: `${value.state || ""}${value.county || ""}${value.tract || ""}${value["block group"] || ""}`,
       geographyType: "census_block_group", source: "U.S. Census Bureau ACS 5-Year", sourceVersion: ACS_SOURCE_VERSION,
       total: count("B25034_001E"), buckets: {"2020Plus": count("B25034_002E"), "2010To2019": count("B25034_003E"),
@@ -492,10 +502,11 @@ class MarylandPropertyProvider {
 class CensusPropertyProvider {
   constructor({fetchJson = defaultFetchJson, apiKey = ""} = {}) { this.fetchJson = fetchJson; this.apiKey = apiKey; }
   async analyze({geometry}) {
+    if (!this.apiKey.trim()) throw new Error("census_api_key_not_bound");
     const query = new URLSearchParams({f: "geojson", geometry: JSON.stringify(arcGisPolygon(geometry)),
       geometryType: "esriGeometryPolygon", spatialRel: "esriSpatialRelIntersects", inSR: "4326", outSR: "4326",
       outFields: "GEOID,STATE,COUNTY,TRACT,BLKGRP", returnGeometry: "false"});
-    const geoUrl = `https://tigerweb.geo.census.gov/arcgis/rest/services/TIGERweb/Tracts_Blocks/MapServer/${TIGERWEB_BLOCK_GROUP_LAYER}/query?${query}`;
+    const geoUrl = `https://tigerweb.geo.census.gov/arcgis/rest/services/TIGERweb/tigerWMS_ACS2024/MapServer/${TIGERWEB_BLOCK_GROUP_LAYER}/query?${query}`;
     const geographies = parseTigerwebBlockGroups(await this.fetchJson(geoUrl, {timeoutMs: 12000}));
     if (!geographies.length) return null;
     if (geographies.length > MAX_CENSUS_GEOGRAPHIES) throw new Error("Selected area intersects too many Census block groups.");
@@ -509,16 +520,23 @@ class CensusPropertyProvider {
     }
     const selected = new Set(geographies.map((item) => item.geographyId));
     const intersectingRows = rows.filter((row) => selected.has(row.geographyId));
-    return intersectingRows.length ? analyzeCensusAggregates(intersectingRows,
-      {geographiesUsed: geographies.map((item) => item.geographyId)}) : null;
+    if (!intersectingRows.length) throw new Error('census_selected_geographies_missing');
+    const returned = new Set(intersectingRows.map(row => row.geographyId));
+    const result = analyzeCensusAggregates(intersectingRows,
+      {geographiesUsed: [...returned]});
+    result.boundaryVersion = CENSUS_BOUNDARY_VERSION;
+    result.providerPagination = {selectedGeographies: selected.size, returnedGeographies: returned.size,
+      maxGeographies: MAX_CENSUS_GEOGRAPHIES, tractRequests: tracts.size};
+    if (returned.size < selected.size) {
+      result.partialCoverage = true;
+      result.limitations.push('Some intersecting Census block groups had no returned housing data; coverage is partial.');
+    }
+    return result;
   }
 }
 
 async function defaultFetchJson(url, {timeoutMs = 10000} = {}) {
-  const controller = new AbortController(); const timeout = setTimeout(() => controller.abort(), timeoutMs);
-  try { const response = await fetch(url, {headers: {"User-Agent": "ScaledCircle Property Intelligence support@scaledcircle.com"}, signal: controller.signal});
-    if (!response.ok) throw new Error(`Provider HTTP ${response.status}`); return await response.json();
-  } finally { clearTimeout(timeout); }
+  return require('./property_source_http').fetchJson(url, {timeoutMs});
 }
 
 async function analyzeWithFallback({geometry, providers}) {

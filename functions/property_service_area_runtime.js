@@ -39,14 +39,8 @@ function createAnalyzer({db, FieldValue, apiKey = "", now = Date.now,
   const fetchJson = suppliedFetch || (async (url, {timeoutMs = 8000} = {}) => {
     const remaining = deadline - now();
     if (remaining <= 0) throw new Error("Property evidence time budget reached.");
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), Math.min(8000, timeoutMs, remaining));
-    try {
-      const response = await fetch(url, {signal: controller.signal,
-        headers: {"User-Agent": "ScaledCircle Property Intelligence support@scaledcircle.com"}});
-      if (!response.ok) throw new Error("Property evidence source unavailable.");
-      return await response.json();
-    } finally { clearTimeout(timer); }
+    return require('./property_source_http').fetchJson(url,
+      {timeoutMs: Math.min(8000, timeoutMs, remaining)});
   });
   const providers = [new property.MarylandPropertyProvider({fetchJson}),
     new property.CensusPropertyProvider({fetchJson, apiKey})];
