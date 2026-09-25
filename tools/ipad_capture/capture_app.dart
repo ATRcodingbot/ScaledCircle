@@ -61,6 +61,73 @@ Future<void> main() async {
           }
           return response('signed_out');
         }
+        if (request['action'] == 'login-state') {
+          var route = 'unknown';
+          var email = false, password = false, obscured = false, button = false;
+          var dialog = false, loading = false;
+          var error = 'none';
+          const errors = {
+            'No account found.': 'auth_user_not_found',
+            'Incorrect password.': 'auth_wrong_password',
+            'Invalid email or password.': 'auth_invalid_credentials',
+            'Invalid email address.': 'auth_invalid_email',
+            'Too many login attempts. Please try again later.':
+                'auth_rate_limited',
+            'Network error. Check your internet connection.':
+                'auth_network_unavailable',
+            'Sign-in did not finish. Check your connection and try again. Contact support if this continues.':
+                'auth_failed',
+            'We could not verify your session. Please retry.':
+                'workspace_failed',
+            "You don't have access to this page.": 'workspace_denied',
+          };
+          void inspect(Element element) {
+            final widget = element.widget;
+            if (ModalRoute.of(element)?.isCurrent != false) {
+              final type = widget.runtimeType.toString();
+              if (type == 'PublicLandingScreen') route = 'public';
+              if (type == 'LoginScreen') route = 'login';
+              if (type == 'BusinessDashboard') route = 'business';
+              if (widget is TextField) {
+                if (widget.decoration?.labelText == 'Email') email = true;
+                if (widget.decoration?.labelText == 'Password') {
+                  password = true;
+                  obscured = widget.obscureText;
+                }
+              }
+              if (widget is ElevatedButton &&
+                  widget.child is Text &&
+                  (widget.child as Text).data == 'Login') {
+                button = widget.onPressed != null;
+              }
+              if (widget is Dialog || widget is ModalBarrier) dialog = true;
+              if (widget is CircularProgressIndicator) loading = true;
+              if (widget is Text && errors.containsKey(widget.data)) {
+                error = errors[widget.data]!;
+              }
+              // Never expose arbitrary SDK messages or widget text.
+              if (widget is SnackBar && error == 'none') {
+                error = 'ui_message_present';
+              }
+            }
+            element.visitChildren(inspect);
+          }
+
+          WidgetsBinding.instance.rootElement?.visitChildren(inspect);
+          return jsonEncode({
+            'protocol': 2,
+            'outcome': 'observed',
+            'route': route,
+            'emailPresent': email,
+            'passwordPresent': password,
+            'passwordObscured': obscured,
+            'loginEnabled': button,
+            'dialog': dialog,
+            'loading': loading,
+            'error': error,
+            'signedIn': FirebaseAuth.instance.currentUser != null,
+          });
+        }
         if (request['action'] == 'verify-login') {
           authorizedUid = null;
           final auth = FirebaseAuth.instance;
@@ -78,7 +145,6 @@ Future<void> main() async {
           final user = auth.currentUser;
           if (user == null) return response('auth_pending');
           if (user.uid != request['expectedUid'] || !user.emailVerified) {
-            await auth.signOut().timeout(const Duration(seconds: 7));
             return response(
               'refused',
               user.uid != request['expectedUid']

@@ -26,7 +26,7 @@ class FakeCaptureTransport implements CaptureTransport {
   }
 
   @override
-  Future<void> authenticate() async {
+  Future<void> authenticate(CaptureProgress progress) async {
     calls.add('authenticate');
     if (secretAuthFailure) throw StateError('SECRET_SENTINEL_PASSWORD_VM_URL');
   }
@@ -50,6 +50,11 @@ class FakeCaptureTransport implements CaptureTransport {
     final pending = File('${directory.path}/$name.pending.png');
     await pending.writeAsBytes(pngHeader());
     await commitScreenshot(pending, File('${directory.path}/$name.png'));
+  }
+
+  @override
+  Future<void> diagnostic(String name) async {
+    calls.add('diagnostic-$name');
   }
 
   @override
@@ -146,7 +151,12 @@ void main() {
       events.any((e) => e['stage'] == 'connect' && e['outcome'] == 'timeout'),
       isTrue,
     );
-    expect(transport.calls, ['connect', 'logout', 'close']);
+    expect(transport.calls, [
+      'connect',
+      'diagnostic-failure',
+      'logout',
+      'close',
+    ]);
   });
 
   test('secret-bearing transport error becomes fixed category only', () async {
@@ -164,6 +174,7 @@ void main() {
     expect(jsonEncode(events), isNot(contains('SECRET_SENTINEL')));
     expect(progress.completedScreens, isEmpty);
     expect(transport.calls, isNot(contains('/business')));
+    expect(transport.calls.indexOf('diagnostic-failure'), lessThan(transport.calls.indexOf('logout')));
   });
 
   test('Home remains complete when Schedule readiness fails', () async {

@@ -39,11 +39,14 @@ class CaptureTests(unittest.TestCase):
             path = Path(directory)
             output = []
             runner = capture.StageRunner(path / 'status.json', path / 'private', budget=3, emit=output.append)
+            before_kill = []
+            runner.before_terminate = lambda: before_kill.append(runner.data['stages'][-1]['exitCode'])
             started = time.monotonic()
             with self.assertRaises(capture.StageFailure):
                 runner.run('compile-simulator', [sys.executable, '-c', 'import time; time.sleep(30)'], .2)
             runner.finish(False)
             self.assertLess(time.monotonic() - started, 7)
+            self.assertEqual(before_kill, [None])
             stage = json.loads((path / 'status.json').read_text())['stages'][0]
             self.assertEqual(stage['status'], 'timeout')
             self.assertIsNotNone(stage['exitCode'])
@@ -178,13 +181,20 @@ class CaptureTests(unittest.TestCase):
     def test_only_installed_ios_runtime_and_exact_ipad_model(self):
         runtimes = {'runtimes': [
             {'isAvailable': False, 'identifier': 'com.apple.CoreSimulator.SimRuntime.iOS-27-0', 'version': '27.0'},
-            {'isAvailable': True, 'identifier': 'com.apple.CoreSimulator.SimRuntime.iOS-26-6', 'version': '26.6'},
+            {'isAvailable': True, 'identifier': 'com.apple.CoreSimulator.SimRuntime.iOS-26-5', 'version': '26.5', 'supportedDeviceTypes': [{'identifier': 'ipad-m4'}]},
         ]}
         devices = {'devicetypes': [{'name': 'iPad Pro 13-inch (M4)', 'identifier': 'ipad-m4'}]}
         self.assertEqual(capture.simulator(runtimes, devices),
-                         ('ipad-m4', 'com.apple.CoreSimulator.SimRuntime.iOS-26-6'))
+                         ('ipad-m4', 'com.apple.CoreSimulator.SimRuntime.iOS-26-5'))
         with self.assertRaises(RuntimeError):
             capture.simulator({'runtimes': []}, devices)
+        with self.assertRaises(RuntimeError):
+            capture.simulator({'runtimes': [{**runtimes['runtimes'][1], 'supportedDeviceTypes': []}]}, devices)
+        self.assertEqual(capture.exact_host_value('26.5.1')('26.5.1\n'), '26.5.1')
+        with self.assertRaises(capture.StageFailure):
+            capture.exact_host_value('26.5.1')('26.6')
+        source = (HERE / 'run.py').read_text()
+        self.assertIn("['xcrun', 'simctl', 'list', 'runtimes', '-j'], 120,", source)
 
     def test_no_release_publishing_or_credential_artifact_configuration(self):
         config = (HERE / 'codemagic.yaml').read_text()
