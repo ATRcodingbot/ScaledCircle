@@ -35,11 +35,26 @@ beforeEach(async()=>{
  await Promise.all([
   ...['scaler','other','business'].map(uid=>db.doc('users/'+uid).set({role:uid==='business'?'business':'scaler',active:true})),
   db.doc('campaigns/campaign').set({businessId:'business',campaignType:'neighborhoodCanvassing',completionPolicyVersion:POLICY,
-    status:'open',fundingStatus:'funded',materialsRequired:false,timeZone:'UTC',workWindowStart:'00:00',workWindowEnd:'23:59'}),
-  db.doc('campaignZones/zone').set({...zone,status:'assigned',assignedScalerId:'scaler'}),
+    status:'open',fundingStatus:'funded',fundingPaymentId:'payment',acceptedOffer:offer,materialsRequired:false,timeZone:'UTC',workWindowStart:'00:00',workWindowEnd:'23:59'}),
+  db.doc('campaignZones/zone').set({...zone,status:'assigned',assignedScalerId:'scaler',fundingPaymentId:'payment'}),
+  db.doc('campaignPayments/payment').set({campaignId:'campaign',businessId:'business',status:'paid',paidAt:Timestamp.now(),
+    stripeMode:'live',stripePaymentIntentId:'pi_fixture',currency:'usd',workerAmountCents:17500,platformFeeCents:3500,
+    businessChargeCents:21000,offerDigest:offer.offerDigest,acceptedOffer:offer}),
+  ...['terms','scaler_work'].map(type=>db.doc('legalConsents/scaler_'+type+'_'+require('./legal_consent').AGREEMENTS[type]).set({
+    uid:'scaler',agreementType:type,agreementVersion:require('./legal_consent').AGREEMENTS[type]})),
   db.doc('assignmentCompensations/zone').set(contract),
   db.doc('legalConsents/scaler_location_notice_location-notice-2026-08-v1').set({uid:'scaler',userRole:'scaler',agreementType:'location_notice',
     agreementVersion:'location-notice-2026-08-v1',acceptedAt:Timestamp.now(),source:'scaler_tracking'})]);
+ const funds=require('./campaign_fund_allocation'),ref=db.doc('campaignPayments/payment');
+ const payment=(await ref.get()).data();payment.fundingAllocation=funds.create('payment',payment);
+ payment.fundingAllocation=funds.reserve('payment',payment,contract);
+ await ref.update({fundingAllocation:payment.fundingAllocation,fundingProtection:{version:funds.VERSION,
+   paymentIntentId:payment.stripePaymentIntentId,withdrawalControl:'committed_funds_retained',sourceAvailable:true,
+   providerBalanceTransactionId:'txn_fixture',verifiedAtMs:Date.now(),netAvailableCents:20000}});
+ for(const type of require('./legal_consent').ROLE_REQUIREMENTS.business_funding) {
+   const version=require('./legal_consent').AGREEMENTS[type];
+   await db.doc('legalConsents/business_'+type+'_'+version).set({uid:'business',agreementType:type,agreementVersion:version});
+ }
 });
 after(async()=>{fft.cleanup();for(const app of getApps())await app.delete();});
 test('production-compatible start denies signed out/cross/wrong role and preserves one session',async()=>{
@@ -48,6 +63,16 @@ test('production-compatible start denies signed out/cross/wrong role and preserv
  const a=await call('startTrackingSession','scaler',{campaignId:'campaign',zoneId:'zone'});
  const b=await call('startTrackingSession','scaler',{campaignId:'campaign',zoneId:'zone'});
  assert.equal(a.sessionId,b.sessionId);assert.equal((await db.collection('trackingSessions').get()).size,1);
+});
+test('actual production start rejects funding invalidated after assignment without changing earned evidence',async()=>{
+ const before=(await db.doc('assignmentCompensations/zone').get()).data();
+ for(const patch of [{status:'refunded'},{status:'paid',disputeOpen:true},{disputeOpen:false,refundReservedWorkerAmountCents:1}]){
+  await db.doc('campaignPayments/payment').update(patch);
+  for(const name of ['startAssignedZone','startTrackingSession'])await assert.rejects(call(name,'scaler',{campaignId:'campaign',zoneId:'zone'}),e=>e.code==='failed-precondition');
+ }
+ assert.equal((await db.collection('trackingSessions').get()).size,0);
+ assert.deepEqual((await db.doc('assignmentCompensations/zone').get()).data(),before);
+ assert.equal((await db.doc('campaignZones/zone').get()).data().status,'assigned');
 });
 test('upload/finalize is queue-compatible, photo-free, duplicate-safe and creates no money',async()=>{
  const {sessionId}=await call('startTrackingSession','scaler',{campaignId:'campaign',zoneId:'zone'});

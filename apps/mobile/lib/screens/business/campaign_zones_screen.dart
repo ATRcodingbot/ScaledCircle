@@ -1,4 +1,3 @@
-import '../../services/platform_billing_service.dart';
 import 'package:flutter_app/navigation/authenticated_app_bar.dart';
 import '../../config/app_environment.dart';
 
@@ -289,30 +288,6 @@ class CampaignZonesScreen extends StatelessWidget {
     AddressSuggestion? selectedArea,
     double desiredHours = 5,
   }) async {
-    if (!PlatformBillingService.authoritativeCampaignFundingAvailable) {
-      await showDialog<void>(
-        context: context,
-        builder: (dialogContext) => AlertDialog(
-          title: const Text('Route planning needs a reviewed work area'),
-          content: const SingleChildScrollView(
-            child: Text(
-              'Your saved territory and any existing analysis are preserved. '
-              'Route queries are bounded to 25 km²; there is no automatic tiled route query for a larger target. '
-              'For a real campaign, review distribution scope and a smaller work area before changing the target. Edit Target requires an explicit save; no change is needed merely to preserve this draft. '
-              'The existing workload planner is limited to six hours per Zone and 32 Zones; these limits do not prove accessible stops or determine a Scaler count. '
-              'Automatic route approval/application remains unavailable while new paid contracts are held.',
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext),
-              child: const Text('Keep saved territory'),
-            ),
-          ],
-        ),
-      );
-      return;
-    }
     final messenger = ScaffoldMessenger.of(context);
     try {
       final functions = FirebaseFunctions.instanceFor(region: 'us-east1');

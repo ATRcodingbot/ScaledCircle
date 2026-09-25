@@ -8,6 +8,25 @@ function prepare() {
  fs.mkdirSync(output,{recursive:true});
  let source=fs.readFileSync(path.join(root,'functions-campaign-funding/index.js'),'utf8').replaceAll('\r','');
  source=source.replace('const stagingPhysicalQa = require("./staging_physical_qa");',"const productionPolicy = require('./production_campaign_policy');");
+ source=once(source,'    transaction.set(paymentRef, {...paymentUpdate, updatedAt: FieldValue.serverTimestamp()}, {merge: true});',
+ `    const allocation=require('./campaign_fund_allocation');
+    const merged={...currentPayment,...paymentUpdate};
+    let next=currentPayment.fundingAllocation;
+    if(paymentUpdate.status==='paid'&&!next)next=allocation.create(paymentId,merged);
+    else if(next&&['disputed','refunded','refund_pending','refund_review_required'].includes(paymentUpdate.status))
+      next=allocation.sourceState(paymentId,currentPayment,paymentUpdate.status==='disputed'?'disputed':paymentUpdate.status==='refunded'?'refunded':'held');
+    if(next)allocation.persist(transaction,paymentRef,currentPayment.fundingAllocation,next,'signed_payment_reconciliation',FieldValue.serverTimestamp());
+    transaction.set(paymentRef, {...paymentUpdate, updatedAt: FieldValue.serverTimestamp()}, {merge: true});`);
+ source=once(source,'  if (!paymentId && typeof object.payment_intent === "string") {',
+ `  let resolvedIntent=object.payment_intent;
+  if(!paymentId&&!resolvedIntent&&typeof object.charge==='string') {
+    const charge=await stripe.charges.retrieve(object.charge);
+    lifecycle.assertStripeEvent(charge,PAYMENT_ENVIRONMENT.stripeMode);
+    resolvedIntent=charge.payment_intent;
+  }
+  if (!paymentId && typeof resolvedIntent === "string") {`);
+ source=once(source,'.where("stripePaymentIntentId", "==", object.payment_intent).limit(1).get();',
+   '.where("stripePaymentIntentId", "==", resolvedIntent).limit(2).get();\n    if(matches.size>1)throw Error("ambiguous_campaign_payment_source");');
  const begin=source.indexOf('  if (stagingPhysicalQa.reserved(campaignId)) {');
  const end=source.indexOf('  const ref = db.collection("campaigns").doc(campaignId);',begin);
  if(begin<0||end<0)throw Error('Funding isolation anchor missing');
@@ -33,7 +52,8 @@ function prepare() {
   s=once(s,'  const quote = lifecycle.quoteForCampaign(input.campaign);',
   `  const quote = productionPolicy.quote(lifecycle,input.campaignId,input.campaign,fundableZones.map(d=>({...d.data(),id:d.id})));`);
   s=once(s,'  const stripe = stripeClient();',
-  `  if(quote.acceptedOffer)await db.runTransaction(async transaction=>{
+  `  if(!quote.acceptedOffer)throw new HttpsError('failed-precondition','This campaign type does not yet have supported immutable funding allocations. Your draft is saved.');
+  if(quote.acceptedOffer)await db.runTransaction(async transaction=>{
     const fresh=(await transaction.get(input.ref)).data();
     const currentZones=await transaction.get(db.collection('campaignZones').where('campaignId','==',input.campaignId));
     const valid=require('./production_publish_compatibility').productionValidZones(currentZones.docs,input.campaignId,input.uid);
@@ -44,6 +64,14 @@ function prepare() {
   const stripe = stripeClient();`);
   return s;
  });
+ source=section(source,'cancelUnassignedFundedCampaign',s=>once(s,'    const refund = await stripe.refunds.create({charge: charge.id,',
+ `    if(payment.fundingAllocation) {
+      const [balance,all]=await Promise.all([stripe.balance.retrieve(),db.collection('campaignPayments').limit(501).get()]);
+      if(all.size>500)throw Error('campaign_allocation_inventory_review_required');
+      require('./campaign_fund_protection').assertRefundCapacity({paymentId,amountCents:refundableCents,balance,workerReleaseCents:payment.workerAmountCents,
+        records:all.docs.map(d=>({id:d.id,data:d.data()}))});
+    }
+    const refund = await stripe.refunds.create({charge: charge.id,`));
  // Publication is one transaction: exact legacy valid-zone filtering is retained;
  // prospective canvassing additionally verifies its funded immutable offer.
  source=section(source,'publishFundedCampaign',()=>`exports.publishFundedCampaign = onCall(OPTIONS, async request=>{
@@ -71,11 +99,25 @@ function prepare() {
  // Export only the coordinated four funding authorities. Refund/cancellation
  // revisions remain separately pinned and are not included in this codebase.
  const parser=require(path.join(root,'functions/node_modules/@babel/parser'));
+ source+=`\nexports.getCampaignFundingState=onCall(OPTIONS,async request=>{
+   const input=await ownedCampaign(request,'payments');
+   const campaign=input.campaign,paymentId=cleanId(campaign.fundingPaymentId);
+   const payment=paymentId?(await db.doc('campaignPayments/'+paymentId).get()).data():null;
+   const status=payment?.status||campaign.fundingStatus||'unfunded';
+   const opened=process.env.LIVE_PAID_WORK_ACTIVATION_ENABLED==='true';
+   const messages={payment_pending:'Payment processing. Work cannot start yet.',paid:'Funding confirmed. Assignment and work-start checks still apply.',
+     refunded:'Payment refunded. This source cannot fund new work.',disputed:'Funding issue — action required.',refund_pending:'Refund pending. New work is blocked.'};
+   const checkoutAllowed=opened&&campaign.status==='draft'&&['','unfunded','payment_failed','checkout_expired'].includes(status);
+   let allocation=null;
+   if(payment?.fundingAllocation)allocation=require('./campaign_fund_allocation').view(paymentId,payment);
+   return {status,checkoutAllowed,message:!opened?'Campaign checkout is awaiting verified fund-retention controls. Your draft is saved.':
+     messages[status]||'Review campaign requirements and the current quote before payment.',allocation};
+ });\n`;
  const generate=require(path.join(root,'functions/node_modules/@babel/generator')).default;
  const {selectedProgram}=require('../functions/scripts/select_function_program');
  source=source.replace("if(project!=='scaledcircle-staging')return;",
    "require('./production_work_settlement_policy').environment(project);");
- source=generate(selectedProgram(parser.parse(source),new Set(['quoteCampaignFunding','createCampaignFundingCheckoutSession','publishFundedCampaign','stripeWebhook','reconcileUnusedWorkReservesV1']))).code;
+ source=generate(selectedProgram(parser.parse(source),new Set(['getCampaignFundingState','quoteCampaignFunding','createCampaignFundingCheckoutSession','publishFundedCampaign','cancelUnassignedFundedCampaign','stripeWebhook','reconcileUnusedWorkReservesV1']))).code;
  source=require('./production_payment_runtime.cjs').deferProductionPaymentEnvironment(source);
  fs.writeFileSync(path.join(output,'index.js'),source);
  const copied=new Set();

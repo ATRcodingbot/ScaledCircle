@@ -76,6 +76,10 @@ function createRuntime({
   const rawCreateTransfer = provider.createTransfer.bind(provider);
   provider.createTransfer = async op => {
     await funding(op);
+    if(!op.replacementFunding)for(const paymentId of new Set(op.allocations.map(s=>s.paymentId))) {
+      const payment=(await db.doc('campaignPayments/'+paymentId).get()).data();
+      if(payment?.fundingAllocation)await require('./campaign_fund_protection').refresh({db,stripe,paymentId,now});
+    }
     return rawCreateTransfer(op);
   };
   const service = require('./scaler_cashout_engine').createService({

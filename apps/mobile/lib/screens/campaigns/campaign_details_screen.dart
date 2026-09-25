@@ -549,30 +549,6 @@ class _CampaignDetailsScreenState extends State<CampaignDetailsScreen> {
     BuildContext context,
     DocumentSnapshot liveCampaign,
   ) {
-    if (!PlatformBillingService.authoritativeCampaignFundingAvailable) {
-      return Card(
-        color: Colors.amber.shade50,
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const Text(
-                'Paid work is not open yet',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17),
-              ),
-              const SizedBox(height: 8),
-              const Text(PlatformBillingService.paidWorkHoldMessage),
-              const SizedBox(height: 12),
-              OutlinedButton(
-                onPressed: () => Navigator.maybePop(context),
-                child: const Text('Back to Campaign'),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
     final liveData = liveCampaign.data() as Map<String, dynamic>? ?? const {};
     final alreadyFunded = liveData['fundingStatus']?.toString() == 'funded';
     return SizedBox(

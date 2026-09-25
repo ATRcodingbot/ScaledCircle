@@ -81,6 +81,14 @@ function patch(source) {
       `    if(acceptedPolicy&&(acceptedPolicy.baseAmountCents!==baseAmountCents||acceptedPolicy.bonusAmountCents!==bonusAmountCents)) {
       throw new HttpsError('failed-precondition','Compensation changed after acceptance.');
     }
+    if(acceptedPolicy) {
+      const funds=require('./campaign_fund_allocation');
+      const next=funds.reserve(fundingPaymentId,payment,acceptedPolicy);
+      funds.persist(transaction,db.doc('campaignPayments/'+fundingPaymentId),payment.fundingAllocation,next,
+        'assignment_reserved',FieldValue.serverTimestamp());
+    } else if(payment?.fundingAllocation) {
+      throw new HttpsError('failed-precondition','This campaign needs supported immutable compensation terms before assignment.');
+    }
     transaction.create(compensationRef, {
       ...(acceptedPolicy||{}),`);
     s=once(s,'      compensationContractId: compensationRef.id,','      compensationContractId: compensationRef.id, fundingPaymentId,');
@@ -127,7 +135,7 @@ function patch(source) {
     }
     const canvassingReview = canvassingCompletion.applies`);
     s=once(s,"!require('./campaign_reserve_settlement').funded(payment)",
-      "!require('./campaign_reserve_settlement').funded(payment) || payment.status !== 'paid' || payment.stripeMode !== 'live' || payment.offerDigest !== contractSnapshot.data()?.offerDigest");
+      "(!payment.fundingAllocation && (!require('./campaign_reserve_settlement').funded(payment) || payment.status !== 'paid')) || payment.stripeMode !== 'live' || payment.offerDigest !== contractSnapshot.data()?.offerDigest");
     s=once(s,'!receipt || receipt.policyVersion !== canvassingCompletion.VERSION',
       "!receipt || completion.status!=='submitted' || receipt.contractDigest!==contractSnapshot.data()?.contractDigest || receipt.policyVersion !== canvassingCompletion.VERSION");
     return s;

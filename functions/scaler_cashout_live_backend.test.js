@@ -9,7 +9,34 @@ const config={project:'scaled-circle',appEnv:'production',mode:'live',platformId
 let runtime,stripe,clock,controls,transfers,payouts,calls;
 const get=async p=>(await db.doc(p).get()).data();
 const req={requestId:'request_certification_one',amountCents:300};
+test('campaign allocation follows actual cashout and late bank reversal without duplicate earning',async()=>{
+ config.platformId='acct_1U328bI9d5xWNArH';
+ stripe.accounts.retrieve=async()=>({id:config.platformId,country:'US',capabilities:{transfers:'active'}});
+ const originalIntent=stripe.paymentIntents.retrieve;
+ stripe.paymentIntents.retrieve=async(id,options)=>{
+   const intent=await originalIntent(id);
+   if(options?.expand)intent.latest_charge={...await stripe.charges.retrieve('ch_real'),amount:360,refunded:false,
+     balance_transaction:{id:'txn_fixture',source:'ch_real',status:'available',currency:'usd',amount:360,net:350,fee:10}};
+   return intent;
+ };
+ const funds=require('./campaign_fund_allocation');
+ const p=await get('campaignPayments/'+paymentId),c={...await get('assignmentCompensations/'+zoneId),contractDigest:'fixture-contract'};
+ p.fundingAllocation=funds.create(paymentId,p);p.fundingAllocation=funds.reserve(paymentId,p,c);
+ p.fundingProtection={version:funds.VERSION,paymentIntentId:p.stripePaymentIntentId,withdrawalControl:'committed_funds_retained',
+   sourceAvailable:true,providerBalanceTransactionId:'txn_fixture',verifiedAtMs:Date.now(),netAvailableCents:350};
+ p.fundingAllocation=funds.start(paymentId,p,c);p.fundingAllocation=funds.earn(paymentId,p,c,300);
+ await db.doc('campaignPayments/'+paymentId).set(p);await db.doc('assignmentCompensations/'+zoneId).set(c);
+ const result=await runtime.request(uid,req);payouts.get('po_real').status='paid';await runtime.reconcile(uid,{operationId:result.operationId});
+ assert.equal(funds.view(paymentId,await get('campaignPayments/'+paymentId)).workerPaidCents,300);
+ await runtime.reconcile(uid,{operationId:result.operationId});
+ assert.equal(funds.view(paymentId,await get('campaignPayments/'+paymentId)).workerPaidCents,300);
+ payouts.get('po_real').status='failed';await runtime.reconcile(uid,{operationId:result.operationId});
+ assert.equal(funds.view(paymentId,await get('campaignPayments/'+paymentId)).workerPaidCents,0);
+ assert.equal(funds.view(paymentId,await get('campaignPayments/'+paymentId)).workerEarnedCents,300);
+ assert.equal(calls.filter(x=>x.kind==='transfer').length,1);
+});
 beforeEach(async()=>{
+ config.platformId='acct_platform';
  config.recoveryEnabled=false;
  for(const name of ['users','wallets','walletTransactions','campaignZones','campaigns','assignmentCompensations','campaignSettlements','campaignCompletions','scalerTransfers','campaignPayments','financialOperations','scalerCashoutIndex','scalerCashoutAllocations','stripeConnectedAccounts','stripeConnectedRecipients','scalerCashoutEvents'])await db.recursiveDelete(db.collection(name));
  clock=1789308000000;controls={platformBalance:10000,connectedBalance:10000,transferError:null,payoutError:null,receiptLive:true,transfersReady:true};transfers=new Map();payouts=new Map();calls=[];

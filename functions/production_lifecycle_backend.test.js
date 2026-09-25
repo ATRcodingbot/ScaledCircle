@@ -28,7 +28,7 @@ class LocalStripe {
     const result={id,url:'https://checkout.invalid/'+id,livemode:true,status:'open',payment_status:'unpaid',
       expires_at:Math.floor(Date.now()/1000)+1800,client_reference_id:data.client_reference_id,
       metadata:data.metadata,currency:data.line_items[0].price_data.currency,
-      amount_total:data.line_items[0].price_data.unit_amount,payment_intent:'pi_emulator_'+creates};
+      amount_total:data.line_items[0].price_data.unit_amount,payment_intent:'pi_emulator'+creates};
     sessions.set(id,result);return result;},
    retrieve:async id=>sessions.get(id)}};
   this.webhooks=actualStripe.webhooks;
@@ -66,6 +66,7 @@ before(async()=>{
  await require('./test_market_fixture').seed(db,[['business','business'],['scaler','scaler'],['other','scaler']],'PA');
  for(const [uid,role]of [['business','business'],['scaler','scaler'],['other','scaler']]) {
   try{await auth.createUser({uid,email:uid+'@example.invalid',emailVerified:true});}catch(e){if(e.code!=='auth/uid-already-exists')throw e;}
+  await auth.updateUser(uid,{disabled:false,emailVerified:true});
   await db.doc('users/'+uid).set({role,active:true});
   for(const [type,agreementVersion]of Object.entries(require('./legal_consent').AGREEMENTS)) {
    await db.doc(`legalConsents/${uid}_${type}_${agreementVersion}`).set({uid,agreementType:type,agreementVersion,acceptedAt:Timestamp.now()});
@@ -115,6 +116,9 @@ test('normal production-compatible create → map → signed mock funding → ac
   await funding.stripeWebhook({method:'POST',rawBody,headers:{'stripe-signature':signature}},response);assert.equal(status,200);}
  await webhook();await webhook();
  assert.equal((await db.doc('campaignPayments/'+checkout.paymentId).get()).data().status,'paid');
+ await assert.rejects(pcall('getCampaignFundingState','other',{campaignId:'ordinary'}));
+ const fundingState=await pcall('getCampaignFundingState','business',{campaignId:'ordinary'});
+ assert.equal(fundingState.checkoutAllowed,false);assert.equal(fundingState.allocation.customerPaidCents,21000);
  assert.equal((await pcall('publishFundedCampaign','business',{campaignId:'ordinary'})).status,'open');
  assert.equal((await pcall('publishFundedCampaign','business',{campaignId:'ordinary'})).replay,true);
  await fft.wrap(privacy.projectCampaignDiscoveryV1)({params:{campaignId:'ordinary'}});
@@ -131,9 +135,17 @@ test('normal production-compatible create → map → signed mock funding → ac
  const contract=(await db.doc('assignmentCompensations/'+zoneId).get()).data();
  assert.equal(contract.completionPolicyVersion,'CanvassingRoute80_95V1');assert.equal(contract.baseAmountCents,15000);
  assert.equal(contract.bonusAmountCents,2500);assert.ok(contract.contractDigest);
+ const reservedState=await pcall('getCampaignFundingState','business',{campaignId:'ordinary'});
+ assert.equal(reservedState.allocation.workerReserveCents,17500);
  await assertSucceeds(sc.doc('assignmentCompensations/'+zoneId).get());
  await assertFails(env.authenticatedContext('other',{email_verified:true}).firestore().doc('assignmentCompensations/'+zoneId).get());
  await assert.rejects(call('startTrackingSession','other',{campaignId:'ordinary',zoneId}));
+ await assert.rejects(call('startTrackingSession','scaler',{campaignId:'ordinary',zoneId}),/funds require verification/);
+ // TEST-only provider evidence: no LIVE balance or provider setting is changed.
+ await db.doc('campaignPayments/'+checkout.paymentId).update({fundingProtection:{
+   version:require('./campaign_fund_allocation').VERSION,paymentIntentId:session.payment_intent,
+   withdrawalControl:'committed_funds_retained',sourceAvailable:true,providerBalanceTransactionId:'txn_fixture',
+   verifiedAtMs:Date.now(),netAvailableCents:20000}});
  const started=await call('startTrackingSession','scaler',{campaignId:'ordinary',zoneId});
  const line=zone.executionRoute.centerline,points=[],distance=require('./route_progress').distance;
  for(let i=1;i<line.length;i++) {
@@ -177,6 +189,8 @@ test('normal production-compatible create → map → signed mock funding → ac
  assert.equal(room.reserveSettlement.earnedFeeCents,3500);
  assert.equal(room.reserveSettlement.businessReturnCents,0);
  await assert.rejects(call('finalizeZoneReview','scaler',{zoneId,decision:'approve'}));
+ // A customer dispute after genuine completed work must not erase its earning.
+ await db.doc('campaignPayments/'+checkout.paymentId).update({status:'disputed',settlementFrozen:true});
  const attempts=await Promise.all([call('finalizeZoneReview','business',{zoneId,decision:'approve'}),
    call('finalizeZoneReview','business',{zoneId,decision:'approve'})]);
  const approved=attempts.find(r=>!r.alreadyProcessed);

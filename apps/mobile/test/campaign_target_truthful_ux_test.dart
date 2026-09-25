@@ -2,7 +2,6 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:flutter_app/config/app_environment.dart';
 import 'package:flutter_app/services/platform_billing_service.dart';
 import 'package:flutter_app/services/secure_function_service.dart';
 import 'package:flutter_app/widgets/zone_intelligence_card.dart';
@@ -74,26 +73,31 @@ void main() {
     expect(error.toString(), 'Campaign funding is unavailable.');
   });
 
-  test(
-    'unrestricted production funding stays held before payout readiness',
-    () {
-      if (AppEnvironmentConfig.isProduction) {
-        expect(
-          PlatformBillingService.authoritativeCampaignFundingAvailable,
-          isFalse,
-        );
-        expect(
-          PlatformBillingService.paidWorkHoldMessage,
-          contains('payout readiness'),
-        );
-      } else {
-        expect(
-          PlatformBillingService.authoritativeCampaignFundingAvailable,
-          isTrue,
-        );
-      }
-    },
-  );
+  test('campaign funding requires current explicit server authority', () {
+    expect(
+      () => PlatformBillingService.requireCampaignFundingReady({}),
+      throwsStateError,
+    );
+    expect(
+      () => PlatformBillingService.requireCampaignFundingReady({
+        'checkoutAllowed': false,
+        'message': 'Payment processing.',
+      }),
+      throwsA(
+        isA<StateError>().having(
+          (e) => e.message,
+          'reason',
+          'Payment processing.',
+        ),
+      ),
+    );
+    expect(
+      () => PlatformBillingService.requireCampaignFundingReady({
+        'checkoutAllowed': true,
+      }),
+      returnsNormally,
+    );
+  });
 
   test(
     'persistence precedes optional analysis and regional totals cannot force redraw',
@@ -121,7 +125,9 @@ void main() {
       expect(source, isNot(contains('preliminary pay')));
       expect(
         source,
-        isNot(contains('This target looks much larger than your flyer quantity.')),
+        isNot(
+          contains('This target looks much larger than your flyer quantity.'),
+        ),
       );
       expect(source, isNot(contains('propertyCount > materialQty * 2')));
       expect(

@@ -285,8 +285,23 @@ function createStore(db, now = Date.now) {
         const allocated = await Promise.all(op.allocations.map(s => tx.get(db.doc('scalerCashoutAllocations/' + s.earningId))));
         const paymentIds = [...new Set(op.allocations.map(s => s.paymentId))];
         const payments = await Promise.all(paymentIds.map(p => tx.get(db.doc('campaignPayments/' + p))));
+        const allocationContracts = await Promise.all(op.allocations.map(s => tx.get(db.doc('assignmentCompensations/'+sid(s.zoneId)))));
         const recoveryRef=op.replacementFunding ? opRef(op.replacementFunding.fundingId) : null;
         const recovery=recoveryRef ? (await tx.get(recoveryRef)).data() : null;
+        const campaignAllocationUpdates = new Map();
+        if (['paid','reopen'].includes(movement)) {
+          const funds=require('./campaign_fund_allocation');
+          for(const [i,s] of op.allocations.entries()) {
+            const snapshot=payments[paymentIds.indexOf(s.paymentId)],p=snapshot.data();
+            if(!p?.fundingAllocation)continue; // Preserve existing historical settlement authority.
+            const current=campaignAllocationUpdates.get(s.paymentId)?.next || p.fundingAllocation;
+            const input={...p,fundingAllocation:current},contract=allocationContracts[i].data();
+            const next=movement==='paid'?funds.paid(s.paymentId,input,contract,{operationId:op.id,
+              amountCents:s.allocatedCents,replacementFundingId:op.replacementFunding?.fundingId||null}):
+              funds.reopen(s.paymentId,input,contract,op.id);
+            campaignAllocationUpdates.set(s.paymentId,{ref:snapshot.ref,before:p.fundingAllocation,next});
+          }
+        }
         if (movement !== 'none') {
           if (movement === 'reopen') {
             if (!op.settled || op.state !== 'completed' || cents(wallet.cashoutPaidCents || 0) < op.amountCents) fail('cashout_settlement_conflict');
@@ -348,6 +363,8 @@ function createStore(db, now = Date.now) {
           if (recovery?.operationId !== op.id || recovery.reservedCents !== op.amountCents || recovery.consumedCents !== 0) fail('cashout_replacement_allocation_conflict');
           tx.update(recoveryRef,{reservedCents:0,consumedCents:op.amountCents,settledAt:now()});
         }
+        for(const item of campaignAllocationUpdates.values()) require('./campaign_fund_allocation').persist(
+          tx,item.ref,item.before,item.next,'cashout_'+movement,now());
         tx.set(opRef(op.id), updated);
         audit(tx, updated, movement === 'none' ? 'reconciled' : movement);
         ledger(tx, updated);

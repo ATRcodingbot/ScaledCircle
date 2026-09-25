@@ -1,7 +1,6 @@
 import 'business_workspace_service.dart';
 import 'subscription_plan_service.dart';
 import '../config/native_membership_policy.dart';
-import '../config/app_environment.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -73,17 +72,16 @@ class PlatformBillingService {
 
   static const String adminWalletId = 'scaled_circle_admin';
 
-  /// Temporary production capability gate. The reviewed funding callables are
-  /// not live yet, so drafts must remain safely saved without presenting a
-  /// launch action that cannot succeed.
-  static const bool authoritativeCampaignFundingAvailable =
-      !AppEnvironmentConfig.isProduction ||
-      bool.fromEnvironment(
-        'LIVE_PAID_WORK_ACTIVATION_ENABLED',
-        defaultValue: false,
+  /// Opening a request is not funding authority. The server checks the current
+  /// campaign, account, quote and launch controls again before creating checkout.
+  static void requireCampaignFundingReady(Map<String, dynamic> state) {
+    if (state['checkoutAllowed'] != true) {
+      throw StateError(
+        state['message']?.toString() ??
+            'Campaign funding status could not be verified. Your draft is saved.',
       );
-  static const paidWorkHoldMessage =
-      'Paid work is not open yet. Your campaign draft is saved while ScaledCircle completes payout readiness.';
+    }
+  }
 
   static const Map<String, double> subscriptionPrices = {
     'starter': 99.0,
@@ -191,12 +189,15 @@ class PlatformBillingService {
     required String campaignId,
     String? approvedQuoteDigest,
   }) async {
-    if (!authoritativeCampaignFundingAvailable) {
-      throw StateError(paidWorkHoldMessage);
-    }
     if (approvedQuoteDigest == null || approvedQuoteDigest.isEmpty) {
       throw Exception('Review and approve the latest campaign funding quote.');
     }
+    requireCampaignFundingReady(
+      await campaignFundingState(
+        businessId: businessId,
+        campaignId: campaignId,
+      ),
+    );
     final result = await _callSecureFunction(
       businessId: businessId,
       functionName: 'createCampaignFundingCheckoutSession',
@@ -209,6 +210,15 @@ class PlatformBillingService {
     if (result['processing'] == true) return;
     await _openStripeUrl(result['url']);
   }
+
+  Future<Map<String, dynamic>> campaignFundingState({
+    required String businessId,
+    required String campaignId,
+  }) => _callSecureFunction(
+    businessId: businessId,
+    functionName: 'getCampaignFundingState',
+    data: {'campaignId': campaignId},
+  );
 
   Future<Map<String, dynamic>> marketplacePolicy({required String businessId}) {
     return _callSecureFunction(

@@ -36,13 +36,33 @@ function prepareSource(){
     }
   }`);
   source=source.replaceAll('assertPhysicalQaRequest(','assertProductionEnvironment(');
+  source="const campaignFundingStripeKey=require('firebase-functions/params').defineSecret('STRIPE_LIVE_SECRET_KEY');\n"+source;
+  source=source.replace('return onCall(TRACKING_CALLABLE_OPTIONS, async (request) => {',
+    "return onCall({...TRACKING_CALLABLE_OPTIONS, ...(['startAssignedZone','startTrackingSession'].includes(name)?{secrets:[campaignFundingStripeKey]}:{})}, async (request) => {");
+  source=source.replace('      await assertProductionEnvironment(request);\n      return await handler(request);',`      await assertProductionEnvironment(request, ${JSON.stringify([...TRACKING,'applyToCampaign'])}.includes(name));
+      if(['startAssignedZone','startTrackingSession'].includes(name)&&(process.env.GCLOUD_PROJECT||process.env.GOOGLE_CLOUD_PROJECT)==='scaled-circle') {
+        const zoneId=request.data?.zoneId;
+        if(typeof zoneId!=='string'||!/^[A-Za-z0-9_-]{1,160}$/.test(zoneId))throw new HttpsError('invalid-argument','Select an assigned Zone.');
+        const zone=(await db.doc('campaignZones/'+zoneId).get()).data();
+        if(zone?.assignedScalerId!==request.auth.uid||zone.campaignId!==request.data?.campaignId)throw new HttpsError('permission-denied','This assignment is unavailable.');
+        const campaign=(await db.doc('campaigns/'+zone.campaignId).get()).data();
+        const paymentId=campaign?.fundingPaymentId;
+        if(typeof paymentId!=='string'||!/^[A-Za-z0-9_-]{1,160}$/.test(paymentId))throw new HttpsError('failed-precondition','Campaign funding requires review.');
+        try {
+          const Stripe=require('stripe'),key=campaignFundingStripeKey.value();
+          if(!key.startsWith('sk_live_'))throw Error('production_payment_configuration_required');
+          await require('./campaign_fund_protection').refresh({db,stripe:new Stripe(key,{timeout:15000,maxNetworkRetries:0}),paymentId});
+        } catch(_) { throw new HttpsError('failed-precondition','Campaign funds are not yet verified and retained. Your assignment is preserved.'); }
+      }
+      return await handler(request);`);
   source=replaceFunction(source,'businessWorkspaceService',`function businessWorkspaceService() {
     return require('./business_workspace').createWorkspaceService({db,auth:getAuth(),FieldValue,Timestamp,origin:'https://scaledcircle.com'});
   }`);
   source=source.replace(/const campaign = \(process\.env\.GCLOUD_PROJECT \|\| process\.env\.GOOGLE_CLOUD_PROJECT\) === 'scaledcircle-staging'\s*\? await db\.collection\('campaigns'\)\.doc\(session\.campaignId\)\.get\(\) : null;/,
     "const campaign = await db.collection('campaigns').doc(session.campaignId).get();");
   const startMarker='  const deadlineValue = zone.deadline || campaign.deadline || null;';
-  source=source.replace(startMarker,`  if (canvassingCompletion.isCanvassing(campaign.campaignType || campaign.type)) {
+  source=source.replace(startMarker,`  let commitFunding;
+  if (canvassingCompletion.isCanvassing(campaign.campaignType || campaign.type)) {
     if(campaign.completionPolicyVersion !== 'CanvassingRoute80_95V1') {
       throw new HttpsError('failed-precondition','Regenerate and accept the current route and compensation terms before starting this work.');
     }
@@ -56,8 +76,35 @@ function prepareSource(){
         contract.routeBinding?.corridorHash!==zone.executionRoute.corridorHash) {
       throw new HttpsError('failed-precondition','The immutable assignment terms are unavailable.');
     }
+    const paymentId=campaign.fundingPaymentId;
+    const payment=typeof paymentId==='string' && /^[A-Za-z0-9_-]{1,160}$/.test(paymentId)
+      ? (await transaction.get(db.doc('campaignPayments/'+paymentId))).data() : null;
+    try { require('./production_work_funding').validate({campaign,zone,contract,payment,paymentId}); }
+    catch(error) { throw new HttpsError('failed-precondition',error.message,{reason:error.reason||'campaign_funding_review_required'}); }
+    const funds=require('./campaign_fund_allocation');
+    let allocation;
+    try { allocation=funds.start(paymentId,payment,contract); }
+    catch(error) { throw new HttpsError('failed-precondition','Campaign funds require verification before work can begin.',{reason:error.message}); }
+    commitFunding=()=>{
+      funds.persist(transaction,db.doc('campaignPayments/'+paymentId),payment.fundingAllocation,allocation,
+        'work_started',FieldValue.serverTimestamp());
+      commitFunding=undefined;
+    };
+    await requireCurrentLegalConsents(context.uid,legalConsent.ROLE_REQUIREMENTS.scaler_work,
+      transaction,'Review the current Scaler Work Terms before starting work.');
+    await requireCurrentLegalConsents(campaign.businessId,legalConsent.ROLE_REQUIREMENTS.business_funding,
+      transaction,'The Business must review the current campaign terms before work begins.');
+    if(payment.initiatedByActorUid&&payment.initiatedByActorUid!==campaign.businessId)
+      await requireCurrentLegalConsents(payment.initiatedByActorUid,legalConsent.ROLE_REQUIREMENTS.business_funding,
+        transaction,'The funding author must review the current campaign terms before work begins.');
   }
 `+startMarker);
+  source=source.replace('  return {workWindow, materialRequired, handoffStatus};',
+    '  return {workWindow, materialRequired, handoffStatus, commitFunding:()=>commitFunding?.()};');
+  for(const name of ['startAssignedZone','startTrackingSession']) {
+    source=require('./production_policy_patches.cjs').section(source,name,s=>
+      s.replaceAll('transaction.update(zoneRef, {','gate.commitFunding?.();\n    transaction.update(zoneRef, {'));
+  }
   const uploadMarker='    if (existing.exists) {\n      const existingData = existing.data() || {};';
   if(!source.replaceAll('\r','').includes(uploadMarker))throw Error('Upload patch anchor missing');
   source=source.replaceAll('\r','').replace(uploadMarker,`    const assigned = await transaction.get(db.doc('campaignZones/'+session.zoneId));
@@ -114,7 +161,7 @@ function prepare(output=path.join(root,'.firebase','production-engineering','tra
   const sourcePackage=JSON.parse(fs.readFileSync(path.join(root,'functions','package.json')));
   fs.writeFileSync(path.join(output,'package.json'),JSON.stringify({name:'scaledcircle-production-tracking',private:true,
     main:'index.js',engines:{node:'24'},dependencies:{'firebase-admin':sourcePackage.dependencies['firebase-admin'],
-      'firebase-functions':sourcePackage.dependencies['firebase-functions']}},null,2)+'\n');
+      'firebase-functions':sourcePackage.dependencies['firebase-functions'],stripe:sourcePackage.dependencies.stripe}},null,2)+'\n');
   const files={};for(const name of ['index.js','package.json',...copied]) {
     const bytes=fs.readFileSync(path.join(output,name));
     const markerSource=['paid_work_launch_gate.js','billing_communications.js','transactional_email.js'].includes(name)?bytes.toString().replaceAll('scaledcircle-staging',''):bytes.toString();

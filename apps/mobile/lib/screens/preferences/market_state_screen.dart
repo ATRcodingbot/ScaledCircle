@@ -2,7 +2,6 @@ import 'package:flutter_app/navigation/authenticated_app_bar.dart';
 import 'package:flutter/material.dart';
 import '../../services/market_rollout_service.dart';
 import '../../widgets/authenticated_sign_out_button.dart';
-import '../../services/platform_billing_service.dart';
 
 String marketStatusMessage(
   Map<String, dynamic> value, {
@@ -14,13 +13,13 @@ String marketStatusMessage(
   if (!business &&
       (value['state'] as Map?)?['code'] == 'MD' &&
       value['status'] == 'ACTIVE') {
-    return 'Maryland Scaler registration is open. Paid assignments remain unavailable until the current activation hold is cleared. Payout setup does not prove a completed withdrawal.';
+    return 'Maryland Scaler registration is open. Available work depends on each campaign’s verified funding and assignment requirements. Payout setup does not prove a completed withdrawal.';
   }
   if (value['status'] == 'ACTIVE') {
-    if (!PlatformBillingService.authoritativeCampaignFundingAvailable) {
-      return 'Business registration and campaign planning are available. Public paid campaign funding and assignments remain held while ScaledCircle completes payout readiness.';
+    if (!business) {
+      return 'Your state is active. Job alerts still follow your saved service areas. Paid work remains subject to account and payment readiness.';
     }
-    return 'Your state is active. Job alerts still follow your saved service areas. Paid work remains subject to account and payment readiness.';
+    return 'Core Business tools and campaign planning are available. Each paid campaign must pass current funding and assignment checks before work begins. Worker availability and results are not guaranteed.';
   }
   if (value['status'] == 'PAUSED') {
     return 'New marketplace work is paused in your state. Your profile and existing work history are preserved.';

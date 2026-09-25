@@ -1615,11 +1615,9 @@ class _FlyerCampaignScreenState extends State<FlyerCampaignScreen> {
                           const Text(
                             'The platform fee applies to base compensation plus the reserved completion bonus. It is not deducted from Scaler pay.',
                           ),
-                          if (!PlatformBillingService
-                              .authoritativeCampaignFundingAvailable)
-                            const Text(
-                              PlatformBillingService.paidWorkHoldMessage,
-                            ),
+                          const Text(
+                            'Payment and campaign-specific funding checks must complete before Scalers can begin work.',
+                          ),
 
                           if (_costQuote != null)
                             _costRow(

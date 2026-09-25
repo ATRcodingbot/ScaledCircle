@@ -15,7 +15,7 @@ const GROUPS=[
  {codebase:'completion-authority-core',from:path.join(privateRoot,'tracking'),names:['initializeCampaignCompletion','submitZoneCompletion','reviewCampaignCompletion','finalizeZoneReview']},
  // startAssignedZone is a legacy source entry, explicitly unused by the mobile client.
  {codebase:'tracking-core',from:path.join(privateRoot,'tracking'),names:TRACKING.filter(n=>n!=='startAssignedZone')},
- {codebase:'campaign-funding',from:path.join(privateRoot,'funding'),names:['quoteCampaignFunding','createCampaignFundingCheckoutSession','publishFundedCampaign','stripeWebhook','reconcileUnusedWorkReservesV1']},
+ {codebase:'campaign-funding',from:path.join(privateRoot,'funding'),names:['getCampaignFundingState','quoteCampaignFunding','createCampaignFundingCheckoutSession','publishFundedCampaign','cancelUnassignedFundedCampaign','stripeWebhook','reconcileUnusedWorkReservesV1']},
  {codebase:'default',from:path.join(privateRoot,'tracking/legacy-payout'),names:['approveZonePayout'],packageFrom:path.join(privateRoot,'tracking')},
 ];
 const digest=bytes=>crypto.createHash('sha256').update(bytes).digest('hex');

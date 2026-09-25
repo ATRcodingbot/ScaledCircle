@@ -5,8 +5,8 @@ const parser = require('../functions/node_modules/@babel/parser');
 const traverse = require('../functions/node_modules/@babel/traverse').default;
 
 const FUNDING_EXPORTS = Object.freeze([
-  'quoteCampaignFunding', 'createCampaignFundingCheckoutSession',
-  'publishFundedCampaign', 'stripeWebhook', 'reconcileUnusedWorkReservesV1',
+  'getCampaignFundingState', 'quoteCampaignFunding', 'createCampaignFundingCheckoutSession',
+  'publishFundedCampaign', 'cancelUnassignedFundedCampaign', 'stripeWebhook', 'reconcileUnusedWorkReservesV1',
 ]);
 
 function deferProductionPaymentEnvironment(source) {

@@ -97,5 +97,5 @@ test('runtime guard is first in every handler, provider factory and financial tr
       seen.push(p.node.id.name);
     },
   });
-  assert.equal(seen.length, 7);
+  assert.equal(seen.length, FUNDING_EXPORTS.length + 2);
 });

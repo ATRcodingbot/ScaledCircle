@@ -60,7 +60,7 @@ void main() {
         'state': {'code': 'MD'},
       });
       expect(message, contains('registration is open'));
-      expect(message, contains('Paid assignments remain unavailable'));
+      expect(message, contains('verified funding and assignment requirements'));
       expect(message, contains('does not prove a completed withdrawal'));
     },
   );
