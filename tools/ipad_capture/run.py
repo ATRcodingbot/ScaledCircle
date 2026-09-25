@@ -15,6 +15,7 @@ import subprocess
 import sys
 import tempfile
 import time
+from auth_preflight import verify as verify_auth, AuthPreflightFailure
 
 SOURCE = '26f29133fcd72edecf5c71497712674293228341'
 SDK = '058e0af2c2b57e369d905a03ac9748b0ebf543c6'
@@ -25,7 +26,7 @@ RUN_BUDGET_SECONDS = 24 * 60  # leaves six minutes of the CI cap for overhead/ex
 REQUIRED_INPUTS = ('IPAD_REVIEWER_EMAIL', 'IPAD_REVIEWER_PASSWORD',
                    'IPAD_REVIEWER_UID', 'IPAD_FIREBASE_PLIST_BASE64')
 SCREENS = ('business-home', 'schedule', 'campaigns')
-STAGES = {'input-preflight', 'verify-host', 'verify-flutter-sdk', 'check-source',
+STAGES = {'input-preflight', 'auth-preflight', 'verify-host', 'verify-flutter-sdk', 'check-source',
           'fetch-pinned-source', 'verify-fetched-source', 'checkout-pinned-source',
           'prepare-harness', 'resolve-harness-dependencies', 'verify-resolved-lock',
           'list-runtimes', 'list-device-types', 'select-runtime', 'create-simulator',
@@ -35,7 +36,7 @@ DRIVER_STAGES = {'connect', 'app-startup', 'authenticate', 'logout', 'close', 'c
     f'{screen}-{phase}' for screen in SCREENS for phase in ('navigation', 'readiness', 'capture')}
 DRIVER_OUTCOMES = {'running', 'success', 'failed', 'timeout'}
 DRIVER_CATEGORIES = {'none', 'driver_unavailable', 'startup_not_ready', 'harness_mismatch',
-    'auth_refused', 'auth_timeout', 'auth_failed', 'auth_identity_mismatch', 'auth_unverified',
+    'auth_runtime_mismatch', 'auth_input_whitespace_unsupported', 'auth_refused', 'auth_timeout', 'auth_failed', 'auth_identity_mismatch', 'auth_unverified',
     'auth_network_unavailable', 'auth_invalid_credentials', 'route_unavailable', 'screen_not_ready',
     'screenshot_failed', 'cleanup_failed', 'stage_timeout', 'invalid_input'}
 
@@ -364,6 +365,15 @@ def main():
             with runner.step('input-preflight', 10):
                 runner.input_states(os.environ)
                 require_inputs(os.environ, emit=lambda _: None)
+                config = plistlib.loads(firebase_plist(os.environ['IPAD_FIREBASE_PLIST_BASE64']))
+            with runner.step('auth-preflight', 30) as (event, deadline):
+                try:
+                    event['authResult'] = verify_auth(os.environ, config,
+                        timeout=min(25, max(.1, deadline - time.monotonic())))
+                except AuthPreflightFailure as error:
+                    event['failureCategory'] = 'auth_preflight_failed'
+                    event['authResult'] = str(error)  # fixed categories only
+                    raise StageFailure('Authentication preflight failed') from None
             with runner.step('verify-host', 10):
                 if sys.platform != 'darwin':
                     raise StageFailure('macOS/Xcode simulator worker required')
@@ -402,7 +412,7 @@ def main():
             with runner.step('verify-resolved-lock', 10):
                 if any(versions(lock.read_text()).get(k) != v for k, v in original_versions.items()):
                     raise StageFailure('Harness changed app dependencies')
-            runtimes = runner.run('list-runtimes', ['xcrun', 'simctl', 'list', 'runtimes', '-j'], 20, capture=True, transform=json.loads)
+            runtimes = runner.run('list-runtimes', ['xcrun', 'simctl', 'list', 'runtimes', '-j'], 120, capture=True, transform=json.loads)
             types = runner.run('list-device-types', ['xcrun', 'simctl', 'list', 'devicetypes', '-j'], 20, capture=True, transform=json.loads)
             with runner.step('select-runtime', 10):
                 device_type, runtime = simulator(runtimes, types)

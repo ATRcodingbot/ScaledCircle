@@ -16,6 +16,8 @@ const captureCategories = {
   'startup_not_ready',
   'harness_mismatch',
   'auth_refused',
+  'auth_runtime_mismatch',
+  'auth_input_whitespace_unsupported',
   'auth_timeout',
   'auth_failed',
   'auth_identity_mismatch',
@@ -251,20 +253,54 @@ class FlutterCaptureTransport implements CaptureTransport {
 
   @override
   Future<void> authenticate() async {
-    final result = await request({
-      'action': 'login',
-      'email': environment['IPAD_REVIEWER_EMAIL'],
-      'password': environment['IPAD_REVIEWER_PASSWORD'],
+    final email = environment['IPAD_REVIEWER_EMAIL'];
+    final password = environment['IPAD_REVIEWER_PASSWORD'];
+    if (email == null ||
+        email.isEmpty ||
+        password == null ||
+        password.isEmpty) {
+      throw const CaptureFailure('invalid_input');
+    }
+    // The pinned LoginScreen trims both fields. Refuse incompatible input rather
+    // than silently changing password bytes or modifying the released app.
+    if (email.trim() != email || password.trim() != password) {
+      throw const CaptureFailure('auth_input_whitespace_unsupported');
+    }
+    final initial = await request({
+      'action': 'verify-login',
       'expectedUid': environment['IPAD_REVIEWER_UID'],
-    }, const Duration(seconds: 65));
-    if (result['outcome'] != 'authenticated') {
-      final category = result['category'];
+    }, const Duration(seconds: 5));
+    if (initial['outcome'] != 'auth_pending') {
       throw CaptureFailure(
-        category is String && captureCategories.contains(category)
-            ? category
-            : 'auth_failed',
+        initial['category'] == 'auth_runtime_mismatch'
+            ? 'auth_runtime_mismatch'
+            : 'auth_refused',
       );
     }
+    // Enter the actual maintained login fields; await each edit before submit.
+    await driver.setSemantics(true, timeout: const Duration(seconds: 5));
+    await driver.tap(find.bySemanticsLabel('Email'));
+    await driver.enterText(email);
+    await driver.tap(find.bySemanticsLabel('Password'));
+    await driver.enterText(password);
+    await driver.tap(find.text('Login'));
+    for (var attempt = 0; attempt < 45; attempt++) {
+      final result = await request({
+        'action': 'verify-login',
+        'expectedUid': environment['IPAD_REVIEWER_UID'],
+      }, const Duration(seconds: 3));
+      if (result['outcome'] == 'authenticated') return;
+      if (result['outcome'] != 'auth_pending') {
+        final category = result['category'];
+        throw CaptureFailure(
+          category is String && captureCategories.contains(category)
+              ? category
+              : 'auth_failed',
+        );
+      }
+      await Future<void>.delayed(const Duration(seconds: 1));
+    }
+    throw const CaptureFailure('auth_timeout');
   }
 
   @override

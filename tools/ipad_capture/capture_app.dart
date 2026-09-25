@@ -61,35 +61,32 @@ Future<void> main() async {
           }
           return response('signed_out');
         }
-        if (request['action'] == 'login') {
+        if (request['action'] == 'verify-login') {
           authorizedUid = null;
-          if (!mainReturned || Firebase.apps.isEmpty || !applicationMounted()) {
-            return response('refused', 'startup_not_ready');
+          final auth = FirebaseAuth.instance;
+          final options = auth.app.options;
+          if (auth.app.name != '[DEFAULT]' ||
+              options.projectId != 'scaled-circle' ||
+              options.appId != '1:1010956217112:ios:91c890b1ca2018a4e70c6d' ||
+              auth.tenantId != null) {
+            return response('refused', 'auth_runtime_mismatch');
           }
-          if (['email', 'password', 'expectedUid'].any(
-            (key) =>
-                request[key] is! String || (request[key] as String).isEmpty,
-          )) {
+          if (request['expectedUid'] is! String ||
+              (request['expectedUid'] as String).isEmpty) {
             return response('refused', 'invalid_input');
           }
-          final result = await FirebaseAuth.instance
-              .signInWithEmailAndPassword(
-                email: request['email'] as String,
-                password: request['password'] as String,
-              )
-              .timeout(const Duration(seconds: 45));
-          final matches = result.user?.uid == request['expectedUid'];
-          final verified = result.user?.emailVerified == true;
-          if (!matches || !verified) {
-            await FirebaseAuth.instance.signOut().timeout(
-              const Duration(seconds: 7),
-            );
+          final user = auth.currentUser;
+          if (user == null) return response('auth_pending');
+          if (user.uid != request['expectedUid'] || !user.emailVerified) {
+            await auth.signOut().timeout(const Duration(seconds: 7));
             return response(
               'refused',
-              matches ? 'auth_unverified' : 'auth_identity_mismatch',
+              user.uid != request['expectedUid']
+                  ? 'auth_identity_mismatch'
+                  : 'auth_unverified',
             );
           }
-          authorizedUid = result.user!.uid;
+          authorizedUid = user.uid;
           return response('authenticated');
         }
         final user = FirebaseAuth.instance.currentUser;
