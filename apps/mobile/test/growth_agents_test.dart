@@ -11,7 +11,16 @@ void main() {
         MaterialApp(
           home: GrowthAgentsScreen(
             loadOverride: () async => {
-              'summary': <String, dynamic>{},
+              'summary': {
+                'discovery': {
+                  'state': 'failed',
+                  'failure': {
+                    'stage': 'response_parsing',
+                    'reason': 'invalid_json_syntax',
+                  },
+                  'lastNewProspectAt': 1789068443037,
+                },
+              },
               'preferences': {'mode': 'important'},
               'researchPaused': false,
               'nextResearchAfter': 1790080000000,
@@ -32,7 +41,19 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      expect(find.text('Status: Active — awaiting next cycle'), findsOneWidget);
+      expect(
+        find.text('Status: Cycle completed — inspect discovery results'),
+        findsOneWidget,
+      );
+      expect(find.text('Fresh discovery: Failed'), findsOneWidget);
+      expect(
+        find.text('Blocked stage: response_parsing — invalid_json_syntax'),
+        findsOneWidget,
+      );
+      expect(
+        find.text('Latest cycle new qualified prospects: Unknown'),
+        findsOneWidget,
+      );
       expect(find.text('New opportunities: 0'), findsOneWidget);
       expect(find.text('Duplicates suppressed: 8'), findsOneWidget);
       expect(find.text('Unavailable sources: 1'), findsOneWidget);

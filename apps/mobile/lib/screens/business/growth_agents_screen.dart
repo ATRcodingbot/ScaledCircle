@@ -509,6 +509,54 @@ class _GrowthAgentsScreenState extends State<GrowthAgentsScreen> {
           ? 'Recruitment partners'
           : 'High-fit accounts',
   };
+  Widget _discoveryStatus(Map<String, dynamic> data) {
+    final summary = data['summary'] is Map ? data['summary'] as Map : const {};
+    final discovery = summary['discovery'] is Map
+        ? summary['discovery'] as Map
+        : const {};
+    final failure = discovery['failure'] is Map
+        ? discovery['failure'] as Map
+        : const {};
+    final state = switch (discovery['state']) {
+      'failed' => 'Failed',
+      'partial' => 'Partial — some requests failed',
+      'processed' => 'Processing completed — inspect qualified results',
+      'running' => 'Running',
+      _ => 'Unknown',
+    };
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _line('Fresh discovery', state),
+        if (failure.isNotEmpty)
+          _line(
+            'Blocked stage',
+            '${failure['stage']} — ${failure['reason'] ?? failure['code']}',
+          ),
+        _line(
+          'Last successful processing',
+          _time(discovery['lastSuccessfulProcessingAt']),
+        ),
+        _line(
+          'Last genuinely new prospect',
+          _time(discovery['lastNewProspectAt']),
+        ),
+        _line(
+          'Latest cycle new qualified prospects',
+          discovery['newQualified'],
+        ),
+        _line('Existing prospects rechecked', discovery['rechecked']),
+        _line('Parsed candidates', discovery['candidatesParsed']),
+        _line('Evidence exclusions', discovery['evidenceExcluded']),
+        _line('Suppressed sources', discovery['suppressed']),
+        _line('Discovery source failures', discovery['sourceFailures']),
+        const Text(
+          'Inventory is cumulative. Freshness uses up to 250 retained records; unknown is not zero. Catalog rechecks are not fresh discovery.',
+        ),
+      ],
+    );
+  }
+
   Widget _internalResearchStatus(Map<String, dynamic> data) {
     final runs = _list(data['runs'])
       ..sort(
@@ -520,7 +568,7 @@ class _GrowthAgentsScreenState extends State<GrowthAgentsScreen> {
     final status = data['researchPaused'] == true
         ? 'Paused'
         : switch (latest['status']) {
-            'completed' => 'Active — awaiting next cycle',
+            'completed' => 'Cycle completed — inspect discovery results',
             'running' => 'Running',
             'failed' || 'held' => 'Needs attention',
             _ => 'No completed cycle recorded',
@@ -536,6 +584,7 @@ class _GrowthAgentsScreenState extends State<GrowthAgentsScreen> {
               style: Theme.of(context).textTheme.titleMedium,
             ),
             _line('Status', status),
+            _discoveryStatus(data),
             _line(
               'Last run',
               _time(latest['completedAt'] ?? latest['createdAt']),
@@ -608,6 +657,7 @@ class _GrowthAgentsScreenState extends State<GrowthAgentsScreen> {
                   : 'Unknown',
             ),
             _line('Scheduled cycle status', status),
+            _discoveryStatus(data),
             _line('Last attempt', _time(schedule['lastAttemptAt'])),
             _line(
               'Last completed cycle',
