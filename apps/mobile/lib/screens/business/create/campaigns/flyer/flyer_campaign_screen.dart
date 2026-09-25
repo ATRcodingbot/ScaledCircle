@@ -544,7 +544,7 @@ class _FlyerCampaignScreenState extends State<FlyerCampaignScreen> {
   String _campaignTypeDescription(String type) {
     switch (type) {
       case 'neighborhoodCanvassing':
-        return 'Distribute approved materials in the selected area. Speaking with residents is not required. Route tracking provides reviewable coverage evidence.';
+        return 'Scalers visit residents or businesses for in-person outreach using approved Business messaging and materials. Conversations, leads and sales are not guaranteed. Route tracking provides reviewable coverage evidence.';
       case 'flyer_distribution':
         return 'Scalers distribute flyers throughout mapped neighborhoods.';
 

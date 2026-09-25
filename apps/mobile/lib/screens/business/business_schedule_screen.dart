@@ -1161,6 +1161,18 @@ class _BusinessScheduleScreenState extends State<BusinessScheduleScreen>
               data?['isOwner'] != true &&
               !(ModalRoute.of(context)?.canPop ?? false)
           ? null
+          : MediaQuery.sizeOf(context).width < 600
+          ? IconButton(
+              tooltip: 'Back',
+              icon: const Icon(Icons.arrow_back),
+              onPressed: () {
+                if (Navigator.canPop(context)) {
+                  Navigator.pop(context);
+                } else {
+                  AppNavigation.replace(context, '/business');
+                }
+              },
+            )
           : TextButton.icon(
               icon: const Icon(Icons.arrow_back),
               label: const Text('Back'),
@@ -1172,7 +1184,11 @@ class _BusinessScheduleScreenState extends State<BusinessScheduleScreen>
                 }
               },
             ),
-      title: Text(can('customersView') ? 'Customers & Schedule' : 'Schedule'),
+      title: Text(
+        can('customersView') && MediaQuery.sizeOf(context).width >= 600
+            ? 'Customers & Schedule'
+            : 'Schedule',
+      ),
       actions: [
         if (data?['isOwner'] != true &&
             (widget.workspaceHome || data?['isOwner'] == false))
@@ -1204,6 +1220,16 @@ class _BusinessScheduleScreenState extends State<BusinessScheduleScreen>
                 child: ListView(
                   padding: const EdgeInsets.all(16),
                   children: [
+                    if (can('customersView') &&
+                        MediaQuery.sizeOf(context).width < 600)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: Text(
+                          'Customers & Schedule',
+                          key: const Key('customers-schedule-heading'),
+                          style: Theme.of(context).textTheme.headlineSmall,
+                        ),
+                      ),
                     Text(
                       can('customersView')
                           ? 'Customers, estimates, jobs and follow-ups in one place.'

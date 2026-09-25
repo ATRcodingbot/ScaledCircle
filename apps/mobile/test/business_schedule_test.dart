@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
+import 'package:flutter_app/navigation/app_shell_identity.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_app/screens/business/business_schedule_screen.dart';
 import 'package:flutter_app/services/business_operations_service.dart';
@@ -88,6 +90,52 @@ class FakeOperations extends BusinessOperationsService {
 }
 
 void main() {
+  for (final width in [320.0, 390.0]) {
+    for (final scale in [1.0, 2.0]) {
+      testWidgets('Schedule title stays readable at $width and $scale', (
+        tester,
+      ) async {
+        tester.view.physicalSize = Size(width, 1000);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        await tester.pumpWidget(
+          AppShellIdentity(
+            uid: 'owner',
+            profile: const {'role': 'business'},
+            workspace: const {'actorUid': 'owner', 'isOwner': true},
+            child: MaterialApp(
+              builder: (context, child) => MediaQuery(
+                data: MediaQuery.of(
+                  context,
+                ).copyWith(textScaler: TextScaler.linear(scale)),
+                child: child!,
+              ),
+              home: BusinessScheduleScreen(
+                businessId: 'test',
+                service: FakeOperations(),
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        final heading = find.byKey(const Key('customers-schedule-heading'));
+        expect(heading, findsOneWidget);
+        final paragraph = tester.renderObject<RenderParagraph>(heading);
+        expect(paragraph.didExceedMaxLines, isFalse);
+        expect(tester.getRect(heading).right, lessThanOrEqualTo(width));
+        expect(
+          find.descendant(
+            of: find.byType(AppBar),
+            matching: find.text('Schedule'),
+          ),
+          findsOneWidget,
+        );
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox.shrink());
+      });
+    }
+  }
   for (final member in [false, true]) {
     testWidgets(
       'confirmed removal works for ${member ? 'member' : 'owner'} and Cancel does not mutate',
@@ -230,12 +278,23 @@ void main() {
       await tester.pumpWidget(const SizedBox());
     },
   );
-  testWidgets('owner Schedule root retains visible Back even with workspaceHome', (tester) async {
-    await tester.pumpWidget(MaterialApp(home:BusinessScheduleScreen(businessId:'owner',service:FakeOperations(),workspaceHome:true)));
-    await tester.pumpAndSettle();
-    expect(find.text('Back'),findsOneWidget);
-    expect(find.text('Workspace'),findsNothing);
-  });
+  testWidgets(
+    'owner Schedule root retains visible Back even with workspaceHome',
+    (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: BusinessScheduleScreen(
+            businessId: 'owner',
+            service: FakeOperations(),
+            workspaceHome: true,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Back'), findsOneWidget);
+      expect(find.text('Workspace'), findsNothing);
+    },
+  );
   testWidgets('owner Back returns to the workspace that opened Schedule', (
     tester,
   ) async {
@@ -383,9 +442,15 @@ void main() {
         );
         await tester.pumpAndSettle();
         expect(find.text('Customers & Schedule'), findsOneWidget);
+        await tester.scrollUntilVisible(
+          find.text('Today'),
+          100,
+          scrollable: find.byType(Scrollable).first,
+        );
         expect(find.text('Today'), findsOneWidget);
         expect(find.text('Week'), findsOneWidget);
         expect(find.text('Month'), findsOneWidget);
+        await tester.ensureVisible(find.text('Customers'));
         await tester.tap(find.text('Customers'));
         await tester.pumpAndSettle();
         await tester.tap(find.text('Add customer'));

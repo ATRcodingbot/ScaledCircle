@@ -814,7 +814,6 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
                     50,
                   ),
                   children: [
-                    const MarketStatusCard(business: true),
                     Card(
                       child: ListTile(
                         leading: const Icon(Icons.calendar_month_outlined),
@@ -886,6 +885,7 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
                         ),
                       ],
                     ),
+                    const MarketStatusCard(business: true),
                     const SizedBox(height: 12),
                     if (BusinessWorkspaceSession.can('campaigns') &&
                         campaigns.isNotEmpty)
