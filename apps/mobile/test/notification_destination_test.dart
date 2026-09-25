@@ -412,6 +412,7 @@ void main() {
                   'type': 'agent_daily_brief',
                   'title': 'Daily research summary',
                   'message': 'No new leads. Last run 2026-09-25T13:00:00Z',
+                  'createdAt': Timestamp.fromDate(DateTime.utc(2026, 9, 25, 13)),
                   'read': false,
                   'deepLink': {
                     'destination': 'business_growth_agents',
@@ -428,6 +429,7 @@ void main() {
       await tester.tap(find.text('Read summary'));
       await tester.pumpAndSettle();
       expect(find.textContaining('2026-09-25T13:00:00Z'), findsOneWidget);
+      expect(find.textContaining('(local time)'), findsOneWidget);
       expect(
         find.textContaining('Full Growth reports are available on the web'),
         findsOneWidget,

@@ -178,6 +178,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
             title: Text(data['title']?.toString() ?? 'Research summary'),
             content: SingleChildScrollView(
               child: Text(
+                '${_summaryTime(context, data['createdAt'])}'
                 '${data['detail'] ?? data['message'] ?? ''}\n\n'
                 'Full Growth reports are available on the web to authorized accounts. '
                 'This summary does not start research or send outreach.',
@@ -213,7 +214,9 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
             .collection('campaigns')
             .doc(target.campaignId)
             .get();
-        if (!context.mounted) return;
+        if (!context.mounted || epoch != _sessionEpoch || uid != _activeUid) {
+          return;
+        }
         if (!campaign.exists) {
           _showMessage(context, 'This campaign is no longer available.');
           return;
@@ -229,7 +232,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       }
       // Start navigation first. A failed route must not acquire an open receipt,
       // and an unavailable receipt must not block the authorized destination.
-      if (data['read'] != true) {
+      if (epoch == _sessionEpoch && uid == _activeUid && data['read'] != true) {
         try {
           if (widget.markNotificationRead != null) {
             await widget.markNotificationRead!(notification);
@@ -641,7 +644,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       return '';
     }
 
-    final date = timestamp.toDate();
+    final date = timestamp.toDate().toLocal();
 
     final difference = DateTime.now().difference(date);
 
@@ -658,5 +661,13 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     }
 
     return '${date.month}/${date.day}/${date.year}';
+  }
+
+  String _summaryTime(BuildContext context, dynamic timestamp) {
+    if (timestamp is! Timestamp) return '';
+    final local = timestamp.toDate().toLocal();
+    final labels = MaterialLocalizations.of(context);
+    return '${labels.formatMediumDate(local)} · '
+        '${labels.formatTimeOfDay(TimeOfDay.fromDateTime(local))} (local time)\n\n';
   }
 }
