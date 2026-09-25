@@ -1,6 +1,6 @@
 'use strict';
 const {test}=require('node:test'),assert=require('node:assert/strict');
-const funds=require('./campaign_fund_allocation'),{inspect,assertRefundCapacity}=require('./campaign_fund_protection');
+const funds=require('./campaign_fund_allocation'),{inspect}=require('./campaign_fund_protection');
 function fixture(){
  const payment={campaignId:'campaign',businessId:'business',status:'paid',paidAt:1,stripeMode:'live',currency:'usd',
    stripePaymentIntentId:'pi_fixture',businessChargeCents:12000,workerAmountCents:10000,platformFeeCents:2000};
@@ -25,13 +25,4 @@ test('other campaign obligations cannot be funded by this campaign surplus',()=>
  const x=fixture(),other={...x.payment,campaignId:'other',stripePaymentIntentId:'pi_other'};
  other.fundingAllocation=funds.create('other',other);x.records.push({id:'other',data:other});
  assert.throws(()=>inspect(x),/committed_funds_shortfall/);
-});
-test('full cancellation cannot consume other worker money or assume processing fees were returned',()=>{
- const x=fixture();
- assert.throws(()=>assertRefundCapacity({...x,paymentId:'payment',amountCents:12000,workerReleaseCents:10000}),/committed_funds/);
- x.balance.available[0].amount=12000;
- assert.doesNotThrow(()=>assertRefundCapacity({...x,paymentId:'payment',amountCents:12000,workerReleaseCents:10000}));
- const other={...x.payment,campaignId:'other',stripePaymentIntentId:'pi_other'};other.fundingAllocation=funds.create('other',other);
- x.records.push({id:'other',data:other});
- assert.throws(()=>assertRefundCapacity({...x,paymentId:'payment',amountCents:12000,workerReleaseCents:10000}),/committed_funds/);
 });

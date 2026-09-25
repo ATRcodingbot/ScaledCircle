@@ -28,27 +28,13 @@ function inspect({payment,account,balanceSettings,intent,balance,records,nowMs})
       continue;
     }
     const summary=funds.view(record.id,p);
-    required+=summary.unresolvedHeldCents+cents(p.platformFeeRefundReservedCents||0);
+    const pending=Object.values(a.refundCapacity||{}).some(r=>r.state!=='reconciled');
+    required+=pending?require('./campaign_refund_capacity').protectedAmount(record.id,p):summary.unresolvedHeldCents+cents(p.platformFeeRefundReservedCents||0);
   }
   if(!Number.isSafeInteger(required)||available<required)fail('platform_committed_funds_shortfall');
   return {version:funds.VERSION,paymentIntentId:intent.id,withdrawalControl:'committed_funds_retained',
     sourceAvailable:true,providerBalanceTransactionId:transaction.id,verifiedAtMs:nowMs,
     netAvailableCents:net,providerFeeCents:fee};
-}
-function assertRefundCapacity({paymentId,amountCents,balance,records,workerReleaseCents=0,feeReleaseCents=0}) {
-  cents(workerReleaseCents);cents(feeReleaseCents);
-  cents(amountCents);const available=balance?.available?.find(x=>x.currency==='usd')?.amount;
-  if(balance?.livemode!==true||!Number.isSafeInteger(available))fail('refund_available_funds_unknown');
-  let committed=0;
-  for(const record of records) {
-    const p=record.data;
-    if(!p.fundingAllocation){if(['paid','funded','disputed','refund_pending','refund_review_required'].includes(p.status))fail('legacy_campaign_allocation_review_required');continue;}
-    const view=funds.view(record.id,p);
-    if(record.id===paymentId&&workerReleaseCents>view.uncommittedWorkerCents)fail('earned_funds_not_refundable');
-    committed+=view.unresolvedHeldCents-(record.id===paymentId?workerReleaseCents:0);
-    committed+=Math.max(0,cents(p.platformFeeRefundReservedCents||0)-(record.id===paymentId?feeReleaseCents:0));
-  }
-  if(available-committed<amountCents)fail('refund_would_use_committed_funds');
 }
 async function refresh({db,stripe,paymentId,now=Date.now}) {
   const ref=db.doc('campaignPayments/'+paymentId),initial=(await ref.get()).data();
@@ -66,4 +52,4 @@ async function refresh({db,stripe,paymentId,now=Date.now}) {
     tx.update(ref,{fundingProtection:proof});return proof;
   });
 }
-module.exports={inspect,refresh,assertRefundCapacity};
+module.exports={inspect,refresh};

@@ -65,13 +65,32 @@ function prepare() {
   return s;
  });
  source=section(source,'cancelUnassignedFundedCampaign',s=>once(s,'    const refund = await stripe.refunds.create({charge: charge.id,',
- `    if(payment.fundingAllocation) {
-      const [balance,all]=await Promise.all([stripe.balance.retrieve(),db.collection('campaignPayments').limit(501).get()]);
-      if(all.size>500)throw Error('campaign_allocation_inventory_review_required');
-      require('./campaign_fund_protection').assertRefundCapacity({paymentId,amountCents:refundableCents,balance,workerReleaseCents:payment.workerAmountCents,
-        records:all.docs.map(d=>({id:d.id,data:d.data()}))});
+ `    if(!payment.fundingAllocation)throw Error('legacy_campaign_allocation_review_required');
+    if(payment.fundingAllocation) {
+      const capacity=await require('./campaign_refund_capacity').reserve({db,stripe,paymentId,operationId:'cancel_'+paymentId,
+        amountCents:refundableCents,workerCents:payment.workerAmountCents,feeCents:refundableCents-payment.workerAmountCents});
+      if(!capacity.claimed)return {campaignId:input.campaignId,paymentId,status:'refund_review_required',duplicate:true};
     }
     const refund = await stripe.refunds.create({charge: charge.id,`));
+ source=section(source,'cancelUnassignedFundedCampaign',s=>{
+   s=once(s,'    await Promise.all([\n      paymentRef.set({stripeRefundId: refund.id,',`    if(payment.fundingAllocation)await require('./campaign_refund_capacity').observe({db,paymentId,operationId:'cancel_'+paymentId,refund});
+    await Promise.all([
+      paymentRef.set({stripeRefundId: refund.id,`);
+   return s;
+ });
+ source=once(source,'    transaction.set(campaignRef, {...campaignUpdate, updatedAt: FieldValue.serverTimestamp()}, {merge: true});\n  });\n}',
+ `    transaction.set(campaignRef, {...campaignUpdate, updatedAt: FieldValue.serverTimestamp()}, {merge: true});
+  });
+  const saved=(await paymentRef.get()).data();
+  for(const operationId of Object.keys(saved?.fundingAllocation?.refundCapacity||{})) {
+    const capacity=require('./campaign_refund_capacity');
+    if(saved.stripeRefundId&&operationId==='cancel_'+paymentId) {
+      const refund=await stripeClient().refunds.retrieve(saved.stripeRefundId);
+      await capacity.observe({db,paymentId,operationId,refund});
+    }
+    await capacity.reconcile({db,stripe:stripeClient(),paymentId,operationId});
+  }
+}`);
  // Publication is one transaction: exact legacy valid-zone filtering is retained;
  // prospective canvassing additionally verifies its funded immutable offer.
  source=section(source,'publishFundedCampaign',()=>`exports.publishFundedCampaign = onCall(OPTIONS, async request=>{

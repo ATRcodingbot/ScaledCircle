@@ -57,6 +57,7 @@ function reserve(paymentId,p,contract) {
   if (!usable(p) || a.sourceState !== 'healthy') fail('campaign_funding_unusable');
   if (a.assignments[b.zoneId]) { assertBinding(a,contract); return a; }
   const t=totals(a);
+  if (Object.values(a.refundCapacity||{}).some(r=>r.state!=='reconciled')) fail('campaign_refund_capacity_held');
   if (b.maximumCents<=0 || sum([t.committed,t.released,t.refunded,b.maximumCents])>a.origin.workerBudgetCents) fail('campaign_reserve_exhausted');
   a.assignments[b.zoneId]={...b,reservedCents:b.maximumCents,earnedCents:0,paidCents:0,started:false,payouts:{}};
   a.revision++; return a;
@@ -111,6 +112,7 @@ function sourceState(paymentId,p,state) {
   const a=checked(paymentId,p);if(a.sourceState===state)return a;
   a.sourceState=state;
   if(state==='refunded') {
+    a.refundedFeeCents=a.origin.platformFeeCents;
     // No work is released once started, even if not reviewed/earned yet.
     for(const r of Object.values(a.assignments))if(!r.started&&!r.settled){a.refundedWorkerCents+=r.reservedCents;r.reservedCents=0;}
     const t=totals(a);a.refundedWorkerCents+=Math.max(0,a.origin.workerBudgetCents-t.committed-t.refunded);
@@ -142,7 +144,7 @@ function view(paymentId,p) {
     platformFeeCents:a.origin.platformFeeCents,workerReserveCents:t.reserved,workerEarnedCents:t.earned,
     workerPaidCents:t.paid,uncommittedWorkerCents:uncommitted,releasedWorkerCents:t.released,
     unresolvedHeldCents:held,fundingState:p.status==='disputed'||a.sourceState==='disputed'?'disputed':
-      !healthy?(t.owed||t.reserved?'shortfall':a.sourceState):retained?'healthy':'held',
+      !healthy?(t.owed||t.reserved?'shortfall':a.sourceState):Object.values(a.refundCapacity||{}).some(r=>r.state!=='reconciled')?'held':retained?'healthy':'held',
     replacementFundingRequired:!healthy&&t.owed>0,
     // Unknown provider fees or missing cash protection never become withdrawable.
     safePlatformWithdrawalCents:0};
@@ -152,6 +154,7 @@ function withdrawal({availableCents,allocations,otherCommittedCents=0,providerCo
   if(!providerControlVerified)return 0;
   let protectedCents=otherCommittedCents, eligible=0;
   for(const a of allocations) {
+    if(Object.values(a.refundCapacity||{}).some(r=>r.state!=='reconciled'))return 0;
     const t=totals(a);
     if(a.sourceState!=='healthy'||a.providerFeeCents===null||a.providerAvailableCents===null)return 0;
     const remainingWorker=a.origin.workerBudgetCents-t.paid-t.refunded;

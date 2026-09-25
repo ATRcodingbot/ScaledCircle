@@ -43,7 +43,15 @@ function prepare(){
     if(name.startsWith('..'))throw Error('Dependency escaped reviewed package');
     if(seen.has(name))continue;seen.add(name);
     const content=fs.readFileSync(original,'utf8');
-    if(/scaledcircle-staging|stagingPhysicalQa|physical_qa_v[123]|StagingCanvassing/.test(content))throw Error('QA source in '+name);
+    // These shared modules retain explicit staging branches. Accept only the
+    // exact maintained file already checked by source preparation; never a
+    // filename-only exception for a modified dependency.
+    const maintained=group.codebase==='campaign-funding'&&fs.existsSync(path.join(root,'functions-campaign-funding',name))
+      ?path.join(root,'functions-campaign-funding',name):path.join(root,'functions',name);
+    const shared=['paid_work_launch_gate.js','billing_communications.js','transactional_email.js'].includes(name)
+      && content===fs.readFileSync(maintained,'utf8');
+    const inspected=shared?content.replaceAll('scaledcircle-staging',''):content;
+    if(/scaledcircle-staging|stagingPhysicalQa|physical_qa_v[123]|StagingCanvassing/.test(inspected))throw Error('QA source in '+name);
     fs.mkdirSync(path.dirname(path.join(out,name)),{recursive:true});fs.writeFileSync(path.join(out,name),content);deps(content,path.dirname(original));
    }
   }

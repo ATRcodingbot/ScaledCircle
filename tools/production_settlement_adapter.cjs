@@ -32,13 +32,18 @@ function moduleSource(name,input){
       }
       tx.update(db.doc('campaignSettlements/'+op.zoneId),{returnStatus:'refunded',`);
   s=once(s,"      const claimed=await db.runTransaction(async tx=>",
-    `      if(payment.fundingAllocation) {
-        const [balance,all]=await Promise.all([provider.balance.retrieve(),db.collection('campaignPayments').limit(501).get()]);
-        if(all.size>500)fail('campaign_allocation_inventory_review_required');
-        require('./campaign_fund_protection').assertRefundCapacity({paymentId:op.paymentId,amountCents:op.amountCents,balance,
-          workerReleaseCents:op.workerRefundCents,feeReleaseCents:op.platformFeeRefundCents,records:all.docs.map(d=>({id:d.id,data:d.data()}))});
+    `      if(!payment.fundingAllocation)fail('legacy_campaign_allocation_review_required');
+      if(payment.fundingAllocation) {
+        const capacity=await require('./campaign_refund_capacity').reserve({db,stripe:provider,paymentId:op.paymentId,operationId:refundOperationId,
+          amountCents:op.amountCents,workerCents:op.workerRefundCents,feeCents:op.platformFeeRefundCents});
+        if(!capacity.claimed)return {status:'hold_unknown_outcome'};
       }
       const claimed=await db.runTransaction(async tx=>`);
+  s=once(s,'    await db.runTransaction(async tx=>{\n      const [fresh,pay]=',`    if(payment.fundingAllocation)await require('./campaign_refund_capacity').observe({db,paymentId:op.paymentId,operationId:refundOperationId,refund});
+    await db.runTransaction(async tx=>{
+      const [fresh,pay]=`);
+  s=once(s,"    return {status:refund.status==='succeeded'?'refunded':refund.status,refundOperationId};",`    if(payment.fundingAllocation)await require('./campaign_refund_capacity').reconcile({db,stripe:provider,paymentId:op.paymentId,operationId:refundOperationId});
+    return {status:refund.status==='succeeded'?'refunded':refund.status,refundOperationId};`);
   s=s.replaceAll("!== 'test'","!== 'live'").replaceAll("!=='test'","!=='live'")
    .replaceAll("(productionAuthority ? 'live' : 'test')","'live'")
    .replaceAll('Verified staging TEST funding','Verified production funding').replaceAll('verified TEST payment','verified production payment')
