@@ -39,11 +39,14 @@ class CaptureTests(unittest.TestCase):
             path = Path(directory)
             output = []
             runner = capture.StageRunner(path / 'status.json', path / 'private', budget=3, emit=output.append)
+            before_kill = []
+            runner.before_terminate = lambda: before_kill.append(runner.data['stages'][-1]['exitCode'])
             started = time.monotonic()
             with self.assertRaises(capture.StageFailure):
                 runner.run('compile-simulator', [sys.executable, '-c', 'import time; time.sleep(30)'], .2)
             runner.finish(False)
             self.assertLess(time.monotonic() - started, 7)
+            self.assertEqual(before_kill, [None])
             stage = json.loads((path / 'status.json').read_text())['stages'][0]
             self.assertEqual(stage['status'], 'timeout')
             self.assertIsNotNone(stage['exitCode'])

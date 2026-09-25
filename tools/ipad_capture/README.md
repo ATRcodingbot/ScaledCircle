@@ -1,5 +1,40 @@
 # Isolated iPad capture — instrumented proposal, not authorized to run
 
+## September 25 login-timeout follow-up (no run authorized)
+
+Run `6ab654095688fa367f36d095` passed early authentication, compilation,
+installation, driver connection and startup, then timed out at the aggregate
+75-second login stage. Its markers do not establish the last login interaction.
+No historical exception or final screen can be reconstructed from those markers.
+
+The pinned app starts at PublicLandingScreen; the old driver searched for Email
+without first opening its header Log In action. The capture-only driver now
+observes entry, opens that maintained route when needed, and records bounded
+before/after markers for fields, exact input entry, obscured password, button,
+submission, auth observation, expected UID and workspace initialization. The
+outer login deadline remains 75 seconds. No production routing/auth code changes.
+
+The host independently runs bounded `xcrun simctl io <actual-id> screenshot`
+at startup before input and on failure before logout/process termination.
+Diagnostic PNGs and safe last-step metadata are separate from listing images;
+unsafe or failed captures retain a fixed failure category and exit status.
+No raw widget trees, field values, tokens or command stderr are exported.
+
+Local validation: 21 Python tests and 10 Flutter/driver/widget tests pass.
+Capture harness analysis passed in its disposable driver-enabled validation
+context. These are offline/synthetic checks, not iOS simulator success.
+
+Codemagic billing readback: 414/500 free minutes used, 86 remaining. Temporary
+capture inputs remain deleted. No new CI run, application build or release action.
+Next proposal requires separate approval: one $0, at-most-30-minute staged
+capture using the unchanged application source, with independent failure evidence.
+
+Attended fallback: Codemagic supports per-run SSH/VNC via Explore build machine.
+Windows OpenSSH and Git Bash exist locally; no compatible VNC viewer was found.
+Windows Remote Desktop is not the macOS VNC client. GUI observation therefore
+needs an approved VNC client and a separately approved bounded remote session;
+no client installation or session has been started.
+
 ## September 25 authentication follow-up
 
 Run `6ab64604cac965652b5ebc90` reached native app startup, then received

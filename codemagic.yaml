@@ -21,5 +21,7 @@ workflows:
     artifacts:
       - /tmp/sc-ipad-capture-output/*.png
       - /tmp/sc-ipad-capture-output/manifest.json
+      - /tmp/sc-ipad-capture-output/diagnostics/*.png
+      - /tmp/sc-ipad-capture-output/diagnostics/*.json
       - /tmp/sc-ipad-capture-status.json
 # No signing integration, publishing, App Store upload, or build-number increment.

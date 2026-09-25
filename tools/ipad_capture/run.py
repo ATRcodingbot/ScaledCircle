@@ -16,6 +16,7 @@ import sys
 import tempfile
 import time
 from auth_preflight import verify as verify_auth, AuthPreflightFailure
+from diagnostics import DiagnosticCapture
 
 SOURCE = '26f29133fcd72edecf5c71497712674293228341'
 SDK = '058e0af2c2b57e369d905a03ac9748b0ebf543c6'
@@ -32,12 +33,17 @@ STAGES = {'input-preflight', 'auth-preflight', 'verify-host', 'host-macos-versio
           'list-runtimes', 'list-device-types', 'select-runtime', 'create-simulator',
           'boot-simulator', 'wait-simulator-boot', 'compile-simulator', 'verify-app-bundle',
           'install-simulator-app', 'launch-and-driver', 'validate-screenshot-artifacts'}
-DRIVER_STAGES = {'connect', 'app-startup', 'authenticate', 'logout', 'close', 'complete'} | {
+DRIVER_STAGES = {'entry-public', 'entry-login', 'auth-pending', 'workspace-pending','login-entry', 'login-open', 'login-screen', 'email-find', 'email-input',
+    'password-find', 'password-obscured', 'password-input', 'login-button', 'login-submit',
+    'auth-observe', 'uid-match', 'workspace-initialize', 'diagnostic-startup', 'diagnostic-failure', 'connect', 'app-startup', 'authenticate', 'logout', 'close', 'complete'} | {
     f'{screen}-{phase}' for screen in SCREENS for phase in ('navigation', 'readiness', 'capture')}
 DRIVER_OUTCOMES = {'running', 'success', 'failed', 'timeout'}
 DRIVER_CATEGORIES = {'none', 'driver_unavailable', 'startup_not_ready', 'harness_mismatch',
     'auth_runtime_mismatch', 'auth_input_whitespace_unsupported', 'auth_refused', 'auth_timeout', 'auth_failed', 'auth_identity_mismatch', 'auth_unverified',
     'auth_network_unavailable', 'auth_invalid_credentials', 'route_unavailable', 'screen_not_ready',
+    'finder_failed', 'input_failed', 'button_unavailable', 'ui_message_present',
+    'auth_user_not_found', 'auth_wrong_password', 'auth_invalid_email', 'auth_rate_limited',
+    'workspace_failed', 'workspace_denied', 'flutter_dialog_present',
     'screenshot_failed', 'cleanup_failed', 'stage_timeout', 'invalid_input'}
 
 
@@ -126,6 +132,7 @@ class StageRunner:
         self.data = {'source': SOURCE, 'startedAtUtc': utc(), 'budgetSeconds': budget,
                      'status': 'running', 'stages': [], 'driverEvents': []}
         self.tick = lambda: None
+        self.before_terminate = lambda: None
         self.save()
 
     def save(self):
@@ -211,6 +218,10 @@ class StageRunner:
                         raise StageFailure('Command failed')
                 finally:
                     if proc.poll() is None:
+                        try:
+                            self.before_terminate()  # evidence BEFORE process-tree termination
+                        except Exception:
+                            event['diagnostics'].append('independent_capture_failed')
                         if os.name != 'nt':
                             os.killpg(proc.pid, signal.SIGTERM)
                         else:
@@ -364,12 +375,17 @@ def main():
         metadata = {}
         driver_status = private / 'driver-status.json'
         last_checkpoint = 0.0
+        diagnostic = None
         def checkpoint(force=False):
             nonlocal last_checkpoint
             if not force and time.monotonic() - last_checkpoint < 1:
                 return
             last_checkpoint = time.monotonic()
             runner.import_driver(driver_status)
+            if diagnostic is not None:
+                for event in list(runner.data['driverEvents']):
+                    if event['stage'] in ('diagnostic-startup', 'diagnostic-failure') and event['outcome'] == 'running':
+                        diagnostic.capture(event['stage'].split('-')[1], runner.data['driverEvents'])
             preserve_screens(captures, OUTPUT, metadata, approved_screens(runner.data['driverEvents']))
         runner.tick = checkpoint
         try:
@@ -431,7 +447,7 @@ def main():
                 pubspec.write_text(pubspec.read_text().replace('dev_dependencies:\n', 'dev_dependencies:\n  flutter_driver:\n    sdk: flutter\n', 1))
                 harness = mobile / 'test_driver'
                 harness.mkdir(exist_ok=True)
-                for filename in ['capture_app.dart', 'capture_driver.dart']:
+                for filename in ['capture_app.dart', 'capture_driver.dart', 'login_steps.dart']:
                     shutil.copyfile(tooling / filename, harness / filename)
             runner.run('resolve-harness-dependencies', ['flutter', 'pub', 'get'], 180, cwd=mobile)
             with runner.step('verify-resolved-lock', 10):
@@ -457,7 +473,9 @@ def main():
                 if not (bundle / info['CFBundleExecutable']).is_file():
                     raise StageFailure('Simulator executable missing')
             runner.run('install-simulator-app', ['xcrun', 'simctl', 'install', simulator_id, str(bundle)], 60)
-            child_env = {**os.environ, 'IPAD_SIMULATOR_UDID': simulator_id,
+            diagnostic = DiagnosticCapture(simulator_id, private / 'diagnostic-ack', OUTPUT / 'diagnostics')
+            runner.before_terminate = lambda: diagnostic.capture('failure', runner.data['driverEvents'])
+            child_env = {**os.environ, 'IPAD_DIAGNOSTIC_ACK_DIR': str(private / 'diagnostic-ack'), 'IPAD_SIMULATOR_UDID': simulator_id,
                          'IPAD_CAPTURE_OUTPUT': str(captures), 'IPAD_DRIVER_STATUS_FILE': str(driver_status)}
             runner.run('launch-and-driver', ['flutter', 'drive', '--no-pub', '--debug', '-d', simulator_id,
                 '--use-application-binary=' + str(bundle), '--target=test_driver/capture_app.dart',

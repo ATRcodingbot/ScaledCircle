@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io' as io;
 import 'dart:typed_data';
+import 'login_steps.dart';
 import 'package:flutter_driver/flutter_driver.dart';
 
 const captureProtocol = 2;
@@ -30,8 +31,26 @@ const captureCategories = {
   'cleanup_failed',
   'stage_timeout',
   'invalid_input',
+  'finder_failed',
+  'input_failed',
+  'button_unavailable',
+  'ui_message_present',
+  'auth_user_not_found',
+  'auth_wrong_password',
+  'auth_invalid_email',
+  'auth_rate_limited',
+  'workspace_failed',
+  'workspace_denied',
+  'flutter_dialog_present',
 };
 final captureStages = {
+  ...loginSteps,
+  'entry-public',
+  'entry-login',
+  'auth-pending',
+  'workspace-pending',
+  'diagnostic-startup',
+  'diagnostic-failure',
   'connect',
   'app-startup',
   'authenticate',
@@ -99,7 +118,8 @@ class CaptureProgress {
 abstract interface class CaptureTransport {
   Future<void> connect();
   Future<void> startup();
-  Future<void> authenticate();
+  Future<void> authenticate(CaptureProgress progress);
+  Future<void> diagnostic(String name);
   Future<void> navigate(String route);
   Future<void> ready(String widgetType);
   Future<void> capture(String name);
@@ -127,9 +147,15 @@ Future<void> captureSequence(
       failureCategory: 'startup_not_ready',
     );
     await progress.stage(
+      'diagnostic-startup',
+      limit(18),
+      () => transport.diagnostic('startup'),
+      failureCategory: 'screenshot_failed',
+    );
+    await progress.stage(
       'authenticate',
       limit(75),
-      transport.authenticate,
+      () => transport.authenticate(progress),
       failureCategory: 'auth_failed',
     );
     for (final screen in captureScreens) {
@@ -156,6 +182,16 @@ Future<void> captureSequence(
       () async {},
       failureCategory: 'invalid_input',
     );
+  } catch (_) {
+    try {
+      await progress.stage(
+        'diagnostic-failure',
+        limit(18),
+        () => transport.diagnostic('failure'),
+        failureCategory: 'screenshot_failed',
+      );
+    } catch (_) {}
+    rethrow;
   } finally {
     // Cleanup cannot discard an already completed screenshot. History retains
     // the original failure even when the last current-status entry is cleanup.
@@ -213,6 +249,7 @@ class FlutterCaptureTransport implements CaptureTransport {
   FlutterCaptureTransport(this.environment);
   final Map<String, String> environment;
   FlutterDriver? _driver;
+  bool _stopped = false;
   FlutterDriver get driver =>
       _driver ?? (throw const CaptureFailure('driver_unavailable'));
 
@@ -228,6 +265,7 @@ class FlutterCaptureTransport implements CaptureTransport {
     Map<String, Object?> input,
     Duration timeout,
   ) async {
+    if (_stopped && input['action'] != 'logout') throw const CaptureFailure('stage_timeout');
     return captureReply(
       await driver
           .requestData(jsonEncode(input), timeout: timeout)
@@ -252,7 +290,7 @@ class FlutterCaptureTransport implements CaptureTransport {
   }
 
   @override
-  Future<void> authenticate() async {
+  Future<void> authenticate(CaptureProgress progress) async {
     final email = environment['IPAD_REVIEWER_EMAIL'];
     final password = environment['IPAD_REVIEWER_PASSWORD'];
     if (email == null ||
@@ -261,46 +299,192 @@ class FlutterCaptureTransport implements CaptureTransport {
         password.isEmpty) {
       throw const CaptureFailure('invalid_input');
     }
-    // The pinned LoginScreen trims both fields. Refuse incompatible input rather
-    // than silently changing password bytes or modifying the released app.
     if (email.trim() != email || password.trim() != password) {
       throw const CaptureFailure('auth_input_whitespace_unsupported');
     }
-    final initial = await request({
-      'action': 'verify-login',
-      'expectedUid': environment['IPAD_REVIEWER_UID'],
-    }, const Duration(seconds: 5));
-    if (initial['outcome'] != 'auth_pending') {
-      throw CaptureFailure(
-        initial['category'] == 'auth_runtime_mismatch'
-            ? 'auth_runtime_mismatch'
-            : 'auth_refused',
-      );
-    }
-    // Enter the actual maintained login fields; await each edit before submit.
-    await driver.setSemantics(true, timeout: const Duration(seconds: 5));
-    await driver.tap(find.bySemanticsLabel('Email'));
-    await driver.enterText(email);
-    await driver.tap(find.bySemanticsLabel('Password'));
-    await driver.enterText(password);
-    await driver.tap(find.text('Login'));
-    for (var attempt = 0; attempt < 45; attempt++) {
-      final result = await request({
-        'action': 'verify-login',
-        'expectedUid': environment['IPAD_REVIEWER_UID'],
-      }, const Duration(seconds: 3));
-      if (result['outcome'] == 'authenticated') return;
-      if (result['outcome'] != 'auth_pending') {
-        final category = result['category'];
+    Future<Map<String, dynamic>> state() =>
+        request({'action': 'login-state'}, const Duration(seconds: 2));
+    void check(Map<String, dynamic> value) {
+      final error = value['error'];
+      if (error is String && error != 'none') {
         throw CaptureFailure(
-          category is String && captureCategories.contains(category)
-              ? category
-              : 'auth_failed',
+          captureCategories.contains(error) ? error : 'auth_failed',
         );
       }
-      await Future<void>.delayed(const Duration(seconds: 1));
+      if (value['dialog'] == true) {
+        throw const CaptureFailure('flutter_dialog_present');
+      }
     }
-    throw const CaptureFailure('auth_timeout');
+
+    final fields = {
+      'Email': find.bySemanticsLabel('Email'),
+      'Password': find.bySemanticsLabel('Password'),
+    };
+    await driver.runUnsynchronized(() async {
+      await runLoginSteps(
+        (step) async {
+          if (_stopped) throw const CaptureFailure('stage_timeout');
+          if (step == 'login-entry') {
+            final initial = await request({
+              'action': 'verify-login',
+              'expectedUid': environment['IPAD_REVIEWER_UID'],
+            }, const Duration(seconds: 2));
+            if (initial['outcome'] != 'auth_pending') {
+              throw CaptureFailure(
+                initial['category'] == 'auth_runtime_mismatch'
+                    ? 'auth_runtime_mismatch'
+                    : 'auth_refused',
+              );
+            }
+            final view = await state();
+            check(view);
+            if (!['public', 'login'].contains(view['route'])) {
+              throw const CaptureFailure('route_unavailable');
+            }
+            await progress.stage(
+              'entry-${view['route']}',
+              const Duration(seconds: 1),
+              () async {},
+              failureCategory: 'route_unavailable',
+            );
+            return view['route'] as String;
+          }
+          if (step == 'login-open') {
+            final button = find.descendant(
+              of: find.byType('_Navigation'),
+              matching: find.text('Log In'),
+            );
+            await driver.waitFor(button, timeout: const Duration(seconds: 3));
+            await driver.tap(button, timeout: const Duration(seconds: 3));
+          } else if (step == 'login-screen') {
+            await driver.waitFor(
+              find.byType('LoginScreen'),
+              timeout: const Duration(seconds: 4),
+            );
+            await driver.setSemantics(
+              true,
+              timeout: const Duration(seconds: 1),
+            );
+            final view = await state();
+            check(view);
+            if (view['route'] != 'login') {
+              throw const CaptureFailure('route_unavailable');
+            }
+          } else if (step == 'email-find' || step == 'password-find') {
+            await driver.waitFor(
+              fields[step == 'email-find' ? 'Email' : 'Password']!,
+              timeout: const Duration(seconds: 4),
+            );
+          } else if (step == 'password-obscured') {
+            final view = await state();
+            check(view);
+            if (view['passwordPresent'] != true ||
+                view['passwordObscured'] != true) {
+              throw const CaptureFailure('input_failed');
+            }
+          } else if (step == 'email-input' || step == 'password-input') {
+            await driver.tap(
+              fields[step == 'email-input' ? 'Email' : 'Password']!,
+              timeout: const Duration(seconds: 2),
+            );
+            await driver.enterText(
+              step == 'email-input' ? email : password,
+              timeout: const Duration(seconds: 2),
+            );
+          } else if (step == 'login-button') {
+            final view = await state();
+            check(view);
+            if (view['loginEnabled'] != true) {
+              throw const CaptureFailure('button_unavailable');
+            }
+            await driver.scrollIntoView(
+              find.text('Login'),
+              timeout: const Duration(seconds: 3),
+            );
+          } else if (step == 'login-submit') {
+            await driver.tap(
+              find.text('Login'),
+              timeout: const Duration(seconds: 3),
+            );
+          } else if (step == 'auth-observe') {
+            await progress.stage(
+              'auth-pending',
+              const Duration(seconds: 1),
+              () async {},
+              failureCategory: 'auth_failed',
+            );
+            final deadline = DateTime.now().add(const Duration(seconds: 27));
+            while (DateTime.now().isBefore(deadline)) {
+              final view = await state();
+              check(view);
+              if (view['signedIn'] == true) return 'signed_in';
+              await Future<void>.delayed(const Duration(milliseconds: 250));
+            }
+            throw const CaptureFailure('auth_timeout');
+          } else if (step == 'uid-match') {
+            final value = await request({
+              'action': 'verify-login',
+              'expectedUid': environment['IPAD_REVIEWER_UID'],
+            }, const Duration(seconds: 3));
+            if (value['outcome'] != 'authenticated') {
+              throw CaptureFailure(
+                captureCategories.contains(value['category'])
+                    ? value['category'] as String
+                    : 'auth_failed',
+              );
+            }
+          } else if (step == 'workspace-initialize') {
+            await progress.stage(
+              'workspace-pending',
+              const Duration(seconds: 1),
+              () async {},
+              failureCategory: 'workspace_failed',
+            );
+            final deadline = DateTime.now().add(const Duration(seconds: 30));
+            while (DateTime.now().isBefore(deadline)) {
+              final view = await state();
+              check(view);
+              if (view['route'] == 'business' && view['loading'] == false) {
+                return 'business';
+              }
+              await Future<void>.delayed(const Duration(milliseconds: 250));
+            }
+            throw const CaptureFailure('workspace_failed');
+          }
+          return 'completed';
+        },
+        (step, seconds, action) => progress.stage(
+          step,
+          Duration(seconds: seconds),
+          action,
+          failureCategory: step.endsWith('find')
+              ? 'finder_failed'
+              : 'input_failed',
+        ),
+      );
+    }, timeout: const Duration(seconds: 3));
+  }
+
+  @override
+  Future<void> diagnostic(String name) async {
+    if (name == 'failure') _stopped = true;
+    // The host observes the diagnostic-* marker and captures independently via
+    // simctl. Do not invoke Flutter here: the driver itself may be stalled.
+    final path = environment['IPAD_DIAGNOSTIC_ACK_DIR'];
+    if (path == null) throw const CaptureFailure('screenshot_failed');
+    final ack = io.File('$path/$name.json');
+    final deadline = DateTime.now().add(const Duration(seconds: 16));
+    while (DateTime.now().isBefore(deadline)) {
+      if (await ack.exists()) {
+        final value = jsonDecode(await ack.readAsString());
+        if (value['status'] != 'captured') {
+          throw const CaptureFailure('screenshot_failed');
+        }
+        return;
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+    }
+    throw const CaptureFailure('screenshot_failed');
   }
 
   @override
