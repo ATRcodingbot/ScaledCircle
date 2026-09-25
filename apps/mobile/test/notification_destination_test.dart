@@ -293,6 +293,55 @@ void main() {
     expect(find.text('View Earnings'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+  testWidgets(
+    'Core native daily brief opens same authorized saved summary and marks only it read',
+    (tester) async {
+      var reads = 0;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: NotificationsScreen(
+            currentUserId: 'self',
+            resolveNotification: (_) async => {
+              'available': true,
+              'type': 'agent_daily_brief',
+              'deepLink': {
+                'destination': 'business_growth_agents',
+                'reportId': 'report-one',
+              },
+            },
+            markNotificationRead: (_) async {
+              reads++;
+            },
+            notificationsStream: Stream.value(
+              _Snapshot([
+                _Document({
+                  'type': 'agent_daily_brief',
+                  'title': 'Daily research summary',
+                  'message': 'No new leads.',
+                  'read': false,
+                  'deepLink': {
+                    'destination': 'business_growth_agents',
+                    'reportId': 'report-one',
+                  },
+                }),
+              ]),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Read summary'));
+      await tester.pumpAndSettle();
+      expect(
+        find.textContaining('Full Growth reports are available on the web'),
+        findsOneWidget,
+      );
+      expect(reads, 1);
+      await tester.tap(find.text('Done'));
+      await tester.pumpAndSettle();
+      expect(reads, 1);
+    },
+  );
   for (final available in [true, false]) {
     testWidgets(
       'server destination authority available=$available survives read failure',

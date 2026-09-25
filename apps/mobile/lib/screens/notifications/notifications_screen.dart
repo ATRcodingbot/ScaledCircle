@@ -120,7 +120,27 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         return;
       }
       Future<dynamic> navigation;
-      if (target.kind == 'earnings') {
+      if (target.kind == 'detail') {
+        navigation = showDialog<void>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: Text(data['title']?.toString() ?? 'Research summary'),
+            content: SingleChildScrollView(
+              child: Text(
+                '${data['detail'] ?? data['message'] ?? ''}\n\n'
+                'Full Growth reports are available on the web to authorized accounts. '
+                'This summary does not start research or send outreach.',
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Done'),
+              ),
+            ],
+          ),
+        );
+      } else if (target.kind == 'earnings') {
         navigation = Navigator.push(
           context,
           MaterialPageRoute(builder: (_) => const ScalerWalletScreen()),
@@ -433,7 +453,19 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
 
                     const SizedBox(height: 8),
 
-                    Text(message),
+                    Text(
+                      message,
+                      maxLines:
+                          type == 'agent_daily_brief' ||
+                              type == 'agent_weekly_report'
+                          ? 4
+                          : null,
+                      overflow:
+                          type == 'agent_daily_brief' ||
+                              type == 'agent_weekly_report'
+                          ? TextOverflow.ellipsis
+                          : null,
+                    ),
 
                     const SizedBox(height: 10),
 

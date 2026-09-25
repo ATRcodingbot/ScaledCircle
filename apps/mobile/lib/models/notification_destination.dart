@@ -10,6 +10,12 @@ NotificationDestination? workspaceNotificationDestination(
   final target = notificationDestination(data);
   if (target?.route != null &&
       !NativeReleasePolicy.allowsRoute(target!.route!, web: web)) {
+    if (const {
+      'agent_daily_brief',
+      'agent_weekly_report',
+    }.contains(data['type'])) {
+      return const NotificationDestination('detail', 'Read summary');
+    }
     return null;
   }
   if (target == null || workspace == null || workspace['isOwner'] == true) {

@@ -30,6 +30,35 @@ beforeEach(async()=>{
  const auth={getUser:async id=>({uid:id,email:id+'@example.test',emailVerified:true,disabled:false})};runtime=createRuntime({db,auth,stripe,config,now:()=>clock});
 });
 after(async()=>{await db.terminate();await deleteApp(app);});
+for(const patch of [{status:'refunded',refundedWorkerAmountCents:300},{disputeOpen:true}])test('unusable source before earning creation cannot manufacture a payable earning '+JSON.stringify(patch),async()=>{
+ const contract=await get('assignmentCompensations/'+zoneId);
+ await db.doc('walletTransactions/'+earningId).delete();await db.doc('wallets/'+uid+'/transactions/'+earningId).delete();
+ await db.doc('wallets/'+uid).update({availableBalance:0});await db.doc('campaignPayments/'+paymentId).update(patch);
+ await assert.rejects(runtime.request(uid,req));assert.equal(calls.length,0);
+ assert.equal(await get('walletTransactions/'+earningId),undefined);assert.deepEqual(await get('assignmentCompensations/'+zoneId),contract);
+});
+for(const patch of [{status:'refunded',refundedWorkerAmountCents:300},{disputeOpen:true}])test('unusable funding preserves earned obligation and rejects unverified replacement '+JSON.stringify(patch),async()=>{
+ const original=await get('walletTransactions/'+earningId),contract=await get('assignmentCompensations/'+zoneId);
+ await db.doc('campaignPayments/'+paymentId).update(patch);
+ await assert.rejects(runtime.request(uid,req));
+ assert.equal(calls.length,0);assert.deepEqual(await get('walletTransactions/'+earningId),original);assert.deepEqual(await get('assignmentCompensations/'+zoneId),contract);
+ assert.equal((await runtime.status(uid)).earningReviewRequired,true);
+ await assert.rejects(runtime.reconcile('admin',{operationId:'cashout_'+'a'.repeat(64),replacementFundingId:'not-authorized'},true),{code:'cashout_request_invalid'});
+});
+test('refund after paid compensation cannot replay payment or erase the original earning',async()=>{
+ const original=await get('walletTransactions/'+earningId),r=await runtime.request(uid,req);
+ payouts.get('po_real').status='paid';await runtime.reconcile(uid,{operationId:r.operationId});
+ await db.doc('campaignPayments/'+paymentId).update({status:'refunded',refundedWorkerAmountCents:300,disputeOpen:true});
+ await runtime.reconcile('admin',{operationId:r.operationId},true);await runtime.reconcile('admin',{operationId:r.operationId},true);
+ assert.equal((await get('wallets/'+uid)).cashoutPaidCents,300);assert.equal(calls.length,2);assert.deepEqual(await get('walletTransactions/'+earningId),original);
+});
+test('uncertain original transfer remains one obligation after source dispute; no replacement execution is admitted',async()=>{
+ controls.transferError='after';const r=await runtime.request(uid,req);
+ stripe.charges.retrieve=async()=>({id:'ch_real',livemode:true,paid:true,disputed:true,currency:'usd',payment_intent:'pi_real',amount_refunded:0});
+ await runtime.reconcile('admin',{operationId:r.operationId,retry:true},true);
+ assert.equal(calls.filter(c=>c.kind==='transfer').length,1);assert.equal(calls.filter(c=>c.kind==='payout').length,0);
+ assert.equal((await get('wallets/'+uid)).cashoutPendingCents,300);assert.equal((await get('wallets/'+uid)).cashoutPaidCents,0);
+});
 test('late bank failure reopens one obligation; repayment cannot debit funding twice',async()=>{
  const r=await runtime.request(uid,req);payouts.get('po_real').status='paid';await runtime.reconcile(uid,{operationId:r.operationId});payouts.get('po_real').status='failed';await runtime.reconcile(uid,{operationId:r.operationId});await runtime.reconcile(uid,{operationId:r.operationId});let w=await get('wallets/'+uid);assert.equal(w.cashoutPaidCents,0);assert.equal(w.cashoutPendingCents,300);assert.equal(w.availableBalance,0);await runtime.reconcile(uid,{operationId:r.operationId,retry:true});payouts.get('po_real').status='paid';await runtime.reconcile(uid,{operationId:r.operationId});w=await get('wallets/'+uid);assert.equal(w.cashoutPaidCents,300);assert.equal(w.cashoutPendingCents,0);assert.equal((await get('campaignPayments/'+paymentId)).transferredWorkerAmountCents,300);assert.equal(calls.filter(x=>x.kind==='transfer').length,1);
 });
