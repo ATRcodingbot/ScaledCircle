@@ -9,7 +9,8 @@ function renderGrowthReport({report,reportId,prospects=[],kind,customer=false,op
  const subject=kind==='weekly'?'Your Growth Weekly Report':kind==='daily'?'Your Growth Daily Brief':'Your Growth team needs your review';
  const lines=[clean(report.businessName||'ScaledCircle'),'', 'Needs your attention',`${count(s.awaitingApproval)} research drafts await review.`,
   'Nothing in this report approves outreach, Social publishing or ad spend.','',
-  'What the team found',`${count(s.businessesFound)} Business prospects · ${count(s.partnersFound)} organization partners · ${count(s.individualScalersFound)} individual candidates.`];
+  'Cumulative research inventory',`${count(s.businessesFound)} Business prospects · ${count(s.partnersFound)} organization partners · ${count(s.individualScalersFound)} individual candidates.`];
+ if(s.discovery)lines.push('',require('./research_result').describe(s.discovery,null));
  if(!count(s.individualScalersFound))lines.push('No verified individual candidates yet. Organization partners are listed separately.');
  if(kind!=='important'){
   const areas=Array.isArray(s.discoveryByServiceArea)?s.discoveryByServiceArea:[];

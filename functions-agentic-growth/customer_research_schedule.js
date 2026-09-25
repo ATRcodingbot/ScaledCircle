@@ -35,7 +35,7 @@ function createService({db,FieldValue,run,now=Date.now}){
           // no stale schedule causes a rapid provider retry loop.
           nextRunAt:completed+DAY,lastErrorCode:error?(error.code||'unavailable'):null};
         if(!error)Object.assign(patch,{lastCompletedAt:completed,lastRunId:result.runId,lastReused:result.reused===true,
-          lastSourceChecks:Number.isFinite(result.sourceChecks)?result.sourceChecks:null});
+          lastDiscoveryState:result.discoveryOutcome?.state||'unknown',lastDiscoveryFailure:result.discoveryOutcome?.failure||null,lastSourceChecks:Number.isFinite(result.sourceChecks)?result.sourceChecks:null});
         tx.update(doc.ref,patch);
       });
       results.push({businessUid:doc.id,status:error?'held':'completed',...(result?{runId:result.runId,reused:result.reused===true}:{})});
