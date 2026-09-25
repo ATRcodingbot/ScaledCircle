@@ -19,6 +19,17 @@ spec.loader.exec_module(capture)
 
 
 class CaptureTests(unittest.TestCase):
+    def test_launch_milestones_keep_only_fixed_names_not_service_tokens(self):
+        raw = ('SC_CAPTURE_MILESTONE:app-entry\n'
+               'SC_CAPTURE_MILESTONE:extension-ready\n'
+               'Dart VM service is listening on http://localhost/private-token\n'
+               'SC_CAPTURE_MILESTONE:driver-entry\n'
+               'SC_CAPTURE_MILESTONE:unknown-secret\n')
+        names = capture.launch_milestones(raw)
+        self.assertEqual(names, ['app-entry', 'extension-ready', 'driver-entry',
+                                 'flutter-service-announced'])
+        self.assertNotIn('private-token', json.dumps(names))
+
     def test_invalid_command_json_is_failed_within_named_stage(self):
         secret = 'private-invalid-json-sentinel'
         with tempfile.TemporaryDirectory() as directory:

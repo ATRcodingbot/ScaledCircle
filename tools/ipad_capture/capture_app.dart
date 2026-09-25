@@ -20,6 +20,7 @@ const captureScreenFailureText = {
 
 // Copied ONLY into a disposable simulator worktree. Never a release entrypoint.
 Future<void> main() async {
+  print('SC_CAPTURE_MILESTONE:app-entry');
   String? authorizedUid;
   var mainReturned = false;
   var mainFailed = false;
@@ -246,10 +247,16 @@ Future<void> main() async {
       }
     },
   );
+  print('SC_CAPTURE_MILESTONE:extension-ready');
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    print('SC_CAPTURE_MILESTONE:first-frame');
+  });
   try {
     await app.main();
+    print('SC_CAPTURE_MILESTONE:app-main-returned');
     mainReturned = true;
   } catch (_) {
     mainFailed = true;
+    print('SC_CAPTURE_MILESTONE:app-main-failed');
   }
 }

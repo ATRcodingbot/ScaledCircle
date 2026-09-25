@@ -47,6 +47,16 @@ DRIVER_CATEGORIES = {'none', 'driver_unavailable', 'startup_not_ready', 'harness
     'screenshot_failed', 'cleanup_failed', 'stage_timeout', 'invalid_input'}
 
 
+MILESTONES = {'app-entry', 'extension-ready', 'first-frame', 'app-main-returned', 'app-main-failed', 'driver-entry'}
+
+def launch_milestones(text):
+    # Return only allowlisted names, never VM-service URLs or console payloads.
+    found = [name for name in re.findall(r'SC_CAPTURE_MILESTONE:([a-z-]+)', text) if name in MILESTONES]
+    if re.search(r'(?:Dart VM service is listening|Dart VM Service.*available|VM Service URL on device)', text):
+        found.append('flutter-service-announced')
+    return list(dict.fromkeys(found))
+
+
 def utc():
     return datetime.now(timezone.utc).isoformat()
 
@@ -185,6 +195,11 @@ class StageRunner:
                 proc = subprocess.Popen(args, cwd=cwd, env=env, stdout=out if capture else log,
                                         stderr=log, start_new_session=os.name != 'nt')
                 heartbeat = time.monotonic()
+                if name == 'launch-and-driver':
+                    event['processStartedAtUtc'] = utc()
+                    event['launchMilestones'] = []
+                    self.save()
+                milestone_tail = ''
                 try:
                     while proc.poll() is None:
                         self.tick()
@@ -192,7 +207,14 @@ class StageRunner:
                             read.seek(offset)
                             chunk = read.read(1024 * 1024)
                             offset += len(chunk)
-                        found = safe_diagnostics(chunk.decode('utf-8', errors='replace'))
+                        decoded = chunk.decode('utf-8', errors='replace')
+                        if name == 'launch-and-driver':
+                            for milestone in launch_milestones(milestone_tail + decoded):
+                                if not any(m['name'] == milestone for m in event['launchMilestones']):
+                                    event['launchMilestones'].append({'name': milestone, 'observedAtUtc': utc()})
+                                    self.save()
+                            milestone_tail = decoded[-200:]
+                        found = safe_diagnostics(decoded)
                         for item in found:
                             if item not in event['diagnostics']:
                                 event['diagnostics'].append(item)

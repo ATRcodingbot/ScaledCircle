@@ -609,6 +609,7 @@ class FlutterCaptureTransport implements CaptureTransport {
 }
 
 Future<void> main() async {
+  print('SC_CAPTURE_MILESTONE:driver-entry');
   final environment = io.Platform.environment;
   final statusPath = environment['IPAD_DRIVER_STATUS_FILE'];
   if (statusPath == null || statusPath.isEmpty) {
