@@ -15,6 +15,7 @@ import subprocess
 import sys
 import tempfile
 import time
+from auth_preflight import verify as verify_auth, AuthPreflightFailure
 
 SOURCE = '26f29133fcd72edecf5c71497712674293228341'
 SDK = '058e0af2c2b57e369d905a03ac9748b0ebf543c6'
@@ -25,7 +26,7 @@ RUN_BUDGET_SECONDS = 24 * 60  # leaves six minutes of the CI cap for overhead/ex
 REQUIRED_INPUTS = ('IPAD_REVIEWER_EMAIL', 'IPAD_REVIEWER_PASSWORD',
                    'IPAD_REVIEWER_UID', 'IPAD_FIREBASE_PLIST_BASE64')
 SCREENS = ('business-home', 'schedule', 'campaigns')
-STAGES = {'input-preflight', 'verify-host', 'host-macos-version', 'host-macos-build', 'host-architecture', 'host-xcode', 'host-developer-directory', 'host-simctl', 'verify-flutter-sdk', 'check-source',
+STAGES = {'input-preflight', 'auth-preflight', 'verify-host', 'verify-flutter-sdk', 'check-source',
           'fetch-pinned-source', 'verify-fetched-source', 'checkout-pinned-source',
           'prepare-harness', 'resolve-harness-dependencies', 'verify-resolved-lock',
           'list-runtimes', 'list-device-types', 'select-runtime', 'create-simulator',
@@ -35,7 +36,7 @@ DRIVER_STAGES = {'connect', 'app-startup', 'authenticate', 'logout', 'close', 'c
     f'{screen}-{phase}' for screen in SCREENS for phase in ('navigation', 'readiness', 'capture')}
 DRIVER_OUTCOMES = {'running', 'success', 'failed', 'timeout'}
 DRIVER_CATEGORIES = {'none', 'driver_unavailable', 'startup_not_ready', 'harness_mismatch',
-    'auth_refused', 'auth_timeout', 'auth_failed', 'auth_identity_mismatch', 'auth_unverified',
+    'auth_runtime_mismatch', 'auth_input_whitespace_unsupported', 'auth_refused', 'auth_timeout', 'auth_failed', 'auth_identity_mismatch', 'auth_unverified',
     'auth_network_unavailable', 'auth_invalid_credentials', 'route_unavailable', 'screen_not_ready',
     'screenshot_failed', 'cleanup_failed', 'stage_timeout', 'invalid_input'}
 
@@ -311,23 +312,12 @@ def versions(text):
 
 def simulator(inventory, device_types):
     runtimes = [r for r in inventory['runtimes']
-                if r.get('isAvailable') is True and r.get('version') == '26.5'
-                and r.get('identifier') == 'com.apple.CoreSimulator.SimRuntime.iOS-26-5']
-    types = [d for d in device_types['devicetypes'] if d.get('name') == 'iPad Pro 13-inch (M4)']
-    for runtime in runtimes:
-        supported = {d.get('identifier') for d in runtime.get('supportedDeviceTypes', []) if isinstance(d, dict)}
-        for device in types:
-            if device.get('identifier') in supported:
-                return device['identifier'], runtime['identifier']
-    raise RuntimeError('Verified iOS 26.5 / compatible iPad Pro 13-inch (M4) unavailable')
-
-
-def exact_host_value(expected):
-    def validate(value):
-        if value.strip() != expected:
-            raise StageFailure('Verified simulator host configuration mismatch')
-        return expected
-    return validate
+                if r.get('isAvailable') and r['identifier'].startswith('com.apple.CoreSimulator.SimRuntime.iOS-')]
+    runtimes.sort(key=lambda r: tuple(map(int, r['version'].split('.'))), reverse=True)
+    types = [d for d in device_types['devicetypes'] if d['name'] == 'iPad Pro 13-inch (M4)']
+    if not runtimes or not types:
+        raise RuntimeError('Required installed iOS runtime / iPad Pro 13-inch (M4) unavailable')
+    return types[0]['identifier'], runtimes[0]['identifier']
 
 
 def firebase_plist(encoded):
@@ -375,25 +365,20 @@ def main():
             with runner.step('input-preflight', 10):
                 runner.input_states(os.environ)
                 require_inputs(os.environ, emit=lambda _: None)
+                config = plistlib.loads(firebase_plist(os.environ['IPAD_FIREBASE_PLIST_BASE64']))
+            with runner.step('auth-preflight', 30) as (event, deadline):
+                try:
+                    event['authResult'] = verify_auth(os.environ, config,
+                        timeout=min(25, max(.1, deadline - time.monotonic())))
+                except AuthPreflightFailure as error:
+                    event['failureCategory'] = 'auth_preflight_failed'
+                    event['authResult'] = str(error)  # fixed categories only
+                    raise StageFailure('Authentication preflight failed') from None
             with runner.step('verify-host', 10):
                 if sys.platform != 'darwin':
                     raise StageFailure('macOS/Xcode simulator worker required')
                 tooling = Path(__file__).resolve().parent
                 repo = Path(os.environ['CM_BUILD_DIR']).resolve()
-                if os.environ.get('DEVELOPER_DIR') not in (None, '', '/Applications/Xcode-26.6.app/Contents/Developer'):
-                    raise StageFailure('Developer directory differs from verified environment')
-            host = {}
-            for stage, command, expected in [
-                ('host-macos-version', ['sw_vers', '-productVersion'], '26.5.1'),
-                ('host-macos-build', ['sw_vers', '-buildVersion'], '25F80'),
-                ('host-architecture', ['uname', '-m'], 'arm64'),
-                ('host-xcode', ['xcodebuild', '-version'], 'Xcode 26.6\nBuild version 17F113'),
-                ('host-developer-directory', ['xcode-select', '-p'], '/Applications/Xcode-26.6.app/Contents/Developer'),
-                ('host-simctl', ['xcrun', '--find', 'simctl'], '/Applications/Xcode-26.6.app/Contents/Developer/usr/bin/simctl')]:
-                host[stage] = runner.run(stage, command, 30, capture=True, transform=exact_host_value(expected))
-            runner.data['verifiedEnvironment'] = host
-            runner.save()
-            print(json.dumps({'verifiedEnvironment': host}), flush=True)
             def verify_sdk(raw):
                 data = json.loads(raw)
                 if data.get('frameworkRevision') != SDK:
@@ -431,9 +416,7 @@ def main():
             types = runner.run('list-device-types', ['xcrun', 'simctl', 'list', 'devicetypes', '-j'], 20, capture=True, transform=json.loads)
             with runner.step('select-runtime', 10):
                 device_type, runtime = simulator(runtimes, types)
-                metadata = {'runtime': runtime, 'deviceType': device_type, 'verifiedEnvironment': host}
-                runner.data['simulatorSelection'] = metadata
-                runner.save()
+                metadata = {'runtime': runtime, 'deviceType': device_type}
             simulator_id = runner.run('create-simulator', ['xcrun', 'simctl', 'create', 'ScaledCircle capture only', device_type, runtime], 30, capture=True)
             runner.run('boot-simulator', ['xcrun', 'simctl', 'boot', simulator_id], 30)
             runner.run('wait-simulator-boot', ['xcrun', 'simctl', 'bootstatus', simulator_id, '-b'], 120)

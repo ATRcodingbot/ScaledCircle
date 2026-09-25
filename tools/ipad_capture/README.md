@@ -1,5 +1,42 @@
 # Isolated iPad capture — instrumented proposal, not authorized to run
 
+## September 25 authentication follow-up
+
+Run `6ab64604cac965652b5ebc90` reached native app startup, then received
+`auth_invalid_credentials`. The old harness mapped four Firebase exception codes
+to that category; the original subcode and old encrypted input bytes were not
+retained. UID mismatch and entitlement/readiness were separate paths. No exact
+credential-transfer root cause is established.
+
+One fresh production password login independently succeeded for the existing
+verified Business reviewer; its isolated session was signed out. Authoritative
+records confirm its existing non-expiring Scale Core reviewer entitlement. This
+does not certify the next simulator login or a client subscription-document read.
+
+The next separately authorized attempt now validates the plist and performs one
+normal Firebase REST password sign-in/identity lookup before dependencies or
+compilation. It uses the same environment inputs and production iOS key, with
+TLS, no redirects/retries, a bounded deadline, allowlisted provider errors and
+memory-only token disposal. It never injects tokens into the simulator. Recorded
+key restrictions permit this host check; a subsequent policy rejection stops the
+run and is not permission to weaken restrictions.
+
+The previous harness called the native password SDK directly. The updated driver
+instead awaits entry into the actual Email/Password fields and presses Login,
+then verifies the default Firebase Auth app's production project/app identity,
+default tenant, expected UID and verified email. Normal LoginScreen navigation
+and workspace checks still apply. The pinned app trims password whitespace;
+the harness refuses boundary-whitespace input instead of altering it. This is
+not evidence that whitespace caused the previous failure. No released app source
+was changed. Actual native field interaction remains to be proved in a capture.
+
+Offline checks use synthetic credentials only; no real credential values, lengths
+or hashes are recorded. Temporary CI inputs remain deleted. No run is authorized
+by preparing this change. The last reported allowance was 97 minutes, not a fresh
+billing check. Recheck allowance only before an approved attempt.
+
+Additional local test: `python tools/ipad_capture/test_auth_preflight.py`.
+
 Three actual Core screens at 2064 × 2752 on an installed iPad Pro 13-inch (M4)
 simulator. Application source remains `26f29133fcd72edecf5c71497712674293228341`
 (iOS36 / Android35), Flutter 3.44.8 revision
