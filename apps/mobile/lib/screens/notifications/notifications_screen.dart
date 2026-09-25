@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter_app/navigation/authenticated_app_bar.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -39,6 +40,52 @@ class NotificationsScreen extends StatefulWidget {
 }
 
 class _NotificationsScreenState extends State<NotificationsScreen> {
+  StreamSubscription<User?>? _authSubscription;
+  String? _observedUid;
+  int _sessionEpoch = 0;
+  DialogRoute<void>? _detailRoute;
+  String? get _activeUid =>
+      currentUserId ?? FirebaseAuth.instance.currentUser?.uid;
+  @override
+  void initState() {
+    super.initState();
+    _observedUid = _activeUid;
+    if (widget.currentUserId == null) {
+      _authSubscription = FirebaseAuth.instance.authStateChanges().listen((
+        user,
+      ) {
+        if (user?.uid != _observedUid && mounted) {
+          setState(() => _accountChanged(user?.uid));
+        }
+      });
+    }
+  }
+
+  void _accountChanged(String? uid) {
+    _observedUid = uid;
+    _sessionEpoch++;
+    initialOpened =
+        true; // A prior account's initial tap must be resolved anew.
+    _socialStates.clear();
+    final route = _detailRoute;
+    _detailRoute = null;
+    if (route?.navigator != null) route!.navigator!.removeRoute(route);
+  }
+
+  @override
+  void didUpdateWidget(covariant NotificationsScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.currentUserId != widget.currentUserId) {
+      _accountChanged(_activeUid);
+    }
+  }
+
+  @override
+  void dispose() {
+    _authSubscription?.cancel();
+    super.dispose();
+  }
+
   bool initialOpened = false;
   bool opening = false;
   final Map<String, Future<Map<String, dynamic>>> _socialStates = {};
@@ -73,7 +120,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         .where('read', isEqualTo: false)
         .get();
 
-    if (snapshot.docs.isEmpty) {
+    if (_activeUid != userId || snapshot.docs.isEmpty) {
       return;
     }
 
@@ -96,12 +143,15 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   }) async {
     if (opening) return;
     opening = true;
+    final epoch = _sessionEpoch;
     final uid = currentUserId ?? FirebaseAuth.instance.currentUser?.uid;
     final data = notification.data() as Map<String, dynamic>;
     try {
+      if (uid == null || data['userId'] != uid) return;
       // In-app and physical push use the same recipient/access authority.
       final resolved = resolvedData ?? await _resolve(notification.id);
       if (!context.mounted ||
+          epoch != _sessionEpoch ||
           uid != (currentUserId ?? FirebaseAuth.instance.currentUser?.uid)) {
         return;
       }
@@ -116,12 +166,13 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         return;
       }
       if (!context.mounted ||
+          epoch != _sessionEpoch ||
           uid != (currentUserId ?? FirebaseAuth.instance.currentUser?.uid)) {
         return;
       }
       Future<dynamic> navigation;
       if (target.kind == 'detail') {
-        navigation = showDialog<void>(
+        final detailRoute = DialogRoute<void>(
           context: context,
           builder: (context) => AlertDialog(
             title: Text(data['title']?.toString() ?? 'Research summary'),
@@ -140,6 +191,10 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
             ],
           ),
         );
+        _detailRoute = detailRoute;
+        navigation = Navigator.of(context).push(detailRoute).whenComplete(() {
+          if (identical(_detailRoute, detailRoute)) _detailRoute = null;
+        });
       } else if (target.kind == 'earnings') {
         navigation = Navigator.push(
           context,
@@ -268,6 +323,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         ],
       ),
       body: StreamBuilder<QuerySnapshot>(
+        key: ValueKey(userId),
         stream:
             notificationsStream ??
             FirebaseFirestore.instance
@@ -293,6 +349,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
 
           final notifications = (snapshot.data?.docs ?? []).where((doc) {
             final data = doc.data() as Map<String, dynamic>;
+            if (_activeUid != userId || data['userId'] != userId) return false;
             return !const {
               'agent_qualified_prospect',
               'agent_referral_partner',
@@ -396,9 +453,16 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   ) {
     final title = data['title']?.toString() ?? 'Notification';
 
-    final message = data['message']?.toString() ?? '';
-
     final type = data['type']?.toString() ?? '';
+    final savedMessage = data['message']?.toString() ?? '';
+    final legacyBrief =
+        (type == 'agent_daily_brief' || type == 'agent_weekly_report') &&
+        data['detail'] == null &&
+        RegExp(r'\d{4}-\d{2}-\d{2}T\d{2}:\d{2}').hasMatch(savedMessage);
+    // Preserve historical diagnostics in the authorized summary dialog.
+    final message = legacyBrief
+        ? 'Read your saved research summary. Full Growth reports require authorized web access.'
+        : savedMessage;
 
     final read = data['read'] == true;
 

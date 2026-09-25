@@ -86,9 +86,9 @@ function createService({db,FieldValue,project,target,readSource=fetchSource,now=
       const stateRef=db.doc('publicResearchDiscoveryState/'+target),saved=(await stateRef.get()).data();
       if(saved&&saved.businessUid!==target)fail('Research workspace binding differs.');
       const profile=customerContext?.profile||publicResearch.publicProfile;
-      const priorRuns=await query('agentRuns');
+      const [priorRuns,priorObservations]=await Promise.all([query('agentRuns'),query('agentObservations')]);
       const failedSourceUrls=priorRuns.flatMap(r=>(r.discoveryChecks||[]).filter(c=>c.status==='source_unavailable_backoff').map(c=>c.sourceUrl));
-      const found=await require('./public_web_discovery').discover({project,businessUid:target,profile:profile||{},scope,opportunityPreferences:initialPreferences,state:saved||{},knownSourceUrls:existing.map(p=>p.sourceUrl),failedSourceUrls,now:now(),search:publicResearch.search,budget:publicResearch.budget,executeRequest:publicResearch.executeRequest,readPublicSource:publicResearch.readPublicSource});
+      const found=await require('./public_web_discovery').discover({project,businessUid:target,profile:profile||{},scope,opportunityPreferences:initialPreferences,state:saved||{},knownSourceUrls:[...existing.map(p=>p.sourceUrl),...priorObservations.filter(o=>o.evidenceState==='AVAILABLE').map(o=>o.sourceUrl)],failedSourceUrls,now:now(),search:publicResearch.search,budget:publicResearch.budget,executeRequest:publicResearch.executeRequest,readPublicSource:publicResearch.readPublicSource});
       discovered.sources.push(...found.sources);discovered.checks.push(...found.checks);
       await stateRef.set({...found.state,businessUid:target,updatedAt:now()});
     }
@@ -101,8 +101,10 @@ function createService({db,FieldValue,project,target,readSource=fetchSource,now=
       .filter(source=>opportunityPreferences.enabled(source,initialPreferences))
       .filter(source=>!suppressedRecipients.has(source.email?.toLowerCase()));
     const isPriorProspect=source=>Boolean((customerContext?.researchVersion||source.publicDiscovery)&&existing.some(p=>p.id==='growth_prospect_'+hash([target,source.key]).slice(0,40)||source.publicDiscovery&&publicHost(source.url)&&publicHost(p.sourceUrl)===publicHost(source.url)));
-    const duplicatesExcludedCount=eligible.filter(isPriorProspect).length;
-    const selected=eligible.filter(source=>!isPriorProspect(source))
+    const priorFor=source=>source.publicDiscovery&&existing.find(p=>publicHost(source.url)&&publicHost(p.sourceUrl)===publicHost(source.url));
+    const newPageForPrior=source=>{const prior=priorFor(source);return prior && prior.sourceUrl!==source.url && prior.doNotContact!==true && prior.approvalState!=='do_not_contact';};
+    const duplicatesExcludedCount=eligible.filter(source=>isPriorProspect(source)&&!newPageForPrior(source)).length;
+    const selected=eligible.filter(source=>!isPriorProspect(source)||newPageForPrior(source))
       .map((source,index)=>{const area=scope.areas.findIndex(a=>a.id===geography.matchArea(source,scope)?.id);return {source,index,area:area<0?999:area};})
       .sort((a,b)=>a.area-b.area||require('./mailbox_growth_learning').priority(b.source,localLearning.patterns)-require('./mailbox_growth_learning').priority(a.source,localLearning.patterns)||a.index-b.index)
       .map(x=>x.source)
@@ -113,7 +115,7 @@ function createService({db,FieldValue,project,target,readSource=fetchSource,now=
       const current=await tx.get(ref),health=await tx.get(db.doc('agentHealth/'+target));if(current.data()?.claim!==claim||health.data()?.researchPaused===true||!safeResearchState(health.data()))fail('Research commit held by Supervisor.');
       const currentWorkspace=await tx.get(db.doc('internalGrowthWorkspaces/'+target));
       if(scopeVersion!==null&&currentWorkspace.data()?.revision!==scopeVersion)fail('Territories changed during research. Retry using the current priority.');
-      const records=[];for(const result of results){const id='growth_prospect_'+hash([target,result.source.key]).slice(0,40),p=db.doc('agentProspects/'+id);records.push({...result,id,ref:p,old:await tx.get(p)});}
+      const records=[];for(const result of results){const id=priorFor(result.source)?.id||'growth_prospect_'+hash([target,result.source.key]).slice(0,40),p=db.doc('agentProspects/'+id);records.push({...result,id,ref:p,old:await tx.get(p)});}
       const pref=await tx.get(db.doc('agentCommunicationPreferences/'+target));
       if(hash(opportunityPreferences.normalize(pref.data()?.opportunities))!==hash(initialPreferences))fail('Growth Preferences changed during research. Retry using your current focus.');
       for(const result of records){const {source,observation:o,id,old}=result,agentType=source.kind==='business'?'lead_generation':'workforce_recruiter';

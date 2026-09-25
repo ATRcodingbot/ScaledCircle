@@ -30,7 +30,7 @@ function createStore(db, now = Date.now) {
     const u = (await tx.get(db.doc('users/' + sid(uid)))).data();
     if (u?.role !== 'scaler' || u.disabled === true || u.accountStatus === 'closing' || u.accountStatus === 'deleted' || !(u.active === true || u.betaAccess === 'approved')) fail('cashout_scaler_required');
   }
-  async function available(tx, uid) {
+  async function available(tx, uid, recoveryPreparation = false) {
     await owner(tx, uid);
     const [w, rows] = await Promise.all([tx.get(walletRef(uid)), tx.get(walletRef(uid).collection('transactions').limit(501))]);
     const wallet = w.data();
@@ -62,14 +62,18 @@ function createStore(db, now = Date.now) {
       const [g, z, c, a, s, t, allocated] = (await Promise.all(refs.map(r => tx.get(r)))).map(x => x.data());
       if (!g || id(g) !== id(e) || !z || !c || !a || !s || !t) fail('cashout_earning_source_missing');
       if (z.assignedScalerId !== uid || z.campaignId !== campaignId || z.businessId !== e.businessId || z.status !== 'completed' || z.reviewStatus !== 'approved' || !z.reviewedBy || !z.reviewFinalizedAt || z.approvedTransferAmountCents !== e.amountCents || z.settlementBlocked === true || z.disputeOpen === true) fail('cashout_approval_unverified');
-      if (c.businessId !== e.businessId || c.fundingStatus !== 'funded' || c.environment === 'staging' || c.stripeMode === 'test' || c.qaIsolation === true || c.stagingOnly === true) fail('cashout_campaign_unverified');
+      if (c.businessId !== e.businessId || (c.fundingStatus !== 'funded' && !recoveryPreparation && !allocated?.recoveryFundingId) || c.environment === 'staging' || c.stripeMode === 'test' || c.qaIsolation === true || c.stagingOnly === true) fail('cashout_campaign_unverified');
       if (a.immutable !== true || a.zoneId !== zoneId || a.campaignId !== campaignId || a.scalerId !== uid || a.businessId !== e.businessId || a.currency !== 'usd' || !(a.acceptedAtMs || a.acceptedAt) || cents(a.baseAmountCents) < cents(z.approvedBaseAmountCents) || cents(a.bonusAmountCents || 0) < cents(z.approvedBonusAmountCents || 0) || z.approvedBaseAmountCents + (z.approvedBonusAmountCents || 0) !== e.amountCents) fail('cashout_contract_unverified');
       if (s.policyVersion !== 'EarnedWorkReserveReturnV1' || s.scalerId !== uid || s.zoneId !== zoneId || s.campaignId !== campaignId || s.businessId !== e.businessId || s.earnedWorkerCents !== e.amountCents || s.actorUid !== z.reviewedBy || !s.createdAt || !['ordinary_review', 'partial_settlement', 'completed_task_review'].includes(s.source)) fail('cashout_settlement_unverified');
       if (t.scalerId !== uid || t.zoneId !== zoneId || t.campaignId !== campaignId || t.businessId !== e.businessId || t.paymentId !== s.paymentId || t.amountCents !== e.amountCents || t.externalExecutionAuthorized !== false || t.stripeTransferId || !['transfer_pending', 'cashout_completed'].includes(t.status)) fail('cashout_transfer_conflict');
       const p = (await tx.get(db.doc('campaignPayments/' + sid(s.paymentId)))).data();
       const completion = (await tx.get(db.doc('campaignCompletions/' + sid(z.submittedCompletionId)))).data();
       if (!completion || completion.zoneId !== zoneId || completion.campaignId !== campaignId || completion.scalerId !== uid || completion.status !== 'approved' || completion.reviewStatus !== 'approved' || completion.approvedTransferAmountCents !== e.amountCents || !(completion.submittedAt || completion.completedAt) || c.fundingPaymentId !== s.paymentId) fail('cashout_completion_unverified');
-      if (!p || p.stripeMode !== 'live' || p.status !== 'paid' || !p.paidAt || !/^pi_/.test(p.stripePaymentIntentId || '') || p.currency !== 'usd' || p.campaignId !== campaignId || p.businessId !== e.businessId || p.settlementFrozen === true || p.disputeOpen === true || p.fundingReviewRequired === true || p.refundRequestedAt || p.refundedWorkerAmountCents > s.unusedWorkerCents || p.businessChargeCents !== p.workerAmountCents + p.platformFeeCents) fail('cashout_funding_unverified');
+      if (!p || p.stripeMode !== 'live' || !p.paidAt || !/^pi_/.test(p.stripePaymentIntentId || '') || p.currency !== 'usd' || p.campaignId !== campaignId || p.businessId !== e.businessId || p.businessChargeCents !== p.workerAmountCents + p.platformFeeCents) fail('cashout_funding_unverified');
+      const originalUsable = p.status === 'paid' && !p.settlementFrozen && !p.disputeOpen && !p.fundingReviewRequired && !p.refundRequestedAt && !(p.refundedWorkerAmountCents > s.unusedWorkerCents);
+      const replacement = allocated?.recoveryFundingId ? (await tx.get(opRef(allocated.recoveryFundingId))).data() : null;
+      const recovered = replacement?.kind === 'scaler_replacement_funding_v1' && replacement.mode === 'live' && replacement.ownerId === uid && replacement.authorizedBy && replacement.authorizationRef && replacement.allocations?.some(x => x.earningId === row.id && x.amountCents + (x.priorPaidCents || 0) >= allocated.reservedCents + allocated.paidCents);
+      if (!originalUsable && !recoveryPreparation && !recovered) fail('cashout_funding_unverified');
       const used = allocated || {
         scalerId: uid,
         earningId: row.id,
@@ -144,6 +148,7 @@ function createStore(db, now = Date.now) {
     }
   }
   return {
+    previewRecovery: uid => db.runTransaction(tx => available(tx, uid, true), {readOnly:true}),
     available: uid => db.runTransaction(tx => available(tx, uid), {
       readOnly: true
     }),
@@ -153,7 +158,7 @@ function createStore(db, now = Date.now) {
     async get(key, uid) {
       return validOp((await opRef(key).get()).data(), uid);
     },
-    async request(uid, requestId, amountCents, accountId) {
+    async request(uid, requestId, amountCents, accountId, recoveryPreparation = false) {
       if (!/^[A-Za-z0-9_-]{16,80}$/.test(requestId || '') || cents(amountCents) === 0) fail('cashout_request_invalid');
       const key = `cashout_${id('v1', 'live', uid, requestId)}`;
       return db.runTransaction(async tx => {
@@ -167,7 +172,7 @@ function createStore(db, now = Date.now) {
           if (op.accountId !== accountId || op.amountCents !== amountCents) fail('cashout_input_conflict');
           return op;
         }
-        const funds = await available(tx, uid);
+        const funds = await available(tx, uid, recoveryPreparation);
         if (funds.pendingCents > 0) {
           const active = validOp((await tx.get(opRef(funds.wallet.activeCashoutOperationId))).data(), uid);
           if (active.amountCents === amountCents && active.accountId === accountId) return active;
@@ -198,6 +203,7 @@ function createStore(db, now = Date.now) {
           accountId,
           amountCents,
           state: 'reserved',
+          recoveryHold: recoveryPreparation,
           version: 1,
           createdAt: now(),
           transferId: null,
@@ -226,6 +232,31 @@ function createStore(db, now = Date.now) {
         return op;
       });
     },
+    async authorizeReplacement(key, expectedVersion, proof, approval) {
+      return db.runTransaction(async tx => {
+        const op = validOp((await tx.get(opRef(key))).data());
+        const fundingId = 'replacement_funding_' + id(proof.topupId);
+        const fundingRef = opRef(fundingId), existing = (await tx.get(fundingRef)).data();
+        if (existing) {
+          if (existing.operationId === key && existing.authorizationRef === approval.authorizationRef && existing.authorizedBy === approval.actorUid && existing.reason === approval.reason && op.replacementFunding?.fundingId === fundingId) return op;
+          fail('cashout_replacement_already_allocated');
+        }
+        if (op.version !== expectedVersion || op.leaseUntil > now()) fail('cashout_stale_claim');
+        // No absence inference from a lost provider response. Reconcile it first.
+        if (op.settled || op.transferStartedAt || op.transferId || op.payoutStartedAt || op.payoutId || !['reserved','platform_balance_pending','attention'].includes(op.state)) fail('cashout_original_attempt_requires_reconciliation');
+        if (proof.netCents < op.amountCents || proof.availableCents < op.amountCents) fail('cashout_replacement_funds_unavailable');
+        const funds = await available(tx, op.ownerId, true);
+        const allocated = await Promise.all(op.allocations.map(a => tx.get(db.doc('scalerCashoutAllocations/' + a.earningId))));
+        if (funds.wallet.activeCashoutOperationId !== key || funds.pendingCents !== op.amountCents) fail('cashout_allocation_conflict');
+        for (const [i,a] of op.allocations.entries()) if (allocated[i].data()?.reservedCents !== a.allocatedCents || allocated[i].data()?.paidCents > a.amountCents - a.allocatedCents || allocated[i].data()?.recoveryFundingId) fail('cashout_allocation_conflict');
+        const replacement = {...proof, fundingId, operationId:key, authorizedBy:approval.actorUid, authorizationRef:approval.authorizationRef, reason:approval.reason, authorizedAt:now()};
+        tx.create(fundingRef, {...replacement, kind:'scaler_replacement_funding_v1', mode:'live', ownerId:op.ownerId, reservedCents:op.amountCents, consumedCents:0, allocations:op.allocations.map((a,i)=>({earningId:a.earningId,amountCents:a.allocatedCents,priorPaidCents:allocated[i].data().paidCents}))});
+        for (const a of allocated) tx.update(a.ref,{recoveryFundingId:fundingId});
+        const updated={...op,replacementFunding:replacement,recoveryHold:false,version:op.version+1};
+        tx.set(opRef(key),updated);audit(tx,updated,'replacement_funding_authorized');
+        return updated;
+      });
+    },
     async claim(key, uid, readOnly = false) {
       return db.runTransaction(async tx => {
         const op = validOp((await tx.get(opRef(key))).data(), uid);
@@ -233,6 +264,7 @@ function createStore(db, now = Date.now) {
         const account = (await tx.get(db.doc('stripeConnectedAccounts/' + uid))).data();
         assertAccount(account, uid);
         if (account.stripeAccountId !== op.accountId) fail('cashout_account_mismatch');
+        if (!readOnly && op.recoveryHold) fail('cashout_recovery_authorization_required');
         if (!readOnly) await available(tx, uid); // Fresh funding/reversal authority before further movement.
         const claimed = {
           ...op,
@@ -253,6 +285,8 @@ function createStore(db, now = Date.now) {
         const allocated = await Promise.all(op.allocations.map(s => tx.get(db.doc('scalerCashoutAllocations/' + s.earningId))));
         const paymentIds = [...new Set(op.allocations.map(s => s.paymentId))];
         const payments = await Promise.all(paymentIds.map(p => tx.get(db.doc('campaignPayments/' + p))));
+        const recoveryRef=op.replacementFunding ? opRef(op.replacementFunding.fundingId) : null;
+        const recovery=recoveryRef ? (await tx.get(recoveryRef)).data() : null;
         if (movement !== 'none') {
           if (movement === 'reopen') {
             if (!op.settled || op.state !== 'completed' || cents(wallet.cashoutPaidCents || 0) < op.amountCents) fail('cashout_settlement_conflict');
@@ -261,7 +295,7 @@ function createStore(db, now = Date.now) {
             const a = allocated[i].data();
             if (a?.scalerId !== op.ownerId || a.mode !== 'live' || cents(movement === 'reopen' ? a.paidCents : a.reservedCents) < s.allocatedCents) fail('cashout_allocation_conflict');
           });
-          if (movement === 'paid' && !op.fundingTransferRecorded) for (const [i, pid] of paymentIds.entries()) {
+          if (movement === 'paid' && !op.fundingTransferRecorded && !op.replacementFunding) for (const [i, pid] of paymentIds.entries()) {
             const amount = op.allocations.filter(s => s.paymentId === pid).reduce((n, s) => n + s.allocatedCents, 0);
             if (cents(payments[i].data()?.reservedWorkerAmountCents || 0) < amount) fail('cashout_funding_allocation_conflict');
           }
@@ -301,7 +335,7 @@ function createStore(db, now = Date.now) {
             cashoutPendingCents: wallet.cashoutPendingCents + (movement === 'reopen' ? op.amountCents : -op.amountCents),
             cashoutPaidCents: (wallet.cashoutPaidCents || 0) + (movement === 'paid' ? op.amountCents : movement === 'reopen' ? -op.amountCents : 0)
           });
-          if (movement === 'paid' && !op.fundingTransferRecorded) for (const [i, pid] of paymentIds.entries()) {
+          if (movement === 'paid' && !op.fundingTransferRecorded && !op.replacementFunding) for (const [i, pid] of paymentIds.entries()) {
             const p = payments[i].data(),
               amount = op.allocations.filter(s => s.paymentId === pid).reduce((n, s) => n + s.allocatedCents, 0);
             tx.update(payments[i].ref, {
@@ -309,6 +343,10 @@ function createStore(db, now = Date.now) {
               transferredWorkerAmountCents: (p.transferredWorkerAmountCents || 0) + amount
             });
           }
+        }
+        if (movement === 'paid' && !op.fundingTransferRecorded && op.replacementFunding) {
+          if (recovery?.operationId !== op.id || recovery.reservedCents !== op.amountCents || recovery.consumedCents !== 0) fail('cashout_replacement_allocation_conflict');
+          tx.update(recoveryRef,{reservedCents:0,consumedCents:op.amountCents,settledAt:now()});
         }
         tx.set(opRef(op.id), updated);
         audit(tx, updated, movement === 'none' ? 'reconciled' : movement);

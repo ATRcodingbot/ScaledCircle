@@ -29,7 +29,7 @@ test('known central limits remain specific; unknown transport errors disclose no
 test('rotating query contains only public allowlisted context; two calls maximum',()=>{const first=discovery.plan({profile,scope,cursor:0}),next=discovery.plan({profile,scope,cursor:2});assert.equal(first.length,2);assert.notEqual(first[0].query,next[0].query);assert(!JSON.stringify(first).includes('PRIVATE'));const r=discovery.request(first[0].query);assert.equal(r.max_tool_calls,1);assert.equal(r.max_output_tokens,1200);assert.equal(r.store,false);});
 test('known prospects and live source backoff inform subsequent search without clearing expiry or making source calls',async()=>{
  const {args,events}=setup();let reads=0;args.knownSourceUrls=[item.url];args.readPublicSource=async()=>{reads++;return '';};
- const out=await discovery.discover(args);assert.equal(reads,0);assert.equal(out.sources.length,0);assert(out.checks.every(c=>c.duplicates===1));assert(events.filter(e=>e[0]==='search').every(e=>e[1].input[1].content.includes('-site:example.com')));
+ const out=await discovery.discover(args);assert.equal(reads,0);assert.equal(out.sources.length,0);assert(out.checks.every(c=>c.duplicates===1));assert(events.filter(e=>e[0]==='search').every(e=>e[1].input[1].content.includes('-site:example.com/vendors')));
  const failed=setup();failed.args.readPublicSource=async()=>{throw Error('restricted');};const first=await discovery.discover(failed.args);
  const next=setup();next.args.state=first.state;next.args.failedSourceUrls=[item.url];const second=await discovery.discover(next.args);assert(second.checks.every(c=>c.backoff===1));assert.deepEqual(second.state.failures,first.state.failures);assert(next.events.filter(e=>e[0]==='search').every(e=>e[1].input[1].content.includes('-site:example.com')));
  const expired=setup();expired.args.state=first.state;expired.args.now+=3*86400000;assert.equal((await discovery.discover(expired.args)).sources.length,1);
@@ -46,4 +46,12 @@ test('response diagnostics distinguish syntax/schema/incomplete without retainin
   const {args}=setup();args.executeRequest=async()=>({response:{...response(),id:'resp_fixture',...value}});
   const out=await discovery.discover(args);assert(out.checks.every(c=>c.stage==='response_parsing'&&c.diagnostic.reason===reason));assert(!JSON.stringify(out).includes('PRIVATE SECRET'));assert.equal(out.checks[0].diagnostic.providerResponseId,'resp_fixture');
  }
+});
+
+test('new verified page on a known domain is checked without inventing a new company',async()=>{
+ const {args,events}=setup();args.knownSourceUrls=['https://example.com/old-page'];let reads=0;
+ args.readPublicSource=async()=>{reads++;return item.quote+' '+item.areaEvidence;};
+ const result=await discovery.discover(args);assert(reads>0);assert.equal(result.sources.length,1);
+ assert(events.filter(e=>e[0]==='search').every(e=>!e[1].input[1].content.includes('-site:example.com ')));
+ assert.equal(result.sources[0].key,'public_web_'+require('node:crypto').createHash('sha256').update('example.com').digest('hex'));
 });

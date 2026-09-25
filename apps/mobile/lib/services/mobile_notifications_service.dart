@@ -85,6 +85,7 @@ class MobileNotificationsService {
   );
   String? _readyUid;
   int _deviceGeneration = 0;
+  int _sessionGeneration = 0;
   Future<NotificationDeviceReadiness>? _registering;
   String? _registeringUid;
   Future<Map<String, dynamic>>? _checking;
@@ -176,6 +177,7 @@ class MobileNotificationsService {
     bool waitForTransport = false,
   }) async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
+    final sessionGeneration = _sessionGeneration;
     final response = await _stage(action, () {
       final request =
           FirebaseFunctions.instanceFor(
@@ -189,7 +191,8 @@ class MobileNotificationsService {
           : request.timeout(const Duration(seconds: 25));
     });
     if (action != 'unregister' &&
-        FirebaseAuth.instance.currentUser?.uid != uid) {
+        (FirebaseAuth.instance.currentUser?.uid != uid ||
+            sessionGeneration != _sessionGeneration)) {
       throw const NotificationRequestFailure('session', 'changed');
     }
     final result = Map<String, dynamic>.from(response.data as Map);
@@ -252,6 +255,7 @@ class MobileNotificationsService {
       final next = user?.uid;
       if (_uid == next && next != null) return;
       _uid = next;
+      _sessionGeneration++;
       _deviceGeneration++;
       _readyUid = null;
       _registering = null;

@@ -10,7 +10,7 @@ const clean=s=>typeof s==='string'?s.replace(/[<>\r\n]/g,' ').trim().slice(0,120
 function publicUrl(value){
  try {const u=new URL(value);if(u.protocol!=='https:'||u.username||u.password||u.port||!u.hostname.includes('.')||/^[\d.]+$/.test(u.hostname)||u.hostname.includes(':')||/(^|\.)(localhost|local|internal|test|invalid)$/.test(u.hostname))return null;u.hash='';for(const k of [...u.searchParams.keys()])if(/^utm_|^(fbclid|gclid)$/.test(k))u.searchParams.delete(k);return u.href;}catch{return null;}
 }
-function plan({profile,scope,opportunityPreferences,cursor=0,excludeHosts=[]}){
+function plan({profile,scope,opportunityPreferences,cursor=0,excludeHosts=[],excludeUrls=[]}){
  const p=prefs.normalize(opportunityPreferences),services=(profile.priorityServices?.length?profile.priorityServices:profile.servicesOffered||[]).map(clean).filter(Boolean).slice(0,12);
  const categories=[['commercial','business_account','business vendor needs'],['propertyManagement','property_management','property management vendor applications'],['vendorNetworks','partner_channel','contractor partner opportunities'],['recruitmentPartners','recruitment_channel','employer recruiting partnerships']].filter(([k])=>p[k]);
  const cells=[];for(const area of scope.areas||[])for(const service of services)for(const [,type,phrase] of categories)cells.push({area,service,type,query:`${service} ${clean(area.label)} ${phrase} public official website -site:gov -site:mil`});
@@ -18,7 +18,8 @@ function plan({profile,scope,opportunityPreferences,cursor=0,excludeHosts=[]}){
  const excluded=[...new Set(excludeHosts)].filter(h=>typeof h==='string'&&/^[a-z0-9.-]+$/.test(h)&&h.includes('.')).sort().slice(0,12);
  return Array.from({length:Math.min(2,cells.length)},(_,i)=>{
   const cell=cells[(cursor+i)%cells.length];let query=cell.query;
-  for(const host of excluded){const token=' -site:'+host;if(query.length+token.length<=600)query+=token;}
+  const paths=[...new Set(excludeUrls.map(publicUrl).filter(Boolean).map(u=>{const x=new URL(u);return x.pathname!=='/'?x.hostname+x.pathname:null;}).filter(Boolean))].slice(0,12);
+  for(const host of [...excluded,...paths]){const token=' -site:'+host;if(query.length+token.length<=600)query+=token;}
   return {...cell,query,slot:i};
  });
 }
@@ -71,11 +72,11 @@ async function discover({businessUid,project,profile,scope,opportunityPreference
  const checks=[],sources=[],next={cursor:state.cursor||0,failures:{...(state.failures||{})}};
  if((!executeRequest&&(!search||!budget))||!readPublicSource)return {sources,checks:[{status:'research_budget_not_authorized'}],state:next};
  const hostOf=url=>{const u=publicUrl(url);return u?new URL(u).hostname.replace(/^www\./,''):null;};
- const knownHosts=new Set(knownSourceUrls.map(hostOf).filter(Boolean));
+ const knownUrls=new Set(knownSourceUrls.map(publicUrl).filter(Boolean));
  const cells=plan({profile,scope,opportunityPreferences,cursor:next.cursor});
  for(const original of cells){
   const blockedHosts=[...failedSourceUrls,...Object.values(next.failures).map(f=>f.url)].map(hostOf).filter(h=>h&&next.failures[hash(h)]?.until>now);
-  const cell=plan({profile,scope,opportunityPreferences,cursor:state.cursor||0,excludeHosts:[...knownHosts,...blockedHosts,...sources.map(s=>hostOf(s.url))]})[original.slot];
+  const cell=plan({profile,scope,opportunityPreferences,cursor:state.cursor||0,excludeHosts:blockedHosts,excludeUrls:[...knownUrls,...sources.map(s=>s.url)]})[original.slot];
   const attemptId=hash(`${project}/${businessUid}/${new Date(now).toISOString().slice(0,10)}/${cell.slot}`);
   let reservation,response,stage='transport';
   try {
@@ -97,7 +98,7 @@ async function discover({businessUid,project,profile,scope,opportunityPreference
    for(const item of (Array.isArray(parsed.candidates)?parsed.candidates:[]).slice(0,4)){
     const url=publicUrl(item.url);if(!url||!cited.has(url)||/\.(gov|mil)(\/|$)/i.test(url)){excluded++;continue;}
     const host=new URL(url).hostname.replace(/^www\./,''),key=hash(host);
-    if(knownHosts.has(host)){duplicates++;continue;}
+    if(knownUrls.has(url)){duplicates++;continue;}
     if(next.failures[key]?.until>now){backoff++;continue;}
     try {
      sourcesChecked++;const html=await readPublicSource({url});

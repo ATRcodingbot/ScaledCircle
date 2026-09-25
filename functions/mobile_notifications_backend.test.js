@@ -136,3 +136,11 @@ t('Email attention uses communications access, not an unrelated intelligence per
  assert.equal(await f.svc.authorized(f.uid,(await n.get()).data()),true);
  await member.update({permissions:['intelligence']});assert.equal(await f.svc.authorized(f.uid,(await n.get()).data()),false);
 });
+t('queued prior-account brief never follows reassigned device and Admin cannot open private summary',async()=>{
+ const f=await fixture();await db.doc('users/'+f.other).update({role:'admin'});
+ const n=await f.notice('agent_daily_brief',{message:'private summary',deepLink:{destination:'business_growth_agents'}});
+ await f.svc.register(f.other,f.input);await f.svc.sendGroup([await n.get()]);assert.equal(f.sent.length,0);
+ assert.deepEqual(await f.svc.open(f.other,n.id),{available:false});assert.equal((await n.get()).data().read,false);
+ await f.svc.register(f.uid,f.input);await f.svc.sendGroup([await n.get()]);assert.equal(f.sent.length,1);
+ assert(!JSON.stringify(f.sent[0]).includes('private summary'));assert.equal((await f.svc.open(f.uid,n.id)).available,true);
+});

@@ -10,6 +10,7 @@ let runtime,stripe,clock,controls,transfers,payouts,calls;
 const get=async p=>(await db.doc(p).get()).data();
 const req={requestId:'request_certification_one',amountCents:300};
 beforeEach(async()=>{
+ config.recoveryEnabled=false;
  for(const name of ['users','wallets','walletTransactions','campaignZones','campaigns','assignmentCompensations','campaignSettlements','campaignCompletions','scalerTransfers','campaignPayments','financialOperations','scalerCashoutIndex','scalerCashoutAllocations','stripeConnectedAccounts','stripeConnectedRecipients','scalerCashoutEvents'])await db.recursiveDelete(db.collection(name));
  clock=1789308000000;controls={platformBalance:10000,connectedBalance:10000,transferError:null,payoutError:null,receiptLive:true,transfersReady:true};transfers=new Map();payouts=new Map();calls=[];
  const earning={type:'scaler_earnings',walletSide:'scaler',transferOperationId:'real-transfer',campaignId,zoneId,businessId:business,scalerId:uid,amount:3,amountCents:300,currency:'usd',status:'available',createdAt:1};
@@ -154,4 +155,51 @@ test('cleared platform setup hold permits original zero-balance onboarding retry
  assert.equal(creates,1);assert.equal(links,2);assert.equal((await get('stripeConnectedAccounts/'+uid)).stripeAccountId,accountId);
  await assert.rejects(runtime.request(uid,req));assert.equal(calls.length,0);
  assert.equal((await db.collection('financialOperations').get()).size,0);assert.equal((await get('wallets/'+uid)).availableBalance,0);
+});
+function recoveryFixture(){
+ config.recoveryEnabled=true;
+ stripe.topups={retrieve:async id=>({id,livemode:true,status:'succeeded',currency:'usd',amount:300,balance_transaction:'txn_operating'})};
+ stripe.balanceTransactions={retrieve:async id=>({id,type:'topup',source:'tu_operating',status:'available',currency:'usd',amount:300,net:300,available_on:Math.floor(clock/1000)-1})};
+ stripe.charges.retrieve=async()=>({id:'ch_real',livemode:true,paid:true,disputed:true,currency:'usd',payment_intent:'pi_real',amount_refunded:0});
+ return {scalerId:uid,...req,topupId:'tu_operating',authorizationRef:'owner_approval_offline_fixture',reason:'Separately verified operating cash for original obligation',expectedVersion:1};
+}
+test('authorized replacement preserves earning identity and pays through same operation once',async()=>{
+ const input=recoveryFixture(),earning=await get('walletTransactions/'+earningId),contract=await get('assignmentCompensations/'+zoneId);
+ await db.doc('campaignPayments/'+paymentId).update({disputeOpen:true});
+ const a=await runtime.authorizeReplacementFunding('admin',input),b=await runtime.authorizeReplacementFunding('admin',input);
+ assert.equal(a.operationId,b.operationId);assert.equal(calls.length,0);assert.equal(a.executionPerformed,false);
+ const originalCreate=stripe.transfers.create;stripe.transfers.create=async(...args)=>{const r=await originalCreate(...args);controls.platformBalance=0;return r;};
+ await runtime.reconcile('admin',{operationId:a.operationId,retry:true},true);
+ payouts.get('po_real').status='paid';await runtime.reconcile(uid,{operationId:a.operationId});await runtime.reconcile(uid,{operationId:a.operationId});
+ assert.equal(calls.filter(c=>c.kind==='transfer').length,1);assert.equal(calls.filter(c=>c.kind==='payout').length,1);
+ assert.equal((await runtime.authorizeReplacementFunding('admin',input)).operationId,a.operationId);
+ assert.equal((await get('wallets/'+uid)).cashoutPaidCents,300);assert.deepEqual(await get('walletTransactions/'+earningId),earning);assert.deepEqual(await get('assignmentCompensations/'+zoneId),contract);
+ const op=await get('financialOperations/'+a.operationId),fund=await get('financialOperations/'+op.replacementFunding.fundingId);
+ assert.equal(fund.consumedCents,300);assert.equal(fund.reservedCents,0);assert.equal(fund.authorizedBy,'admin');
+ // Later original source recovery cannot create a parallel payment.
+ await db.doc('campaignPayments/'+paymentId).update({disputeOpen:false});await runtime.request(uid,req);assert.equal(calls.length,2);
+});
+test('replacement rejects pending/test/insufficient provider funding and lacks no implicit live authority',async()=>{
+ const input=recoveryFixture();config.recoveryEnabled=false;await assert.rejects(runtime.authorizeReplacementFunding('admin',input),{code:'cashout_recovery_not_enabled'});config.recoveryEnabled=true;
+ await assert.rejects(runtime.authorizeReplacementFunding(uid,input),{code:'cashout_admin_required'});
+ const valid=stripe.topups.retrieve;for(const patch of [{status:'pending'},{status:'reversed'},{livemode:false},{currency:'eur'}]){stripe.topups.retrieve=async id=>({...await valid(id),...patch});await assert.rejects(runtime.authorizeReplacementFunding('admin',input));}
+ stripe.topups.retrieve=valid;controls.platformBalance=0;await assert.rejects(runtime.authorizeReplacementFunding('admin',input),{code:'cashout_replacement_funds_unavailable'});
+ assert.equal((await db.collection('financialOperations').get()).size,0);assert.equal(calls.length,0);
+});
+test('uncertain original transfer blocks replacement, preserving its reservation and eventual original settlement',async()=>{
+ controls.transferError='after';const original=await runtime.request(uid,req);const input=recoveryFixture(),op=await get('financialOperations/'+original.operationId);input.expectedVersion=op.version;
+ await assert.rejects(runtime.authorizeReplacementFunding('admin',input),{code:'cashout_original_attempt_requires_reconciliation'});
+ assert.equal((await get('financialOperations/'+original.operationId)).replacementFunding,undefined);assert.equal((await get('wallets/'+uid)).cashoutPendingCents,300);assert.equal(calls.length,1);
+});
+test('same funding cannot be reassigned and source earning never recreated after reversal',async()=>{
+ const input=recoveryFixture(),a=await runtime.authorizeReplacementFunding('admin',input);await assert.rejects(runtime.authorizeReplacementFunding('admin',{...input,authorizationRef:'different_approval_ref'}),{code:'cashout_replacement_already_allocated'});
+ stripe.topups.retrieve=async id=>({id,livemode:true,status:'reversed',currency:'usd',amount:300,balance_transaction:'txn_operating'});
+ await runtime.reconcile('admin',{operationId:a.operationId,retry:true},true);assert.equal(calls.length,0);assert.equal((await get('wallets/'+uid)).cashoutPendingCents,300);
+});
+
+test('replacement covers only the unpaid portion of the same earning',async()=>{
+ const original=await runtime.request(uid,{requestId:'first_partial_payment',amountCents:100});payouts.get('po_real').status='paid';await runtime.reconcile(uid,{operationId:original.operationId});
+ const input={...recoveryFixture(),amountCents:200};await db.doc('campaignPayments/'+paymentId).update({disputeOpen:true});
+ const restored=await runtime.authorizeReplacementFunding('admin',input);const op=await get('financialOperations/'+restored.operationId),f=await get('financialOperations/'+op.replacementFunding.fundingId);
+ assert.equal(f.reservedCents,200);assert.equal(f.allocations[0].priorPaidCents,100);assert.equal((await runtime.store.available(uid)).paidCents,100);assert.equal((await runtime.store.available(uid)).pendingCents,200);assert.equal((await get('walletTransactions/'+earningId)).amountCents,300);
 });

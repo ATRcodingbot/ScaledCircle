@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 // Snapshot test doubles only; no Firestore SDK implementation is shipped.
 // ignore_for_file: subtype_of_sealed_class
@@ -13,7 +14,7 @@ class _Document implements QueryDocumentSnapshot {
   @override
   String get id => "notice-one";
   @override
-  Map<String, dynamic> data() => value;
+  Map<String, dynamic> data() => {'userId': 'self', ...value};
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
@@ -27,6 +28,96 @@ class _Snapshot implements QuerySnapshot {
 }
 
 void main() {
+  testWidgets('account switch rejects old list and late detail result', (
+    tester,
+  ) async {
+    final account = ValueNotifier('self');
+    final resolve = Completer<Map<String, dynamic>>();
+    var reads = 0;
+    final rows = _Snapshot([
+      _Document({
+        'type': 'agent_daily_brief',
+        'title': 'Private saved brief',
+        'message': 'Private summary',
+        'deepLink': {'destination': 'business_growth_agents'},
+      }),
+    ]);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ValueListenableBuilder<String>(
+          valueListenable: account,
+          builder: (_, uid, _) => NotificationsScreen(
+            currentUserId: uid,
+            notificationsStream: Stream.value(rows),
+            resolveNotification: (_) => resolve.future,
+            markNotificationRead: (_) async {
+              reads++;
+            },
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Private saved brief'));
+    await tester.pump();
+    account.value = 'other';
+    await tester.pumpAndSettle();
+    expect(find.text('Private saved brief'), findsNothing);
+    resolve.complete({
+      'available': true,
+      'type': 'agent_daily_brief',
+      'deepLink': {'destination': 'business_growth_agents'},
+    });
+    await tester.pumpAndSettle();
+    expect(find.text('Private summary'), findsNothing);
+    expect(reads, 0);
+    account.value = 'self';
+    await tester.pumpAndSettle();
+    expect(find.text('Private saved brief'), findsOneWidget);
+  });
+  testWidgets('open summary closes on account switch and old tap is denied', (
+    tester,
+  ) async {
+    final account = ValueNotifier('self');
+    var reads = 0;
+    final rows = _Snapshot([
+      _Document({
+        'type': 'agent_daily_brief',
+        'title': 'Original brief',
+        'message': 'Recipient-only summary',
+        'deepLink': {'destination': 'business_growth_agents'},
+      }),
+    ]);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ValueListenableBuilder<String>(
+          valueListenable: account,
+          builder: (_, uid, _) => NotificationsScreen(
+            currentUserId: uid,
+            notificationsStream: Stream.value(rows),
+            resolveNotification: (_) async => {
+              'available': uid == 'self',
+              'type': 'agent_daily_brief',
+              'deepLink': {'destination': 'business_growth_agents'},
+            },
+            markNotificationRead: (_) async {
+              reads++;
+            },
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Original brief'));
+    await tester.pumpAndSettle();
+    expect(find.byType(AlertDialog), findsOneWidget);
+    expect(reads, 1);
+    account.value = 'other';
+    await tester.pumpAndSettle();
+    expect(find.byType(AlertDialog), findsNothing);
+    expect(find.text('Original brief'), findsNothing);
+    expect(reads, 1);
+  });
   test('official weather notice opens its exact saved alert', () {
     final target = notificationDestination({
       'type': 'weather_opportunity',
@@ -102,6 +193,7 @@ void main() {
               currentUserId: 'owner',
               resolveNotification: (_) async => {
                 'available': true,
+                'userId': 'owner',
                 'type': 'social_drafts_ready',
                 'title': 'Instagram post — scheduled',
                 'message': 'Current post state',
@@ -118,6 +210,7 @@ void main() {
               notificationsStream: Stream.value(
                 _Snapshot([
                   _Document({
+                    'userId': 'owner',
                     'type': 'social_drafts_ready',
                     'title': 'Old review',
                     'read': false,
@@ -171,6 +264,7 @@ void main() {
           notificationsStream: Stream.value(
             _Snapshot([
               _Document({
+                'userId': 'owner',
                 'title': 'Open notice',
                 'read': false,
                 'deepLink': {'destination': 'business_schedule'},
@@ -317,7 +411,7 @@ void main() {
                 _Document({
                   'type': 'agent_daily_brief',
                   'title': 'Daily research summary',
-                  'message': 'No new leads.',
+                  'message': 'No new leads. Last run 2026-09-25T13:00:00Z',
                   'read': false,
                   'deepLink': {
                     'destination': 'business_growth_agents',
@@ -330,8 +424,10 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
+      expect(find.textContaining('2026-09-25T13:00:00Z'), findsNothing);
       await tester.tap(find.text('Read summary'));
       await tester.pumpAndSettle();
+      expect(find.textContaining('2026-09-25T13:00:00Z'), findsOneWidget);
       expect(
         find.textContaining('Full Growth reports are available on the web'),
         findsOneWidget,

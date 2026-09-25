@@ -56,6 +56,11 @@ function createRuntime({
   }
   async function funding(op) {
     await platform();
+    if (op.replacementFunding) {
+      if (config.recoveryEnabled !== true) fail('cashout_recovery_not_enabled');
+      await require('./scaler_cashout_recovery').verifyReplacement({stripe,platformId:config.platformId,topupId:op.replacementFunding.topupId,amountCents:op.amountCents,requireAvailableBalance:!op.transferId,now});
+      return;
+    }
     for (const s of op.allocations) {
       const intent = await stripe.paymentIntents.retrieve(s.paymentIntentId);
       if (intent.livemode !== true || intent.status !== 'succeeded' || intent.amount_received !== s.paymentAmountCents || intent.currency !== 'usd' || intent.metadata?.paymentId !== s.paymentId || intent.metadata?.campaignId !== s.campaignId || intent.metadata?.businessUid !== s.businessId) fail('cashout_live_payment_unverified');
@@ -388,6 +393,37 @@ function createRuntime({
     }
     return result;
   }
+  // Prepared operator action; no public endpoint or production activation in this batch.
+  // Authorization binds one verified operating-cash credit to one existing obligation.
+  // Execution remains the existing separately authorized reconcile/retry action.
+  async function authorizeReplacementFunding(uid,input) {
+    await actor(uid,true);assertRuntime(config);
+    if(config.recoveryEnabled!==true)fail('cashout_recovery_not_enabled');
+    if(!input||Object.keys(input).some(k=>!['scalerId','requestId','amountCents','topupId','authorizationRef','reason','expectedVersion'].includes(k))||!Number.isSafeInteger(input.expectedVersion)||input.expectedVersion<1||typeof input.authorizationRef!=='string'||!/^[A-Za-z0-9_-]{8,180}$/.test(input.authorizationRef)||typeof input.reason!=='string'||input.reason.trim().length<10||input.reason.length>500)fail('cashout_recovery_authorization_required');
+    await actor(input.scalerId);
+    const amountCents=cents(input.amountCents);
+    if(!amountCents)fail('cashout_request_invalid');
+    const prior=(await db.doc('financialOperations/cashout_'+id('v1','live',input.scalerId,input.requestId)).get()).data();
+    if(prior?.replacementFunding){
+      const r=prior.replacementFunding;
+      if(prior.amountCents!==amountCents||r.topupId!==input.topupId||r.authorizationRef!==input.authorizationRef||r.authorizedBy!==uid||r.reason!==input.reason.trim())fail('cashout_replacement_already_allocated');
+      return {...projection(prior),replacementAuthorized:true,executionPerformed:false};
+    }
+    const proof=await require('./scaler_cashout_recovery').verifyReplacement({stripe,platformId:config.platformId,topupId:input.topupId,amountCents,now});
+    const account=(await accountRef(input.scalerId).get()).data();assertAccount(account,input.scalerId);
+    const existing=(await db.doc('financialOperations/cashout_'+id('v1','live',input.scalerId,input.requestId)).get()).data();
+    // A usable original source needs no replacement authority or reservation.
+    if(!existing?.replacementFunding){
+      const preview=await store.previewRecovery(input.scalerId);
+      let remaining=amountCents;const selected=[];for(const source of preview.sources.sort((a,b)=>a.earningId.localeCompare(b.earningId))){if(source.availableCents>0&&remaining>0){selected.push(source);remaining-=Math.min(remaining,source.availableCents);}}
+      if(!existing&&remaining>0)fail('cashout_insufficient_balance');
+      try{await funding(existing||{allocations:selected});fail('cashout_original_funding_still_usable');}
+      catch(e){if(!['cashout_live_charge_unverified','cashout_live_payment_unverified'].includes(e.code))throw e;}
+    }
+    const op=await store.request(input.scalerId,input.requestId,amountCents,account.stripeAccountId,true);
+    const updated=await store.authorizeReplacement(op.id,input.expectedVersion,proof,{actorUid:uid,authorizationRef:input.authorizationRef,reason:input.reason.trim()});
+    return {...projection(updated),replacementAuthorized:true,executionPerformed:false};
+  }
   async function adminList(uid) {
     await actor(uid, true);
     const index = await db.collection('scalerCashoutIndex').orderBy('createdAt', 'desc').limit(100).get();
@@ -480,6 +516,7 @@ function createRuntime({
     request,
     reconcile,
     adminList,
+    authorizeReplacementFunding,
     webhook,
     sweep,
     store,
