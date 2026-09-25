@@ -19,9 +19,22 @@ function validateEnvelope(body, expectedActor) {
 async function forward({url,actorUid,operation,input,auth}) {
   if(!/^https:\/\/internalgrowthworkspacebridgev1-[a-z0-9-]+\.a\.run\.app$/.test(url||'')) throw Error('Internal workspace bridge is not configured.');
   validateEnvelope({actorUid,operation,input},actorUid);
-  const client=await auth.getIdTokenClient(url);
-  const response=await client.request({url,method:'POST',data:{operation,input:input||{},actorUid},timeout:175000});
+  let response;
+  try {
+    const client=await auth.getIdTokenClient(url);
+    response=await client.request({url,method:'POST',data:{operation,input:input||{},actorUid},timeout:175000});
+  } catch (cause) {
+    const error=Error('The internal workspace service is unavailable. Retry to read saved activity.');
+    error.code='unavailable';
+    error.stage='internal_bridge_transport';
+    error.providerStatus=Number.isInteger(cause?.response?.status)?cause.response.status:null;
+    // Never propagate a credential-bearing HTTP client error or numeric HTTP code.
+    throw error;
+  }
   if(response.data?.error) {const e=Error(response.data.error.message);e.code=response.data.error.code;throw e;}
+  if(!response.data?.result || typeof response.data.result!=='object' || Array.isArray(response.data.result)) {
+    const error=Error('The internal workspace response is incompatible.');error.code='data-loss';throw error;
+  }
   return response.data.result;
 }
 module.exports={validateEnvelope,forward,authorizeProductionActor};

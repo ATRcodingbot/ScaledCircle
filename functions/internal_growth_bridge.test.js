@@ -1,5 +1,13 @@
 'use strict';
 const {test}=require('node:test'),assert=require('node:assert/strict');const bridge=require('../functions-agentic-growth/internal_growth_bridge');
+test('bridge transport rejection is safe unavailable, never caller denial or numeric callable code',async()=>{
+ const auth={getIdTokenClient:async()=>({request:async()=>{throw Object.assign(Error('private payload and credential'),{code:403,response:{status:403}});}})};
+ await assert.rejects(bridge.forward({url:'https://internalgrowthworkspacebridgev1-abc-ue.a.run.app',actorUid:'admin',operation:'load',auth}),e=>e.code==='unavailable'&&e.providerStatus===403&&!String(e).includes('credential')&&!e.cause);
+});
+test('missing bridge response remains incompatible, not an empty successful workspace',async()=>{
+ const auth={getIdTokenClient:async()=>({request:async()=>({data:{}})})};
+ await assert.rejects(bridge.forward({url:'https://internalgrowthworkspacebridgev1-abc-ue.a.run.app',actorUid:'admin',operation:'load',auth}),e=>e.code==='data-loss');
+});
 test('internal bridge fails closed on tenant impersonation, arbitrary operations and scope injection',()=>{
  for(const body of [{actorUid:'other',operation:'load'},{actorUid:'admin',operation:'delete'},{actorUid:'admin',operation:'load',input:{businessUid:'other'}},{actorUid:'admin',operation:'load',path:'wallets/x'}])assert.throws(()=>bridge.validateEnvelope(body,'admin'));
  assert.throws(()=>bridge.validateEnvelope({actorUid:'admin',operation:'load'},''));

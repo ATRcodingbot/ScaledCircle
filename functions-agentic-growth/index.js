@@ -468,7 +468,13 @@ exports.getAgenticGrowthAdminSummaryV1 = onCall(
   async (request) => {
     if((process.env.GCLOUD_PROJECT||process.env.GOOGLE_CLOUD_PROJECT)==='scaled-circle') {
       await growthActor(request);
-      const view=await internalBridge.forward({url:process.env.GROWTH_INTERNAL_BRIDGE_URL,actorUid:request.auth.uid,operation:'load',input:{},auth:new GoogleAuth()});
+      let view;
+      try {
+        view=await internalBridge.forward({url:process.env.GROWTH_INTERNAL_BRIDGE_URL,actorUid:request.auth.uid,operation:'load',input:{},auth:new GoogleAuth()});
+      } catch(error) {
+        console.error('Internal Growth summary read failed',{stage:error.stage||'internal_bridge_response',code:error.code||'unavailable',providerStatus:error.providerStatus||null});
+        throw new HttpsError(['unavailable','data-loss','permission-denied','not-found'].includes(error.code)?error.code:'unavailable','AI Team activity could not be loaded. Retry to read saved status.');
+      }
       return {schemaVersion:view.schemaVersion,agentCount:view.agents.length,runCount:view.runs.length,
         observationCount:view.summary.completedSourceChecks,recommendationCount:view.summary.qualified,
         actionObjectCount:view.summary.awaitingApproval,killSwitchActiveCount:view.killSwitchActive?1:0,

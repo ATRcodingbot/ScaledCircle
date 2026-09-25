@@ -177,7 +177,7 @@ void main() {
     (tester) async {
       final service = _FakeAgenticGateway(fail: true);
       await _pumpAt(tester, AdminAgenticGrowthScreen(service: service));
-      expect(find.text("We couldn't load AI Team operations."), findsOneWidget);
+      expect(find.textContaining('temporarily unavailable'), findsOneWidget);
       expect(find.text('internal [0]'), findsNothing);
       service.fail = false;
       await tester.tap(find.text('Try again'));

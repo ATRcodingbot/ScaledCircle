@@ -1,5 +1,5 @@
 import '../business/growth_agents_screen.dart';
-import 'package:cloud_functions/cloud_functions.dart';
+import '../../models/growth_read_failure.dart';
 import 'package:flutter/material.dart';
 
 import '../../services/agentic_growth_service.dart';
@@ -34,13 +34,11 @@ class _AdminAgenticGrowthScreenState extends State<AdminAgenticGrowthScreen> {
       if (mounted) {
         setState(() => _summary = summary);
       }
-    } on FirebaseFunctionsException catch (_) {
+    } catch (error) {
       if (mounted) {
-        setState(() => _error = "We couldn't load AI Team operations.");
-      }
-    } catch (_) {
-      if (mounted) {
-        setState(() => _error = 'Unable to load AI Team health.');
+        setState(
+          () => _error = growthReadFailure(error, privateWorkspace: true),
+        );
       }
     }
   }

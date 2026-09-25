@@ -1,6 +1,7 @@
 import 'package:flutter_app/navigation/authenticated_app_bar.dart';
 import '../../widgets/social_performance_panel.dart';
 import '../../models/social_plan_presentation.dart';
+import '../../models/growth_read_failure.dart';
 import '../../services/business_email_service.dart';
 import '../../services/business_workspace_service.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -122,12 +123,13 @@ class _GrowthAgentsScreenState extends State<GrowthAgentsScreen> {
           _error = null;
         });
       }
-    } catch (_) {
+    } catch (error) {
       if (mounted && generation == _loadGeneration) {
         setState(
-          () => _error = widget.customer
-              ? 'Unable to load your Growth workspace. Confirm you are using your invited Business account, then retry.'
-              : 'Unable to load this private workspace. Sign in as the ScaledCircle dogfood Admin, then retry.',
+          () => _error = growthReadFailure(
+            error,
+            privateWorkspace: !widget.customer,
+          ),
         );
       }
     }
