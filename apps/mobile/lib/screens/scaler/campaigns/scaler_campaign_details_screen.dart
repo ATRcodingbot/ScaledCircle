@@ -1,3 +1,5 @@
+import '../../../widgets/campaign_funding_status.dart';
+import '../../../services/secure_function_service.dart';
 import 'package:flutter_app/widgets/map_source_credit.dart';
 import 'package:flutter_app/navigation/authenticated_app_bar.dart';
 import '../../../widgets/production_compensation_acceptance.dart';
@@ -267,11 +269,15 @@ class _ScalerCampaignDetailsScreenState
             false;
 
         if (assignedToCurrentScaler) {
-          return SizedBox(
-            height: 55,
-            child: ElevatedButton(
-              onPressed: null,
-              child: const Text("Accepted / Assigned"),
+          return CampaignFundingStatus(
+            authorityKey:
+                '${FirebaseAuth.instance.currentUser?.uid}/${campaign.id}',
+            currentAuthorityKey: () =>
+                '${FirebaseAuth.instance.currentUser?.uid}/${campaign.id}',
+            authorityChanges: FirebaseAuth.instance.authStateChanges(),
+            load: () => const SecureFunctionService().call(
+              functionName: 'getCampaignFundingState',
+              data: {'campaignId': campaign.id},
             ),
           );
         }

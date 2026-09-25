@@ -118,19 +118,40 @@ function prepare() {
  // Export only the coordinated four funding authorities. Refund/cancellation
  // revisions remain separately pinned and are not included in this codebase.
  const parser=require(path.join(root,'functions/node_modules/@babel/parser'));
- source+=`\nexports.getCampaignFundingState=onCall(OPTIONS,async request=>{
-   const input=await ownedCampaign(request,'payments');
-   const campaign=input.campaign,paymentId=cleanId(campaign.fundingPaymentId);
-   const payment=paymentId?(await db.doc('campaignPayments/'+paymentId).get()).data():null;
-   const status=payment?.status||campaign.fundingStatus||'unfunded';
-   const opened=process.env.LIVE_PAID_WORK_ACTIVATION_ENABLED==='true';
-   const messages={payment_pending:'Payment processing. Work cannot start yet.',paid:'Funding confirmed. Assignment and work-start checks still apply.',
-     refunded:'Payment refunded. This source cannot fund new work.',disputed:'Funding issue — action required.',refund_pending:'Refund pending. New work is blocked.'};
-   const checkoutAllowed=opened&&campaign.status==='draft'&&['','unfunded','payment_failed','checkout_expired'].includes(status);
-   let allocation=null;
-   if(payment?.fundingAllocation)allocation=require('./campaign_fund_allocation').view(paymentId,payment);
-   return {status,checkoutAllowed,message:!opened?'Campaign checkout is awaiting verified fund-retention controls. Your draft is saved.':
-     messages[status]||'Review campaign requirements and the current quote before payment.',allocation};
+ source+=`\nexports.getCampaignFundingState=onCall({...OPTIONS,secrets:[STRIPE_SECRET_KEY]},async request=>{
+   if(!request.auth?.uid)throw new HttpsError('unauthenticated','Sign in to continue.');
+   const profile=(await db.doc('users/'+request.auth.uid).get()).data();
+   let input,scalerUid=null;
+   if(profile?.role==='scaler'){
+     const actor=await auth.getUser(request.auth.uid),campaignId=cleanId(request.data?.campaignId);
+     if(actor.disabled||!actor.emailVerified||profile.active!==true||!campaignId)throw new HttpsError('permission-denied','Verified Scaler access required.');
+     const ref=db.doc('campaigns/'+campaignId),campaign=(await ref.get()).data();
+     if(!campaign)throw new HttpsError('not-found','Campaign unavailable.');
+     const assigned=await db.collection('campaignZones').where('campaignId','==',campaignId).get();
+     if(!assigned.docs.some(d=>d.data().assignedScalerId===request.auth.uid))throw new HttpsError('permission-denied','No current assignment in this campaign.');
+     input={ref,campaign,campaignId};scalerUid=request.auth.uid;
+   }else input=await ownedCampaign(request,'payments');
+   let checkoutAllowed=false,checkoutReason=null;
+   if(!scalerUid&&input.campaign.status==='draft')try {
+     require('./paid_work_launch_gate').assertNewPaidWork({project:process.env.GCLOUD_PROJECT||process.env.GOOGLE_CLOUD_PROJECT});
+     await require('./market_rollout').requireActiveBusiness(db,input.campaign.businessId);
+     await requireBusinessFundingConsent(input.actorUid);
+     if(input.actorUid!==input.uid)await requireBusinessFundingConsent(input.uid);
+     const zones=await assertFundable(input);
+     await require('./market_work_geography').requireCampaign(db,{...input.campaign,serviceArea:zones.flatMap(z=>z.data().serviceArea||[])});
+     const quote=productionPolicy.quote(lifecycle,input.campaignId,input.campaign,zones.map(d=>({...d.data(),id:d.id})));
+     checkoutAllowed=!!quote.acceptedOffer;
+     if(!checkoutAllowed)checkoutReason='unsupported_campaign_type';
+   }catch(_){checkoutReason='campaign_requirements_not_met';}
+   const result=await require('./campaign_state_readback').read({db,auth,Timestamp,HttpsError,input,scalerUid,checkoutAllowed,checkoutReason,
+     loadProvider:async payment=>{
+       if(!payment?.stripePaymentIntentId)throw Error('signed_campaign_funding_required');
+       const stripe=stripeClient();
+       const [account,balanceSettings,intent,balance]=await Promise.all([stripe.accounts.retrieve(),stripe.balanceSettings.retrieve(),
+         stripe.paymentIntents.retrieve(payment.stripePaymentIntentId,{expand:['latest_charge.balance_transaction']}),stripe.balance.retrieve()]);
+       return {account,balanceSettings,intent,balance};
+     }});
+   return {...result,message:result.checkoutAllowed?'Review the current quote before payment.':'Campaign requirements must be verified before funding or work.'};
  });\n`;
  const generate=require(path.join(root,'functions/node_modules/@babel/generator')).default;
  const {selectedProgram}=require('../functions/scripts/select_function_program');
@@ -145,7 +166,9 @@ function prepare() {
    const name=m[1].replace(/\.js$/,'')+'.js';if(copied.has(name))continue;copied.add(name);
    let filename=path.join(root,'functions-campaign-funding',name);
    if(!fs.existsSync(filename))filename=path.join(root,'functions',name);
-   let content=fs.readFileSync(filename,'utf8');
+   let content=name==='campaign_start_readback.js'
+     ?require('./campaign_start_readback.cjs')(require('./prepare_production_engineering.cjs').prepareSource())
+     :fs.readFileSync(filename,'utf8');
    content=require('./production_settlement_adapter.cjs').moduleSource(name,content);
    if(name==='campaign_funding_lifecycle.js') {
     content=replaceFunction(content,'paymentEnvironment',`function paymentEnvironment(environment={}) {

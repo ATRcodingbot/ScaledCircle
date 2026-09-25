@@ -132,3 +132,43 @@ test('low-accuracy and teleport evidence cannot earn route credit; revoked assig
   points:[{...points[0],sequence:4,timestampMs:start+40000}]}));
  await assert.rejects(call('getTrackingSessionState','scaler',{sessionId,includeProgress:true}));
 });
+const readback=require('../.firebase/production-engineering/funding/campaign_state_readback');
+async function presentation(scalerUid=null) {
+ const ref=db.doc('campaigns/campaign'),campaign=(await ref.get()).data();
+ const {HttpsError}=require('firebase-functions/v2/https');
+ return readback.read({db,auth,Timestamp,HttpsError,input:{ref,campaign,campaignId:'campaign'},scalerUid,
+   loadProvider:async p=>({account:{id:'acct_1U328bI9d5xWNArH'},balanceSettings:{payments:{payouts:{schedule:{interval:'manual'}}}},
+     balance:{livemode:true,available:[{currency:'usd',amount:21000}]},
+     intent:{id:p.stripePaymentIntentId,livemode:true,status:'succeeded',currency:'usd',amount_received:21000,
+       latest_charge:{id:'ch_fixture',paid:true,livemode:true,disputed:false,refunded:false,amount_refunded:0,payment_intent:p.stripePaymentIntentId,amount:21000,currency:'usd',
+         balance_transaction:{id:'txn_fixture',currency:'usd',amount:21000,source:'ch_fixture',status:'available',fee:1000,net:20000}}}})});
+}
+test('read-only readiness reuses live start gates without creating tracking or changing allocations',async()=>{
+ const before=(await db.doc('campaignPayments/payment').get()).data();
+ const result=await presentation();assert.equal(result.eligibility.state,'ready');assert.equal(result.eligibility.readyZoneCount,1);
+ assert.deepEqual((await db.doc('campaignPayments/payment').get()).data(),before);
+ assert.equal((await db.collection('trackingSessions').get()).size,0);
+ await db.doc('legalConsents/scaler_location_notice_location-notice-2026-08-v1').delete();
+ const blocked=await presentation();assert.equal(blocked.eligibility.state,'blocked');assert.equal(blocked.eligibility.zones[0].reason,'consent_required');
+});
+test('funded unassigned, processing, unsupported and reserve-less presentations never ready',async()=>{
+ await db.doc('campaignZones/zone').update({assignedScalerId:null,status:'unassigned'});
+ assert.equal((await presentation()).eligibility.state,'awaiting_scaler');
+ await db.doc('campaignPayments/payment').update({status:'payment_pending',fundingAllocation:candidateRequire('firebase-admin/firestore').FieldValue.delete()});
+ assert.equal((await presentation()).eligibility.state,'payment_processing');
+ await db.doc('campaigns/campaign').update({campaignType:'postcardMailing'});
+ assert.equal((await presentation()).eligibility.state,'unsupported');
+});
+test('readback retains earned unpaid obligation through dispute and restricts Scaler visibility',async()=>{
+ const f=require('./campaign_fund_allocation'),ref=db.doc('campaignPayments/payment'),p=(await ref.get()).data();
+ p.fundingAllocation=f.start('payment',p,contract);p.fundingAllocation=f.earn('payment',p,contract,15000);
+ await ref.update({fundingAllocation:p.fundingAllocation,status:'disputed'});
+ const result=await presentation('scaler');assert.equal(result.eligibility.state,'funding_issue');assert.equal(result.allocation.workerEarnedCents,15000);assert.equal(result.allocation.workerPaidCents,0);
+ assert.equal(result.allocation.customerPaidCents,undefined);
+ await assert.rejects(presentation('other'),e=>e.code==='permission-denied');
+});
+
+test('missing assignment reserve blocks read-only start readiness',async()=>{
+ await db.doc('campaignPayments/payment').update({'fundingAllocation.assignments':{}});
+ const result=await presentation();assert.equal(result.eligibility.state,'blocked');assert.equal(result.eligibility.readyZoneCount,0);
+});

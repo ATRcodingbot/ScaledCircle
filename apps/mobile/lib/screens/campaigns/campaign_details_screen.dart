@@ -15,6 +15,7 @@ import '../../services/secure_function_service.dart';
 import '../../widgets/legal_consent_prompt.dart';
 import '../../widgets/material_work_scope.dart';
 import '../../widgets/campaign_planning_cost.dart';
+import '../../widgets/campaign_funding_status.dart';
 
 import '../../services/wallet_service.dart';
 import '../../navigation/app_routes.dart';
@@ -2109,6 +2110,20 @@ class _CampaignDetailsScreenState extends State<CampaignDetailsScreen> {
 
               const SizedBox(height: 12),
 
+              CampaignFundingStatus(
+                key: ValueKey(
+                  '${FirebaseAuth.instance.currentUser?.uid}/${campaign.id}/$status/$fundingStatus',
+                ),
+                authorityKey:
+                    '${FirebaseAuth.instance.currentUser?.uid}/${campaign.id}',
+                currentAuthorityKey: () =>
+                    '${FirebaseAuth.instance.currentUser?.uid}/${campaign.id}',
+                authorityChanges: FirebaseAuth.instance.authStateChanges(),
+                load: () => _billingService.campaignFundingState(
+                  businessId: data['businessId']?.toString() ?? '',
+                  campaignId: campaign.id,
+                ),
+              ),
               Card(
                 child: Padding(
                   padding: const EdgeInsets.all(16),
@@ -2119,9 +2134,9 @@ class _CampaignDetailsScreenState extends State<CampaignDetailsScreen> {
                             Icons.check_circle,
                             color: Colors.green,
                           ),
-                          title: Text('Payment confirmed'),
+                          title: Text('Campaign funding'),
                           subtitle: Text(
-                            'Campaign funded and ready to publish.',
+                            'Use the current server status above. Publishing and work start remain subject to server checks.',
                           ),
                         )
                       : status == 'draft' &&

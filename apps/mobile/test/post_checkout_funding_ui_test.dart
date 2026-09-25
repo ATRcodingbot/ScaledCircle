@@ -17,28 +17,42 @@ void main() {
     expect(returnSource, contains('Payment confirmed'));
     expect(returnSource, contains('Campaign funded'));
     expect(returnSource, contains('Campaign canceled / refunded'));
-    expect(returnSource, contains('The requested campaign could not be found.'));
-    expect(returnSource, contains('your browser return does not mark the campaign funded'));
-  });
-
-  test('Checkout return includes campaign identity but no payment authority', () {
-    final backend = File('../../functions-campaign-funding/index.js')
-        .readAsStringSync();
     expect(
-      backend,
-      contains('campaign-funding-return?status=processing&campaignId='),
+      returnSource,
+      contains('The requested campaign could not be found.'),
     );
-    expect(backend, isNot(contains('status=funded')));
-    expect(backend, isNot(contains('paymentStatus=paid')));
+    expect(
+      returnSource,
+      contains('your browser return does not mark the campaign funded'),
+    );
   });
 
-  test('funded Campaign Details avoids stale quote and exposes publish step', () {
-    final details = File(
-      'lib/screens/campaigns/campaign_details_screen.dart',
-    ).readAsStringSync();
-    expect(details, contains("fundingStatus == 'funded'"));
-    expect(details, contains("title: Text('Payment confirmed')"));
-    expect(details, contains("'Publish Funded Campaign'"));
-    expect(details, contains('publishFundedCampaign'));
-  });
+  test(
+    'Checkout return includes campaign identity but no payment authority',
+    () {
+      final backend = File(
+        '../../functions-campaign-funding/index.js',
+      ).readAsStringSync();
+      expect(
+        backend,
+        contains('campaign-funding-return?status=processing&campaignId='),
+      );
+      expect(backend, isNot(contains('status=funded')));
+      expect(backend, isNot(contains('paymentStatus=paid')));
+    },
+  );
+
+  test(
+    'funded Campaign Details avoids stale quote and exposes publish step',
+    () {
+      final details = File(
+        'lib/screens/campaigns/campaign_details_screen.dart',
+      ).readAsStringSync();
+      expect(details, contains("fundingStatus == 'funded'"));
+      expect(details, contains('CampaignFundingStatus('));
+      expect(details, isNot(contains('Campaign funded and ready to publish')));
+      expect(details, contains("'Publish Funded Campaign'"));
+      expect(details, contains('publishFundedCampaign'));
+    },
+  );
 }
