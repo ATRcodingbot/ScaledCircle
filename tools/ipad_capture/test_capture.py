@@ -172,7 +172,7 @@ class CaptureTests(unittest.TestCase):
         self.assertIn('max_build_duration: 30', config)
         self.assertNotIn('triggering:', config)
         self.assertIn('/tmp/sc-ipad-capture-status.json', config)
-        self.assertEqual(capture.SOURCE, '26f29133fcd72edecf5c71497712674293228341')
+        self.assertEqual(capture.SOURCE, 'c66388d96131224a0a8f7367a4b73b7f92cd95a4')
 
     def test_plist_rejects_wrong_project_before_build(self):
         config = {'PROJECT_ID': 'scaled-circle', 'BUNDLE_ID': 'com.scaledcircle.app',

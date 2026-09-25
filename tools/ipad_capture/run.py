@@ -18,7 +18,7 @@ import time
 from auth_preflight import verify as verify_auth, AuthPreflightFailure
 from diagnostics import DiagnosticCapture
 
-SOURCE = '26f29133fcd72edecf5c71497712674293228341'
+SOURCE = 'c66388d96131224a0a8f7367a4b73b7f92cd95a4'
 SDK = '058e0af2c2b57e369d905a03ac9748b0ebf543c6'
 LOCK = '2d929b3279125c2a0732212aee86ebf51607aaff76f315c9a0ff51e0bbf8ea94'
 OUTPUT = Path('/tmp/sc-ipad-capture-output')
