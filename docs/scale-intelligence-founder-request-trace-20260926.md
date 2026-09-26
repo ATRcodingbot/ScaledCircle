@@ -91,6 +91,8 @@ When no defensible alternate exists, the dialog says **“No supported alternati
 - Dependency lock: unchanged.
 - No server query, timeout, provider, ranking, authority or economic rule was changed.
 
+The web correction is deployed from `d511a43188a7618cd9235ba2554a7226f041e280` to Hosting version `2592bf79c7ba280a`, released `2026-09-26T21:46:22.982Z`. All 317 compiled Dart source inputs matched the committed source. Public bundle SHA-256 `cf706b426ff44b31888809742931b7c302211da8391d14bf3ec64cd629b1e8a0`, index, bootstrap, service worker and version file match the prepared package. Five retained static pages, four rewrites and four cache-header rules are unchanged. Get remains `getsmartzoneplan-00009-gow` with 100% traffic. No new production recommendation was triggered to verify the wording; the retained response shape is covered by the focused widget test.
+
 Production acquisition remains the blocker to a useful 21061 recommendation. Another Founder click is **not required to diagnose this run or validate the wording correction**. A future meaningful acceptance needs fresh successful provider evidence before requesting another physical review; no blind retry was performed.
 
 ## Preservation
@@ -98,3 +100,5 @@ Production acquisition remains the blocker to a useful 21061 recommendation. Ano
 Post-investigation read at `2026-09-26T21:42:36.361Z` exactly matches the original campaign fingerprint `83f379dac8a08c0d95216e04b20e829c601aec144af760646d8514cde2620fab`, update time `2026-09-19T11:34:54.318751Z`, and zero bound campaign zones.
 
 Safe retained evidence is under `.firebase/mapping-qa/scale-intelligence-acceptance/`: `founder-exact-trace.safe.json`, `founder-request-logs.safe.json`, `founder-physical-fail-safe.png` and `after-founder-traced-result.fingerprints.safe.json`. Private raw logs are excluded from this report and from version control. The frozen native source, finances, entitlements, manual mapping and Email/Social remain outside this correction.
+
+Hosting package and independent public readback evidence are retained under `.firebase/scale-search-readback-hosting/`. The native checkout was independently rechecked clean at `0f57f0894a06fc0de0b769d3c4fa012c62e51cb1` after deployment.

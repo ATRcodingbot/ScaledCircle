@@ -10,11 +10,13 @@ Promotion tooling: `327423a63233e3f02de22524aa1173b69216d4cd` (four deployment-h
 | `applySmartZonePlan` | `applysmartzoneplan-00009-wal` |
 | `getSmartZonePlan` | `getsmartzoneplan-00009-gow` |
 | `getBusinessWorkspaceContext` | `getbusinessworkspacecontext-00004-xop` |
-| Firebase Hosting | `cb0ebe407ef0f3b2` |
+| Firebase Hosting | `2592bf79c7ba280a` (bounded failure-explanation follow-up) |
 
 All three functions are ACTIVE. Generation-pinned uploaded source archives match their prepared packages exactly: Apply 24/24 files, Get 24/24 files, workspace projection 9/9 files. IAM, identities, environment, secrets and unrelated configuration are unchanged. The only approved configuration adjustment is Get's 180-second timeout. Existing live server dependency-lock records are preserved; the exact reviewed clipping dependency graph is added where required. Workspace projection lock is unchanged.
 
 Hosting released at `2026-09-26T20:59:37.623Z`. Public bundle SHA-256 is `76b47030cddee39cfb45275282e2daf7ab1ff31c6217301c51c8259e3b52e8cb`, matching the reviewed package. Index, bootstrap, service worker and version file match. Four existing rewrites, four cache headers and five static pages remain unchanged.
+
+Follow-up web-only explanation source `d511a43188a7618cd9235ba2554a7226f041e280` released at `2026-09-26T21:46:22.982Z`; current public bundle SHA-256 `cf706b426ff44b31888809742931b7c302211da8391d14bf3ec64cd629b1e8a0`. It displays the returned acquisition counts and explicitly labels the absence of a supported alternate. Forty-seven focused tests, analyzer and production web build passed; source/package/public readback matched. No function revision, Hosting rule or native candidate changed. Full details are in the request trace below.
 
 ## Authority evidence
 
