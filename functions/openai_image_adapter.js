@@ -150,7 +150,9 @@ function buildPrompt(brief = {}) {
     `Use only non-personal area context${region ? ` for ${region}` : ""}${traits ? `: ${traits}` : ""}. ` +
       "Depict a plausible regional property type without reproducing any specific real home or address." :
     "Use an attainable, generic property setting without reproducing any specific real home or address.";
-  const composition = clean(brief.composition, 300) ||
+  const printGeometry = brief.materialSlot === "door_hanger_service_hero" ?
+    require("./door_hanger_geometry").generationGeometry() : null;
+  const composition = printGeometry ? "portrait composition below the reserved top safe line; preserve the complete important subject" : clean(brief.composition, 300) ||
     "landscape hero composition with a safe central crop";
   return [
     `Create one photorealistic, professional ${direction} service-concept image for ${category}.`,
@@ -163,8 +165,8 @@ function buildPrompt(brief = {}) {
     `Workmanship must be ${clean(brief.workmanship, 300) || "physically plausible, clean, and professionally executed"}.`,
     "The result should be aspirational but attainable: avoid extravagant mansion bias, implausible architecture,",
     "physically absurd construction, unrelated geography, and generic stock-photo staging.",
-    ...(brief.printGeometry ? ["Required print geometry (inches): " + JSON.stringify(brief.printGeometry)] : []),
-    `Compose for ${composition}; preserve both the service work and enough property context after cropping.`,
+    ...(printGeometry ? ["Required print geometry (inches): " + JSON.stringify(printGeometry)] : []),
+    `Compose for ${composition}; preserve both the service work and enough property context${printGeometry ? " without cropping important content" : " after cropping"}.`,
     "No people, faces, crews, logos, readable text, signage, credentials, awards, ratings, reviews, guarantees,",
     "before-and-after composition, or claim that the depicted work was completed by the Business.",
   ].join(" ");

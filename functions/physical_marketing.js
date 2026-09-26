@@ -230,7 +230,7 @@ function suggestedCopy(service) {
 function normalizeDraft(input = {}) {
   if (input.productSpecId?.startsWith("door_hanger") &&
       (input.artworkUploadId || input.creationMode === "upload")) {
-    throw new Error("Door-hanger full-page artwork needs safe-area review; upload a logo or service image for template placement instead. Print-ready approval is blocked.");
+    throw Object.assign(new Error("Full-page door-hanger artwork isn’t supported yet. Upload your logo and images and ScaledCircle will place them safely within the verified template."), {code: "invalid-argument"});
   }
   const spec = productSpec(input.productSpecId);
   const postcard=spec.mailingMethod==='eddm_retail';
@@ -1205,8 +1205,7 @@ function validateAuthorizedDraft(draft, authority = {}) {
 }
 
 function versionOrderReady(version = {}) {
-  return (!String(version.productSpecId || "").startsWith("door_hanger") ||
-    version.geometrySnapshot?.version === doorGeometry.GEOMETRY_VERSION) &&
+  return !doorGeometry.needsRegeneration(version) &&
     version.preflightStatus === "pass" && version.printReadinessStatus === "pass" &&
     version.marketingReadinessStatus === "pass";
 }
@@ -1400,14 +1399,16 @@ function createPhysicalMarketingService({db, FieldValue, bucket, createResponseA
       const data = doc.data() || {}; const versionId = data.reviewVersionId || data.approvedVersionId;
       const versionSnap = versionId ? await versions.doc(versionId).get() : null;
       let version = versionSnap?.exists ? {versionId, ...versionSnap.data()} : null;
-      if (version && String(version.productSpecId).startsWith("door_hanger") &&
-          version.geometrySnapshot?.version !== doorGeometry.GEOMETRY_VERSION) {
+      if (version && doorGeometry.needsRegeneration(version)) {
         version = {...version, printReadinessStatus: "fail", preflightStatus: "fail",
           geometryMigrationRequired: true};
       }
       const artifactSnap = version?.artifactId ? await artifacts.doc(version.artifactId).get() : null;
       const artifact = artifactSnap?.exists ? artifactSnap.data() : null;
-      return {materialId: doc.id, ...data, version: version ? {...version,
+      return {materialId: doc.id, ...data,
+        ...(version?.geometryMigrationRequired ? {status: "DRAFT", approvedVersionId: null,
+          readinessDisposition: "Needs regeneration / Needs renewed approval"} : {}),
+        version: version ? {...version,
         artifact: artifact ? {artifactId: artifact.artifactId, format: artifact.format,
           storagePath: version.geometryMigrationRequired ? null : artifact.storagePath, digitalJpgPath: version.geometryMigrationRequired ? null : artifact.digitalJpgPath,
           printRasters: version.geometryMigrationRequired ? [] : artifact.printRasters || [],
@@ -1650,7 +1651,8 @@ function createPhysicalMarketingService({db, FieldValue, bucket, createResponseA
       const version = doc.data() || {}; const artifact = artifactByVersion.get(doc.id) || {};
       return {versionId: doc.id, materialId: version.materialId,
         templateId: version.templateId || null, templateVersion: version.templateVersion || null,
-        printReady: version.printReadinessStatus === "pass",
+        printReady: !doorGeometry.needsRegeneration(version) && version.printReadinessStatus === "pass",
+        geometryMigrationRequired: doorGeometry.needsRegeneration(version),
         marketingReady: version.marketingReadinessStatus === "pass",
         marketingReadinessFailures: Array.isArray(version.marketingReadiness?.failures) ?
           version.marketingReadiness.failures : [],

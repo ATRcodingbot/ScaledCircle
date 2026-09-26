@@ -709,13 +709,23 @@ class _MaterialCard extends StatelessWidget {
             final details = Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                if (version['geometryMigrationRequired'] == true)
+                  const Text('Needs regeneration / Needs renewed approval'),
+                if (draft['productSpecId'] == 'door_hanger_3_5x8_5')
+                  const Padding(
+                    padding: EdgeInsets.only(bottom: 12),
+                    child: Text(
+                      'Full-page door-hanger artwork isn’t supported yet. Upload your logo and images and ScaledCircle will place them safely within the verified template.',
+                    ),
+                  ),
+
                 if (draft['productSpecId'] == 'door_hanger_3_5x8_5')
                   const Padding(
                     padding: EdgeInsets.only(bottom: 12),
                     child: Text(
                       'Door hangers include a reserved top area for the printer’s hole/die-cut. '
-                      'Keep important text, logos and QR codes below the safe line. '
-                      'The preview guide is not printed. For GotPrint, download the flattened Printer JPG files.',
+                      'Important text, logos and QR codes are automatically kept below the safe area. '
+                      'The web preview guide is not printed. For GotPrint, download the flattened Printer JPG files. ',
                     ),
                   ),
 

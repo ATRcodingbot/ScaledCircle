@@ -3,7 +3,7 @@
 // Coordinates are inches from the TOP LEFT of trim, on each printed face.
 // Vendor templates are not interchangeable. A new format needs its own reviewed entry.
 const GEOMETRY_VERSION = "DoorHangerGeometryV2";
-const CUSTOMER_COPY = "Door hangers include a reserved top area for the printer’s hole/die-cut. Keep important text, logos and QR codes below the safe line.";
+const CUSTOMER_COPY = "Door hangers include a reserved top area for the printer’s hole/die-cut. Important text, logos and QR codes are automatically kept below the safe area.";
 const GOTPRINT = Object.freeze({
   id: "gotprint_3_5x8_5_20260926", version: GEOMETRY_VERSION,
   vendor: "gotprint", verified: true,
@@ -31,6 +31,12 @@ function geometryFor(spec) {
   return structuredClone(GOTPRINT);
 }
 
+function needsRegeneration(version = {}) {
+  return String(version.productSpecId || "").startsWith("door_hanger") &&
+    (version.geometrySnapshot?.version !== GEOMETRY_VERSION ||
+      version.geometrySnapshot?.id !== GOTPRINT.id);
+}
+
 function preflightContent(geometry, boxes, {complete = true} = {}) {
   if (!geometry?.verified) return {status: "fail", warnings: ["Printer template geometry is not verified."]};
   if (!complete || !Array.isArray(boxes) || !boxes.length) return {status: "fail",
@@ -56,4 +62,4 @@ function generationGeometry() {
     instruction: "The top 2.15 inches are unavailable for important content on either face. Compose important imagery below that line from the outset. No printed hole or guide. This service image is placed entirely inside the safe content region."};
 }
 
-module.exports = {GEOMETRY_VERSION, CUSTOMER_COPY, GOTPRINT, geometryFor, preflightContent, generationGeometry};
+module.exports = {GEOMETRY_VERSION, CUSTOMER_COPY, GOTPRINT, geometryFor, preflightContent, generationGeometry, needsRegeneration};

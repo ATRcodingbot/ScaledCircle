@@ -1,0 +1,218 @@
+{
+  "implementation": "fb7766973f5c503b0451a4a71825002277ea3c98",
+  "geometry": "DoorHangerGeometryV2",
+  "functions": {
+    "approvePhysicalMarketingVersion": {
+      "baseRevision": "approvephysicalmarketingversion-00003-siw",
+      "baseSource": {
+        "bucket": "gcf-v2-sources-1010956217112-us-east1",
+        "generation": "1788981205574876",
+        "object": "approvePhysicalMarketingVersion/function-source.zip"
+      },
+      "files": {
+        "physical_marketing.js": {
+          "beforeSha256": "aaa64a8f0a89b117774acc181a81a5e29dd8e87941211a0b99afceda5990aa22",
+          "afterSha256": "2301aaf8ff4e24c816c276e18340958791fed0e117171eb1de933cf84cc08b34",
+          "patch": "48e7576402f2a1ff.patch"
+        },
+        "door_hanger_geometry.js": {
+          "beforeSha256": null,
+          "afterSha256": "2c0dea7d50570e28db1dc09dd77eadfd2ca050fe7b90e9176a9721af096c6d31",
+          "patch": "abf8e8b0b1ae6d78.patch"
+        },
+        "workspace-exports.js": {
+          "beforeSha256": "e91047711e0cf939763d7427b303b46ae8846fe717a3a96c996eef3f80018e39",
+          "afterSha256": "08f8ba8b5b7963d07dcde92be323e3e4158df4fecbfa0615e3b989c4864e025e",
+          "patch": "77f2f0e99c58fae7.patch"
+        },
+        "index.js": {
+          "unchangedSha256": "f28f9bff74d99a2a0cb926e5dedd9f405bfca106368f60a924d2e2376d7ca377"
+        },
+        "package-lock.json": {
+          "unchangedSha256": "8c70bd4dd6842146157dbb57a6a98855336914a353743943ca0982d0e8c12690"
+        }
+      }
+    },
+    "getPhysicalMarketingOperations": {
+      "baseRevision": "getphysicalmarketingoperations-00002-son",
+      "baseSource": {
+        "bucket": "gcf-v2-sources-1010956217112-us-east1",
+        "generation": "1788256002664489",
+        "object": "getPhysicalMarketingOperations/function-source.zip"
+      },
+      "files": {
+        "physical_marketing.js": {
+          "beforeSha256": "6344b0b12825e6a4b95d14b3e742dd70abef474964be4ac0f6402177a0b8c1c1",
+          "afterSha256": "f079af0cdc8e1493532012bf4446e29e15a8c425afaf00e5919a6b0f426a9e8c",
+          "patch": "39e1b6c87bea9393.patch"
+        },
+        "door_hanger_geometry.js": {
+          "beforeSha256": null,
+          "afterSha256": "2c0dea7d50570e28db1dc09dd77eadfd2ca050fe7b90e9176a9721af096c6d31",
+          "patch": "abf8e8b0b1ae6d78.patch"
+        },
+        "index.js": {
+          "unchangedSha256": "a601e08fae7e8adeaa55c5edd5735948a800d745124498bfaad0e869cb8d1fc0"
+        },
+        "package-lock.json": {
+          "unchangedSha256": "9e179a1cd46fa19a2958c3d72f0df23b3ea27bf4ba222240d76a25abcb2ab89b"
+        }
+      }
+    },
+    "getPhysicalMarketingWorkspace": {
+      "baseRevision": "getphysicalmarketingworkspace-00003-sim",
+      "baseSource": {
+        "bucket": "gcf-v2-sources-1010956217112-us-east1",
+        "generation": "1788981147976960",
+        "object": "getPhysicalMarketingWorkspace/function-source.zip"
+      },
+      "files": {
+        "physical_marketing.js": {
+          "beforeSha256": "aaa64a8f0a89b117774acc181a81a5e29dd8e87941211a0b99afceda5990aa22",
+          "afterSha256": "2301aaf8ff4e24c816c276e18340958791fed0e117171eb1de933cf84cc08b34",
+          "patch": "48e7576402f2a1ff.patch"
+        },
+        "door_hanger_geometry.js": {
+          "beforeSha256": null,
+          "afterSha256": "2c0dea7d50570e28db1dc09dd77eadfd2ca050fe7b90e9176a9721af096c6d31",
+          "patch": "abf8e8b0b1ae6d78.patch"
+        },
+        "workspace-exports.js": {
+          "beforeSha256": "e91047711e0cf939763d7427b303b46ae8846fe717a3a96c996eef3f80018e39",
+          "afterSha256": "08f8ba8b5b7963d07dcde92be323e3e4158df4fecbfa0615e3b989c4864e025e",
+          "patch": "77f2f0e99c58fae7.patch"
+        },
+        "index.js": {
+          "unchangedSha256": "f28f9bff74d99a2a0cb926e5dedd9f405bfca106368f60a924d2e2376d7ca377"
+        },
+        "package-lock.json": {
+          "unchangedSha256": "8c70bd4dd6842146157dbb57a6a98855336914a353743943ca0982d0e8c12690"
+        }
+      }
+    },
+    "mutatePhysicalMarketingMaterial": {
+      "baseRevision": "mutatephysicalmarketingmaterial-00003-voq",
+      "baseSource": {
+        "bucket": "gcf-v2-sources-1010956217112-us-east1",
+        "generation": "1788981205704394",
+        "object": "mutatePhysicalMarketingMaterial/function-source.zip"
+      },
+      "files": {
+        "physical_marketing.js": {
+          "beforeSha256": "aaa64a8f0a89b117774acc181a81a5e29dd8e87941211a0b99afceda5990aa22",
+          "afterSha256": "2301aaf8ff4e24c816c276e18340958791fed0e117171eb1de933cf84cc08b34",
+          "patch": "48e7576402f2a1ff.patch"
+        },
+        "door_hanger_geometry.js": {
+          "beforeSha256": null,
+          "afterSha256": "2c0dea7d50570e28db1dc09dd77eadfd2ca050fe7b90e9176a9721af096c6d31",
+          "patch": "abf8e8b0b1ae6d78.patch"
+        },
+        "workspace-exports.js": {
+          "beforeSha256": "e91047711e0cf939763d7427b303b46ae8846fe717a3a96c996eef3f80018e39",
+          "afterSha256": "08f8ba8b5b7963d07dcde92be323e3e4158df4fecbfa0615e3b989c4864e025e",
+          "patch": "77f2f0e99c58fae7.patch"
+        },
+        "index.js": {
+          "unchangedSha256": "f28f9bff74d99a2a0cb926e5dedd9f405bfca106368f60a924d2e2376d7ca377"
+        },
+        "package-lock.json": {
+          "unchangedSha256": "8c70bd4dd6842146157dbb57a6a98855336914a353743943ca0982d0e8c12690"
+        }
+      }
+    },
+    "preparePhysicalMarketingVersion": {
+      "baseRevision": "preparephysicalmarketingversion-00004-wit",
+      "baseSource": {
+        "bucket": "gcf-v2-sources-1010956217112-us-east1",
+        "generation": "1788981147986179",
+        "object": "preparePhysicalMarketingVersion/function-source.zip"
+      },
+      "files": {
+        "physical_marketing.js": {
+          "beforeSha256": "aaa64a8f0a89b117774acc181a81a5e29dd8e87941211a0b99afceda5990aa22",
+          "afterSha256": "2301aaf8ff4e24c816c276e18340958791fed0e117171eb1de933cf84cc08b34",
+          "patch": "48e7576402f2a1ff.patch"
+        },
+        "door_hanger_geometry.js": {
+          "beforeSha256": null,
+          "afterSha256": "2c0dea7d50570e28db1dc09dd77eadfd2ca050fe7b90e9176a9721af096c6d31",
+          "patch": "abf8e8b0b1ae6d78.patch"
+        },
+        "workspace-exports.js": {
+          "beforeSha256": "e91047711e0cf939763d7427b303b46ae8846fe717a3a96c996eef3f80018e39",
+          "afterSha256": "08f8ba8b5b7963d07dcde92be323e3e4158df4fecbfa0615e3b989c4864e025e",
+          "patch": "77f2f0e99c58fae7.patch"
+        },
+        "index.js": {
+          "unchangedSha256": "f28f9bff74d99a2a0cb926e5dedd9f405bfca106368f60a924d2e2376d7ca377"
+        },
+        "package-lock.json": {
+          "unchangedSha256": "8c70bd4dd6842146157dbb57a6a98855336914a353743943ca0982d0e8c12690"
+        }
+      }
+    },
+    "processGeneratedServiceVisual": {
+      "baseRevision": "processgeneratedservicevisual-00010-qal",
+      "baseSource": {
+        "bucket": "gcf-v2-sources-1010956217112-us-east1",
+        "generation": "1789912900051175",
+        "object": "processGeneratedServiceVisual/function-source.zip"
+      },
+      "files": {
+        "generation_foundation.js": {
+          "beforeSha256": "5910bc32a7a2111a7aa048d05b170c198bf8d71e75795942dc825ea6c81a836b",
+          "afterSha256": "c56ed1a20d8be01f17363b0e161841dc33e6ab342da36ed1014936ff65c2fb53",
+          "patch": "00c45357b801e4c5.patch"
+        },
+        "openai_image_adapter.js": {
+          "beforeSha256": "db3c959e2355aa5fa11b16cdec549c0cf7a093b5be2825a073bdb608ec23c1d2",
+          "afterSha256": "3ed11651b4dba96c8d0ad00c2ff2e66f08de85daa7bb4644c59a5ed532148734",
+          "patch": "895be59b9c051e7e.patch"
+        },
+        "door_hanger_geometry.js": {
+          "beforeSha256": null,
+          "afterSha256": "2c0dea7d50570e28db1dc09dd77eadfd2ca050fe7b90e9176a9721af096c6d31",
+          "patch": "abf8e8b0b1ae6d78.patch"
+        },
+        "index.js": {
+          "unchangedSha256": "fa1fe6674eb1b8579dc8624cda729064f7c29c32802cc3b11fd0292e01d43a9b"
+        },
+        "package-lock.json": {
+          "unchangedSha256": "f59daf2e2f93a76ccbbe3f75c563189cb1ee80f29eeef2dae55abe16f126d3db"
+        }
+      }
+    },
+    "requestGeneratedServiceVisual": {
+      "baseRevision": "requestgeneratedservicevisual-00008-viq",
+      "baseSource": {
+        "bucket": "gcf-v2-sources-1010956217112-us-east1",
+        "generation": "1789909609337305",
+        "object": "requestGeneratedServiceVisual/function-source.zip"
+      },
+      "files": {
+        "generation_foundation.js": {
+          "beforeSha256": "5910bc32a7a2111a7aa048d05b170c198bf8d71e75795942dc825ea6c81a836b",
+          "afterSha256": "c56ed1a20d8be01f17363b0e161841dc33e6ab342da36ed1014936ff65c2fb53",
+          "patch": "00c45357b801e4c5.patch"
+        },
+        "openai_image_adapter.js": {
+          "beforeSha256": "db3c959e2355aa5fa11b16cdec549c0cf7a093b5be2825a073bdb608ec23c1d2",
+          "afterSha256": "3ed11651b4dba96c8d0ad00c2ff2e66f08de85daa7bb4644c59a5ed532148734",
+          "patch": "895be59b9c051e7e.patch"
+        },
+        "door_hanger_geometry.js": {
+          "beforeSha256": null,
+          "afterSha256": "2c0dea7d50570e28db1dc09dd77eadfd2ca050fe7b90e9176a9721af096c6d31",
+          "patch": "abf8e8b0b1ae6d78.patch"
+        },
+        "index.js": {
+          "unchangedSha256": "65c6af5efac7a4147110ac2f606dceaea5c09b9607e273802be823ce6ce1789b"
+        },
+        "package-lock.json": {
+          "unchangedSha256": "099a65c3414e8a77b60abc47a240b2f95a50420d79dc0d3888a73f97f326856f"
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,10 @@
+--- a/workspace-exports.js
++++ b/workspace-exports.js
+@@ -94,6 +94,7 @@
+   publicBaseUrl: attributionFoundation.publicResponseOrigin(attributionProjectId)
+ });
+ function physicalMarketingHttpsError(error) {
++  if (error?.code === "invalid-argument") return new HttpsError("invalid-argument", error.message);
+   const code = String(error?.message || error);
+   console.warn("physical_marketing_request_rejected", {
+     category: code.slice(0, 120)

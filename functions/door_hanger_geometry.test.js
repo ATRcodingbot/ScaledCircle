@@ -17,7 +17,7 @@ test("valid safe content passes; incomplete uploaded content is warned and block
   assert.equal(geo.preflightContent(geo.GOTPRINT, boxes).status, "pass");
   assert.equal(geo.preflightContent(geo.GOTPRINT, boxes, {complete: false}).status, "fail");
   assert.throws(() => physical.normalizeDraft({productSpecId: "door_hanger_3_5x8_5",
-    artworkUploadId: "unverified-upload"}), /safe-area review/);
+    artworkUploadId: "unverified-upload"}), /isn’t supported yet/);
 });
 test("geometry changes cannot borrow verification; unrelated landscape products are unaffected", () => {
   const spec = physical.productSpec("door_hanger_3_5x8_5");

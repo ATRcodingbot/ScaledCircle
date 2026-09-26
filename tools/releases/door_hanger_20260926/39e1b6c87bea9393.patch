@@ -1,0 +1,20 @@
+--- a/physical_marketing.js
++++ b/physical_marketing.js
+@@ -1,6 +1,7 @@
+ "use strict";
+ 
+ const crypto = require("node:crypto");
++const doorGeometry = require("./door_hanger_geometry");
+ const fs = require("node:fs");
+ const sharp = require("sharp");
+ const QRCode = require("qrcode");
+@@ -1399,7 +1400,8 @@
+       const version = doc.data() || {}; const artifact = artifactByVersion.get(doc.id) || {};
+       return {versionId: doc.id, materialId: version.materialId,
+         templateId: version.templateId || null, templateVersion: version.templateVersion || null,
+-        printReady: version.printReadinessStatus === "pass",
++        printReady: !doorGeometry.needsRegeneration(version) && version.printReadinessStatus === "pass",
++        geometryMigrationRequired: doorGeometry.needsRegeneration(version),
+         marketingReady: version.marketingReadinessStatus === "pass",
+         marketingReadinessFailures: Array.isArray(version.marketingReadiness?.failures) ?
+           version.marketingReadiness.failures : [],
