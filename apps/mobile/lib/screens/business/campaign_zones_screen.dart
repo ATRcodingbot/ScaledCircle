@@ -707,11 +707,11 @@ class _CampaignZonesScreenState extends State<CampaignZonesScreen> {
                 onPressed: () => Navigator.pop(dialogContext, 'adjust'),
                 child: const Text('Adjust Area'),
               ),
-              TextButton(
-                onPressed: recommendationContext['hasAlternative'] == true
+              SmartZoneAlternativeAction(
+                onAvailable:
+                    canApply && recommendationContext['hasAlternative'] == true
                     ? () => Navigator.pop(dialogContext, 'another')
                     : null,
-                child: const Text('Try Another Recommendation'),
               ),
               TextButton(
                 onPressed: () => Navigator.pop(dialogContext, 'draw'),

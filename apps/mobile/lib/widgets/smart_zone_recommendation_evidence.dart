@@ -100,6 +100,51 @@ String advisoryWorkload(num minutes) {
   return total < 60 ? '${total}m' : '${total ~/ 60}h ${total % 60}m';
 }
 
+String intelligentAreaFailureMessage(Map<String, dynamic> plan) {
+  const fallback =
+      "We couldn't find enough reliable data to recommend an area here yet. You can still draw your own area.";
+  final search = plan['searchRegion'];
+  final context = plan['recommendationContext'];
+  if (search is! Map || context is! Map) return fallback;
+  final selected = search['selectedWindows'];
+  final successful = search['successfulWindows'];
+  if (selected is! int ||
+      selected < 1 ||
+      selected > 12 ||
+      successful is! int ||
+      successful < 0 ||
+      successful > selected) {
+    return fallback;
+  }
+  final hours = context['requestedHours'];
+  final workload =
+      hours is num && hours.isFinite && hours >= 0.5 && hours <= 192
+      ? " We couldn't verify the requested $hours hours of work."
+      : '';
+  final outcome = successful == 0
+      ? 'Reliable map evidence was unavailable for all $selected selected sections.'
+      : successful < selected
+      ? 'Reliable map evidence was available for $successful of $selected selected sections. The remaining sections could not be assessed. The assessed sections did not support a reliable outreach area.'
+      : 'We analyzed $successful sections but did not find enough classified targets near permitted local streets to recommend a reliable outreach area.';
+  final next = successful < selected
+      ? 'Try again later, choose a nearby location, or draw your own area.'
+      : 'Choose a nearby location or draw your own area.';
+  return '$outcome$workload $next';
+}
+
+class SmartZoneAlternativeAction extends StatelessWidget {
+  const SmartZoneAlternativeAction({super.key, required this.onAvailable});
+  final VoidCallback? onAvailable;
+
+  @override
+  Widget build(BuildContext context) => onAvailable == null
+      ? const Text('No supported alternative from this search.')
+      : TextButton(
+          onPressed: onAvailable,
+          child: const Text('Try Another Recommendation'),
+        );
+}
+
 class _IntelligenceRecommendationEvidence extends StatelessWidget {
   const _IntelligenceRecommendationEvidence({required this.plan});
   final Map<String, dynamic> plan;
@@ -150,9 +195,7 @@ class _IntelligenceRecommendationEvidence extends StatelessWidget {
           Text('Location: ${recommendation['locationLabel']}'),
         const SizedBox(height: 12),
         if (!valid) ...[
-          const Text(
-            "We couldn't find enough reliable data to recommend an area here yet. You can still draw your own area.",
-          ),
+          Text(intelligentAreaFailureMessage(plan)),
         ] else ...[
           Text('Why this area', style: Theme.of(context).textTheme.titleSmall),
           for (final reason in recommendation['why'] as List? ?? [])
