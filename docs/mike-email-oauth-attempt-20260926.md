@@ -28,3 +28,7 @@ The original connection request was created at 2026-09-26 17:00:31.020 UTC (1:00
 Existing Email backend suite was included in 104 passing backend checks. Current web regression suite: 38 passing tests, including direct Email route/login return and provider/entitlement states. These are not evidence of a completed live Google authorization.
 
 No production sends, credential reset, OAuth scope expansion, consent-screen change, callback replay or fabricated connection. Await the actual new returned connection state before certifying CONNECTED. Independent CSV/maps/campaign work remains separate.
+
+## Latest readback at 17:25:53 UTC / 1:25:53 PM Eastern
+
+Mike initiated a new correctly bound Read + Send attempt at 17:20:58.880 UTC; it expires at 17:30:58.880 UTC and is pending. The original attempt was canceled at 17:20:58.997 UTC when replaced. The new attempt still has no connected mailbox status or private credential document. Do not interrupt the active Google flow or request another initiation while this request is current. The latest operations revision is businessemailoperationsv1-00032-tiy after the separately authorized canonical-CRM selection update; its environment/secrets/OAuth configuration are unchanged. No further callback cause is inferred.
