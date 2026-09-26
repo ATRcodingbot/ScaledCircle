@@ -153,7 +153,7 @@ These readbacks verify the deployed revisions, configuration/IAM preservation, H
 
 Founder physically selected **21061 / Anne Arundel County** in the existing Test draft, then opened Recommend an Area. The deployed `871030a` review showed **0 mapped target features**, OpenStreetMap, **Source date: Not recorded**, unavailable classified targets/local-road linework, disabled Use Recommended Area, and available Adjust Area. [Actual production screenshot](qa-artifacts/mapping-production-21061-unavailable.png). This is a fail-safe result, not positive Corkran acceptance. The exact campaign and zero-zone records were compared before/after this read-only preview and were unchanged. The older tab's unsaved 48-point circle was preserved.
 
-## Narrow correction validation (not yet deployed at this checkpoint)
+## Narrow correction validation — application source df0a3e9
 
 - ZCTA fallback queries only the actual GEOID field; unresolved ZIP/place results cannot silently become address-sized squares. A known full ZIP above 25 km² retains its geometry and reports the analysis limit.
 - An explicit unsaved drawn `analysisBoundary` can be previewed through the same owner-authorized draft endpoint. Strict numeric coordinates, simple-ring validation and a 1,000-point cap reject malformed/crossing/retraced boundaries. Oversized geometry is not clipped or replaced. Preview writes no campaign or Zone; Apply still regenerates and checks the exact plan before its existing transaction.
@@ -162,7 +162,25 @@ Founder physically selected **21061 / Anne Arundel County** in the existing Test
 - The evidence widget keeps Apply disabled and avoids presenting a candidate total of zero as a measured source inventory. Partial-source timestamps are labeled incomplete; successful source timestamp and retrieval time remain separate.
 - **77 focused Node tests passed**: 73 across resolver, entry contract/authority, actual helper execution, geography/diagnostics and planning, plus four real Corkran fixture regressions. **31 Flutter widget tests passed** across evidence presentation and mapping interactions. Changed client files analyze clean; production Flutter web build succeeded (`APP_ENV=production`, `--no-pub`). Dependency locks unchanged. No native build or campaign/financial mutation.
 
-The corrected production readback and Founder physical inspection remain to be recorded after deployment. The original 11.529-second production null-snapshot cause remains unknowable from its retained logs; current public replays and resolver proof are explicitly separate evidence.
+### Corrected deployment readback
+
+Application source: `df0a3e94888d0f68750d399a1f286cbfdc87bb47`, clean and pushed before promotion. The package overlays preserve the deployed authorization prelude exactly; the maintained monolith has a different authority-module dependency, so only the selected-area/anchor/digest tail is transplanted within `smartZoneCampaign`. All other source declarations and dependency locks are preserved. Five overlay tests include execution of both actual deployed authorization preludes with positive/negative synthetic contexts.
+
+| Surface | Corrected verified result |
+| --- | --- |
+| Location resolver | `resolveserviceareaplace-00007-saw`, ACTIVE |
+| Recommendation preview | `getsmartzoneplan-00008-pec`, ACTIVE |
+| Recommendation application | `applysmartzoneplan-00008-naj`, ACTIVE |
+| Configuration and IAM | All three postdeploy configuration difference lists empty; all three IAM policies unchanged |
+| Hosting | `sites/scaled-circle/versions/62fe12d009268df9`, released `2026-09-26T19:56:00.825Z`; existing headers/rewrites and five extra static pages retained |
+| Served web bytes | 6,556,937 bytes; SHA-256 `b134703a01194c90ee1bc0611b36ff08c0ef61a609ce7dc428048d696f0a43ff`; matches compiled artifact and 317 verified source-input hashes |
+| Actual unauthenticated HTTP probes | Signed-out and deliberately invalid bearer requests each returned HTTP 401 / callable `UNAUTHENTICATED`; no provider work or campaign mutation |
+| QA campaign readback | At `19:58:21.305851Z`, exact campaign document and zero Zone documents unchanged from predeployment snapshots |
+| Frozen native checkout | Clean at `0f57f0894a06fc0de0b769d3c4fa012c62e51cb1`; no native build or store action |
+
+Evidence: `.firebase/mapping-correction/deploy/*/deployment.safe.json`, `auth-negative.safe.json`, `.firebase/mapping-21061-correction/hosting/deployment.safe.json`, and `.firebase/mapping-qa/acceptance-after/corrected-deployment-before-physical/`.
+
+The refreshed QA browser loaded the Test planning page, but automated Flutter-control interaction did not complete navigation into Campaign Zones. It is not a production recommendation PASS or proof of a packaged product defect. Founder was asked to select 21061 once on the corrected client, inspect the explicit 25 km²-limit result, then draw an appropriately bounded Corkran neighborhood area and request a preview without Save/Use/funding. Corrected authenticated production recommendation and Founder physical inspection remain pending. The original 11.529-second production null-snapshot cause remains unknowable from its retained logs; current public replays and resolver proof are explicitly separate evidence.
 
 Only direct observations belong here. Record the actual mode, visible result, timestamp and screenshot/log evidence, plus whether any authorized draft was saved. Do not infer browser PASS from a local fixture.
 
