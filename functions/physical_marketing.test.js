@@ -57,7 +57,7 @@ test("bounded V1 product specs include required door hanger and supported front/
   const door = physical.productSpec("door_hanger_3_5x8_5");
   assert.equal(door.widthInches, 3.5); assert.equal(door.heightInches, 8.5);
   assert.deepEqual(door.sides, [1, 2]); assert.deepEqual(door.quantities, [100, 250, 500, 1000, 2500]);
-  assert.equal(door.dieCut.kind, "standard_circular_hole");
+  assert.equal(door.dieCut.kind, "vendor_hole_and_slit");
   assert.equal(Object.values(physical.PRODUCT_SPECS).filter((item) => !item.uiHidden).length, 5);
 });
 
@@ -73,7 +73,8 @@ test("workspace ordering understands Firestore Timestamp values", () => {
 
 test("print media normalization removes provider canvas gutters before effective-DPI certification", async () => {
   const placement = physical.doorHangerMediaPlacement(physical.productSpec("door_hanger_3_5x8_5"));
-  const normalized = await physical.normalizePlacedImage(await gutteredServiceImage(), placement);
+  await assert.rejects(physical.normalizePlacedImage(await gutteredServiceImage(), placement), /resolution_low/);
+  const normalized = await physical.normalizePlacedImage(await gutteredServiceImage(), {...placement, minimumDpi: 300});
   assert.equal(normalized.width, 794);
   assert.equal(normalized.height, 1024);
   assert.equal(normalized.effectiveDpi, 317);

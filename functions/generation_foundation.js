@@ -211,8 +211,9 @@ function safeBrief(request, brand = {}, serviceAreaContext = null, socialCreativ
     ...(socialCreativeContext?{socialCreativeContext}:{}),
     visualSubject: language.visualSubject,
     workmanship: "physically plausible professional execution with clean lines, realistic proportions, and appropriate site conditions",
+    ...(request.materialSlot === "door_hanger_service_hero" ? {printGeometry: require("./door_hanger_geometry").generationGeometry()} : {}),
     composition: request.materialSlot === "door_hanger_service_hero" ?
-      "portrait print composition; keep the marketed service and regional property context visible through a narrow door-hanger crop" :
+      "portrait print composition; compose the complete service subject for placement below the reserved top safe line; do not crop important details" :
       "landscape hero composition with a safe central crop",
     exclusions: ["identifiable_people", "real_customer_property", "before_after", "credentials_or_awards",
       "reviews_or_ratings", "factual_signage", "business_logo", "completed_work_claim"],

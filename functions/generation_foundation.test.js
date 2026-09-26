@@ -136,7 +136,7 @@ test("area-context snapshot is bounded, immutable, non-personal, and service lan
     requestedPurpose: "service_visual", materialSlot: "door_hanger_service_hero",
     campaignId: "campaign_safe_123"}, {}, context);
   assert.equal(brief.serviceLanguage.customerProject, "deck project");
-  assert.match(brief.composition, /door-hanger crop/);
+  assert.match(brief.composition, /reserved top safe line/);
   assert.equal(brief.serviceAreaVisualContext.contextDigest, context.contextDigest);
 });
 

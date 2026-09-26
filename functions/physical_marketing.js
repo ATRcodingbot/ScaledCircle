@@ -1,6 +1,7 @@
 "use strict";
 
 const crypto = require("node:crypto");
+const doorGeometry = require("./door_hanger_geometry");
 const fs = require("node:fs");
 const sharp = require("sharp");
 const QRCode = require("qrcode");
@@ -67,8 +68,8 @@ const PRODUCT_SPECS = Object.freeze({
     bleedInches: 0.0625, safeInches: 0.125, sides: [1, 2], defaultSides: 2,
     quantities: [100, 250, 500, 1000, 2500], colorProfile: "CMYK",
     stockTarget: "14pt coated", finishTarget: "professional_gloss_or_aqueous",
-    dieCut: {kind: "standard_circular_hole", diameterInches: 1.1875,
-      centerXInches: 1.75, centerFromTopInches: 0.75, exclusionPaddingInches: 0.125},
+    geometryId: doorGeometry.GOTPRINT.id,
+    dieCut: {kind: "vendor_hole_and_slit", exclusion: doorGeometry.GOTPRINT.exclusion},
   }),
   postcard_4x6: Object.freeze({
     productType: "postcard", label: "Postcard 4 × 6", widthInches: 6, heightInches: 4,
@@ -145,14 +146,14 @@ function productSpec(specId) {
   const id = text(specId, 80);
   const spec = PRODUCT_SPECS[id];
   if (!spec) throw new Error("physical_product_unsupported");
-  return {specId: id, version: "PhysicalProductSpecV1", ...spec};
+  return {specId: id, version: "PhysicalProductSpecV1", ...spec, geometry: doorGeometry.geometryFor(spec)};
 }
 
 function publicProductSpecs() {
   return Object.entries(PRODUCT_SPECS)
     .filter(([, spec]) => !spec.uiHidden)
     .map(([specId, spec]) => ({specId, version: "PhysicalProductSpecV1", ...spec,
-      dieCut: spec.dieCut || null}));
+      dieCut: spec.dieCut || null, geometry: doorGeometry.geometryFor(spec)}));
 }
 
 function validHexColor(value, fallback) {
@@ -227,6 +228,10 @@ function suggestedCopy(service) {
 }
 
 function normalizeDraft(input = {}) {
+  if (input.productSpecId?.startsWith("door_hanger") &&
+      (input.artworkUploadId || input.creationMode === "upload")) {
+    throw new Error("Door-hanger full-page artwork needs safe-area review; upload a logo or service image for template placement instead. Print-ready approval is blocked.");
+  }
   const spec = productSpec(input.productSpecId);
   const postcard=spec.mailingMethod==='eddm_retail';
   const qrEnabled=!postcard||input.qrEnabled!==false;
@@ -371,9 +376,8 @@ function sideLayout(spec, draft, side) {
   const right = width - bleed - safe;
   const bottom = bleed + safe;
   let top = height - bleed - safe;
-  if (spec.dieCut && side === 1) {
-    const protectedFromTop = spec.dieCut.centerFromTopInches +
-      spec.dieCut.diameterInches / 2 + spec.dieCut.exclusionPaddingInches;
+  if (spec.productType === "door_hanger") {
+    const protectedFromTop = doorGeometry.geometryFor(spec).contentTop;
     top = Math.min(top, height - bleed - protectedFromTop * 72);
   }
   return {width, height, bleed, safe, left, right, bottom, top,
@@ -388,20 +392,22 @@ async function normalizePlacedImage(imageBuffer, placement) {
   if (!trimmed.info.width || !trimmed.info.height) throw new Error("physical_media_invalid");
   const effectiveDpi = Math.min(trimmed.info.width / placement.widthInches,
     trimmed.info.height / placement.heightInches);
-  if (effectiveDpi < MIN_EFFECTIVE_DPI) throw new Error("physical_media_resolution_low");
-  const width = Math.ceil(placement.widthInches * MIN_EFFECTIVE_DPI);
-  const height = Math.ceil(placement.heightInches * MIN_EFFECTIVE_DPI);
-  const cmykJpeg = await image.clone().resize({width, height, fit: "cover", position: "attention"})
+  const minimumDpi = placement.minimumDpi || MIN_EFFECTIVE_DPI;
+  if (effectiveDpi < minimumDpi) throw new Error("physical_media_resolution_low");
+  const width = Math.ceil(placement.widthInches * minimumDpi);
+  const height = Math.ceil(placement.heightInches * minimumDpi);
+  const cmykJpeg = await image.clone().resize({width, height, fit: placement.preserveContent ? "contain" : "cover", position: "attention", background: "#FFFFFF"})
     .toColourspace("cmyk").jpeg({quality: 92, chromaSubsampling: "4:4:4"})
     .withIccProfile("cmyk").toBuffer();
-  const proof = await image.clone().resize({width, height, fit: "cover",
-    position: "attention"}).jpeg({quality: 90}).toBuffer();
+  const proof = await image.clone().resize({width, height, fit: placement.preserveContent ? "contain" : "cover",
+    position: "attention", background: "#FFFFFF"}).jpeg({quality: 90}).toBuffer();
   return {cmykJpeg, proof, width: trimmed.info.width, height: trimmed.info.height,
     effectiveDpi: Math.floor(effectiveDpi)};
 }
 
 function doorHangerMediaPlacement(spec) {
-  return {widthInches: Math.min(2.5, spec.widthInches - 0.36), heightInches: 2.7};
+  return {widthInches: Math.min(2.5, spec.widthInches - 0.36), heightInches: 2.7,
+    preserveContent: true, minimumDpi: doorGeometry.geometryFor(spec).rasterDpi};
 }
 
 function fittedImageBox(image, maximumWidth, maximumHeight, centerX, centerY) {
@@ -486,6 +492,7 @@ async function renderDoorHangerPrintMaster({version, trackedUrl, mediaBuffer, lo
   pdf.setAuthor("ScaledCircle"); pdf.setCreator("ScaledCircle Physical Marketing Execution V1");
   pdf.setProducer("ScaledCircle"); pdf.setCreationDate(fixedDate); pdf.setModificationDate(fixedDate);
   addPdfXMetadata(pdf, await cmykOutputProfile());
+  const geometry = doorGeometry.geometryFor(spec);
   const placement = doorHangerMediaPlacement(spec);
   const normalizedMedia = await normalizePlacedImage(mediaBuffer, placement);
   const normalizedLogo = await normalizeLogo(logoBuffer);
@@ -496,11 +503,21 @@ async function renderDoorHangerPrintMaster({version, trackedUrl, mediaBuffer, lo
   const primary = hexToCmyk(primaryHex); const secondary = hexToCmyk(secondaryHex);
   const primaryInk = hexToCmyk(readableColor(primaryHex).hex);
   const qr = qrMatrix(trackedUrl); const sideEvidence = []; const pageEvidence = [];
-  const fontEvidence = [];
+  const fontEvidence = []; const contentBoxes = [];
   for (let side = 1; side <= draft.sideCount; side += 1) {
     const layout = sideLayout(spec, draft, side); const page = pdf.addPage([layout.width, layout.height]);
-    const protectedFromTop = spec.dieCut && side === 1 ? spec.dieCut.centerFromTopInches +
-      spec.dieCut.diameterInches / 2 + spec.dieCut.exclusionPaddingInches : null;
+    page.setTrimBox(layout.bleed, layout.bleed, spec.widthInches * 72, spec.heightInches * 72);
+    page.setBleedBox(0, 0, layout.width, layout.height);
+    const protectedFromTop = doorGeometry.geometryFor(spec).contentTop;
+    // Measure the actual drawing operations, not just the planned header position.
+    const record = (kind, x, y, width, height) => contentBoxes.push({side, kind,
+      x: (x - layout.bleed) / 72, y: (layout.height - y - height - layout.bleed) / 72,
+      width: width / 72, height: height / 72});
+    const drawText = page.drawText.bind(page); const drawImage = page.drawImage.bind(page);
+    page.drawText = (value, options) => {record("text", options.x, options.y,
+      options.font.widthOfTextAtSize(value, options.size), options.size); return drawText(value, options);};
+    page.drawImage = (value, options) => {record("image/logo", options.x, options.y,
+      options.width, options.height); return drawImage(value, options);};
     pageEvidence.push({side, widthPoints: layout.width, heightPoints: layout.height,
       bleedPoints: layout.bleed, safePoints: layout.safe, contentTopPoints: layout.top,
       dieSafeContentTopPoints: protectedFromTop == null ? null :
@@ -533,9 +550,9 @@ async function renderDoorHangerPrintMaster({version, trackedUrl, mediaBuffer, lo
         page.drawImage(embeddedImage, imageBox);
         if (generatedMedia) {
           page.drawRectangle({x: imageBox.x, y: imageBox.y, width: imageBox.width,
-            height: 17, color: cmyk(0, 0, 0, 0)});
-          page.drawText("CONCEPTUAL SERVICE VISUAL — NOT COMPLETED WORK", {x: imageBox.x + 6,
-            y: imageBox.y + 5, size: 7.5, font: bold, color: secondary}); fontEvidence.push(7.5);
+            height: 28, color: cmyk(0, 0, 0, 0)});
+          drawWrappedText(page, bold, "CONCEPTUAL SERVICE VISUAL — NOT COMPLETED WORK", {x: imageBox.x + 6,
+            top: imageBox.y + 25, width: imageBox.width - 12, size: 7.5, color: secondary, maximumLines: 3}); fontEvidence.push(7.5);
         }
       }
       if (!embeddedImage && template.templateId === "door_hanger_professional_services_v1") {
@@ -601,9 +618,9 @@ async function renderDoorHangerPrintMaster({version, trackedUrl, mediaBuffer, lo
         page.drawImage(embeddedImage, imageBox);
         if (generatedMedia) {
           page.drawRectangle({x: imageBox.x, y: imageBox.y, width: imageBox.width,
-            height: 17, color: cmyk(0, 0, 0, 0)});
-          page.drawText("CONCEPTUAL SERVICE VISUAL — NOT COMPLETED WORK", {x: imageBox.x + 6,
-            y: imageBox.y + 5, size: 7.5, font: bold, color: secondary}); fontEvidence.push(7.5);
+            height: 28, color: cmyk(0, 0, 0, 0)});
+          drawWrappedText(page, bold, "CONCEPTUAL SERVICE VISUAL — NOT COMPLETED WORK", {x: imageBox.x + 6,
+            top: imageBox.y + 25, width: imageBox.width - 12, size: 7.5, color: secondary, maximumLines: 3}); fontEvidence.push(7.5);
         }
       } else if (middleHeight >= 70) {
         page.drawRectangle({x: layout.left, y: middleBottom, width: layout.contentWidth,
@@ -620,6 +637,7 @@ async function renderDoorHangerPrintMaster({version, trackedUrl, mediaBuffer, lo
       page.drawRectangle({x: layout.left, y: cardY, width: layout.contentWidth,
         height: cardHeight, color: cmyk(0.04, 0.015, 0, 0)});
       const qrSize = 84; const qrX = layout.left + 12; const qrY = cardY + 42;
+      record("QR including quiet zone", qrX, qrY, qrSize, qrSize);
       const qrEvidence = drawQr(page, qr, qrX, qrY, qrSize); sideEvidence.push({side, qr: qrEvidence});
       page.drawText("SCAN TO GET STARTED", {x: qrX, y: cardY + 22,
         size: 7.5, font: bold, color: secondary}); fontEvidence.push(7.5);
@@ -634,6 +652,8 @@ async function renderDoorHangerPrintMaster({version, trackedUrl, mediaBuffer, lo
         size: 8.5, font: bold, color: secondary});
     }
   }
+  const contentSafety = doorGeometry.preflightContent(geometry, contentBoxes);
+  if (contentSafety.status !== "pass") throw new Error("door_hanger_content_outside_safe_area: " + contentSafety.warnings.join(" "));
   const pdfBytes = Buffer.from(await pdf.save({useObjectStreams: false, addDefaultPage: false}));
   const proofs = [];
   for (let side = 1; side <= draft.sideCount; side += 1) proofs.push(await renderDoorHangerProof({
@@ -641,9 +661,17 @@ async function renderDoorHangerPrintMaster({version, trackedUrl, mediaBuffer, lo
     logoProof: normalizedLogo?.proof || null, logoWordmark: normalizedLogo?.wordmark === true,
     business, template, generatedMedia,
   }));
+  const rasterPrints = [];
+  for (const proof of proofs) {
+    const jpg = await sharp(proof.svg, {density: geometry.rasterDpi / 150 * 72})
+      .withMetadata({density: geometry.rasterDpi}).withIccProfile("cmyk").toColourspace("cmyk")
+      .jpeg({quality: 100, chromaSubsampling: "4:4:4"}).toBuffer();
+    rasterPrints.push({side: proof.side, jpg});
+  }
   const layout = sideLayout(spec, draft, 1);
-  return {pdf: pdfBytes, proofs, digitalJpg: proofs[0].jpg,
-    evidence: {pdfXVersion: PDF_X_VERSION, outputIntent: "CMYK", fontsEmbedded: true,
+  return {rasterPrints, pdf: pdfBytes, proofs, digitalJpg: proofs[0].jpg,
+    evidence: {geometryId: geometry.id, geometryVersion: geometry.version, contentSafety, contentBoxes,
+      pdfXVersion: PDF_X_VERSION, outputIntent: "CMYK", fontsEmbedded: true,
       sideCount: draft.sideCount, sideEvidence, pageEvidence,
       finalRenderedServiceCopy: {canonical: serviceLanguage.canonical,
         serviceLabel: serviceLanguage.noun, supporting, backHeadline,
@@ -893,8 +921,7 @@ async function renderDoorHangerProof({spec, draft, side, trackedUrl, mediaProof,
   const bleed = spec.bleedInches * dpi; const safe = spec.safeInches * dpi;
   const left = bleed + safe; const right = width - bleed - safe; const contentWidth = right - left;
   let top = bleed + safe;
-  if (spec.dieCut && side === 1) top = bleed + (spec.dieCut.centerFromTopInches +
-    spec.dieCut.diameterInches / 2 + spec.dieCut.exclusionPaddingInches) * dpi;
+  if (spec.productType === "door_hanger") top = bleed + doorGeometry.geometryFor(spec).contentTop * dpi;
   const primary = validHexColor(business.primaryColor || draft.primaryColor, "#176FD1");
   const secondary = validHexColor(business.secondaryColor || draft.secondaryColor, "#10243E");
   const primaryInk = readableColor(primary).hex;
@@ -1040,8 +1067,7 @@ async function renderProof({spec, draft, side, trackedUrl, mediaProof}) {
   const primary = draft.primaryColor; const secondary = draft.secondaryColor;
   const serviceLanguage = customerServiceLanguage(draft.service);
   let top = bleed + safe;
-  if (spec.dieCut && side === 1) top = bleed + (spec.dieCut.centerFromTopInches +
-    spec.dieCut.diameterInches / 2 + spec.dieCut.exclusionPaddingInches) * dpi;
+  if (spec.productType === "door_hanger") top = bleed + doorGeometry.geometryFor(spec).contentTop * dpi;
   const image = mediaProof ? `data:image/jpeg;base64,${mediaProof.toString("base64")}` : null;
   const qr = qrMatrix(trackedUrl); const qrSize = Math.min(190, (right - left) * 0.45);
   const front = `<rect width="100%" height="100%" fill="${primary}"/>` +
@@ -1073,7 +1099,7 @@ function preflightReport({version, renderEvidence, artifactHash}) {
   const expectedBleedPoints = spec.bleedInches * 72;
   const expectedSafePoints = spec.safeInches * 72;
   const pages = Array.isArray(renderEvidence.pageEvidence) ? renderEvidence.pageEvidence : [];
-  const front = pages.find((item) => item.side === 1);
+  const geometry = doorGeometry.geometryFor(spec);
   const checks = {
     eddmMailingPanel: spec.mailingMethod !== "eddm_retail" || renderEvidence.eddmMailingPanel === true,
     exactTrim: pages.length === version.content.sideCount && pages.every((page) =>
@@ -1084,11 +1110,13 @@ function preflightReport({version, renderEvidence, artifactHash}) {
     safeArea: pages.length > 0 && pages.every((page) =>
       Math.abs(page.safePoints - expectedSafePoints) < 0.01),
     dieCutExclusion: spec.productType !== "door_hanger" ||
-      (spec.dieCut?.kind === "standard_circular_hole" && front?.dieSafeContentTopPoints != null &&
-        front.contentTopPoints <= front.dieSafeContentTopPoints + 0.01),
+      (renderEvidence.geometryId === geometry.id && pages.length === version.content.sideCount &&
+        pages.every(page => page.dieSafeContentTopPoints != null &&
+          page.contentTopPoints <= page.dieSafeContentTopPoints + 0.01) &&
+        renderEvidence.contentSafety?.status === "pass"),
     pageOrder: renderEvidence.sideCount === version.content.sideCount &&
       pages.every((page, index) => page.side === index + 1),
-    effectiveResolution: renderEvidence.vectorOnly || renderEvidence.effectiveRasterDpi >= MIN_EFFECTIVE_DPI,
+    effectiveResolution: renderEvidence.vectorOnly || renderEvidence.effectiveRasterDpi >= (geometry?.rasterDpi || MIN_EFFECTIVE_DPI),
     cmykOutputIntent: renderEvidence.outputIntent === "CMYK",
     embeddedFonts: renderEvidence.fontsEmbedded === true,
     qrQuietZone: renderEvidence.sideEvidence.every((item) => item.qr.quietModules >= 4),
@@ -1177,7 +1205,9 @@ function validateAuthorizedDraft(draft, authority = {}) {
 }
 
 function versionOrderReady(version = {}) {
-  return version.preflightStatus === "pass" && version.printReadinessStatus === "pass" &&
+  return (!String(version.productSpecId || "").startsWith("door_hanger") ||
+    version.geometrySnapshot?.version === doorGeometry.GEOMETRY_VERSION) &&
+    version.preflightStatus === "pass" && version.printReadinessStatus === "pass" &&
     version.marketingReadinessStatus === "pass";
 }
 
@@ -1369,14 +1399,20 @@ function createPhysicalMarketingService({db, FieldValue, bucket, createResponseA
     const materialItems = await Promise.all(materialQuery.docs.map(async (doc) => {
       const data = doc.data() || {}; const versionId = data.reviewVersionId || data.approvedVersionId;
       const versionSnap = versionId ? await versions.doc(versionId).get() : null;
-      const version = versionSnap?.exists ? {versionId, ...versionSnap.data()} : null;
+      let version = versionSnap?.exists ? {versionId, ...versionSnap.data()} : null;
+      if (version && String(version.productSpecId).startsWith("door_hanger") &&
+          version.geometrySnapshot?.version !== doorGeometry.GEOMETRY_VERSION) {
+        version = {...version, printReadinessStatus: "fail", preflightStatus: "fail",
+          geometryMigrationRequired: true};
+      }
       const artifactSnap = version?.artifactId ? await artifacts.doc(version.artifactId).get() : null;
       const artifact = artifactSnap?.exists ? artifactSnap.data() : null;
       return {materialId: doc.id, ...data, version: version ? {...version,
         artifact: artifact ? {artifactId: artifact.artifactId, format: artifact.format,
-          storagePath: artifact.storagePath, digitalJpgPath: artifact.digitalJpgPath,
+          storagePath: version.geometryMigrationRequired ? null : artifact.storagePath, digitalJpgPath: version.geometryMigrationRequired ? null : artifact.digitalJpgPath,
+          printRasters: version.geometryMigrationRequired ? [] : artifact.printRasters || [],
           proofs: artifact.proofs, artifactHash: artifact.artifactHash,
-          preflight: artifact.preflight, printReadiness: artifact.printReadiness || artifact.preflight,
+          preflight: artifact.preflight, printReadiness: version.geometryMigrationRequired ? {status: "fail", warnings: ["Prepare a new proof with the current door-hanger safe area."]} : artifact.printReadiness || artifact.preflight,
           marketingReadiness: artifact.marketingReadiness || version.marketingReadiness || null} : null} : null};
     }));
     const media = [];
@@ -1484,7 +1520,7 @@ function createPhysicalMarketingService({db, FieldValue, bucket, createResponseA
       draft.campaignId);
     const logo = authority.approvedLogo && draft.includeLogo!==false ? await ownedMedia(uid, authority.approvedLogo,
       {requiredPurpose: "logo"}) : {snapshot: null, buffer: null};
-    const draftHash = digest({materialId, revision: material.draftRevision, draft, page, media: media.snapshot});
+    const draftHash = digest({geometry: doorGeometry.geometryFor(spec), materialId, revision: material.draftRevision, draft, page, media: media.snapshot});
     const versionId = `version_${digest(`${materialId}:${material.draftRevision}:${draftHash}`).slice(0, 40)}`;
     const existing = await versions.doc(versionId).get();
     if (existing.exists) return {materialId, versionId, artifactId: existing.data()?.artifactId,
@@ -1498,6 +1534,7 @@ function createPhysicalMarketingService({db, FieldValue, bucket, createResponseA
         landingPageId: page.landingPageId, landingPageVersionId: page.landingPageVersionId},
     }, actor) : {responseAssetId:null,trackedUrl:null};
     const snapshot = {schemaVersion: SCHEMA_VERSION, versionId, materialId, businessUid: uid,
+      geometrySnapshot: doorGeometry.geometryFor(spec),
       campaign, productSpecId: spec.specId, productSpecVersion: spec.version, content: draft,
       templateId: templateSpec(draft.templateId, spec.productType).templateId,
       templateVersion: templateSpec(draft.templateId, spec.productType).version,
@@ -1505,7 +1542,7 @@ function createPhysicalMarketingService({db, FieldValue, bucket, createResponseA
         cta: draft.cta, service: draft.service},
       brandSnapshot: {...authority, approvedLogo: logo.snapshot},
       layoutSnapshot: {templateId: draft.templateId,
-        imageFit: "cover_attention", optionalRegionsRebalance: true},
+        imageFit: "contain", optionalRegionsRebalance: true},
       mediaSnapshot: media.snapshot, artworkSnapshot:artwork.snapshot,landingPage: page,
       responseAssetId: response.responseAssetId, trackedUrl: response.trackedUrl,
       trackingPhoneAssetId: draft.trackingPhoneAssetId,
@@ -1521,8 +1558,15 @@ function createPhysicalMarketingService({db, FieldValue, bucket, createResponseA
       const path = `${base}/proof-side-${proof.side}.webp`;
       await bucket().file(path).save(proof.webp, {resumable: false,
         metadata: {contentType: "image/webp", cacheControl: "private,no-store"}});
-      proofRecords.push({side: proof.side, storagePath: path, width: proof.width, height: proof.height,
+      proofRecords.push({guide: spec.productType === "door_hanger" ? {geometry: doorGeometry.geometryFor(spec), copy: doorGeometry.CUSTOMER_COPY} : null, side: proof.side, storagePath: path, width: proof.width, height: proof.height,
         contentHash: digest(proof.webp)});
+    }
+    const printRasterRecords = [];
+    for (const raster of rendered.rasterPrints || []) {
+      const storagePath = `${base}/print-side-${raster.side}.jpg`;
+      await bucket().file(storagePath).save(raster.jpg, {resumable: false,
+        metadata: {contentType: "image/jpeg", cacheControl: "private,no-store"}});
+      printRasterRecords.push({side: raster.side, storagePath, dpi: 350, colorSpace: "CMYK"});
     }
     const pdfPath = `${base}/print-master.pdf`; const jpgPath = `${base}/digital-front.jpg`;
     await Promise.all([
@@ -1538,7 +1582,7 @@ function createPhysicalMarketingService({db, FieldValue, bucket, createResponseA
     const at = FieldValue.serverTimestamp();
     const artifact = {schemaVersion: SCHEMA_VERSION, artifactId, businessUid: uid, materialId, versionId,
       contentHash: snapshot.contentHash, artifactHash, immutable: true, format: "PDF/X-4",
-      storagePath: pdfPath, digitalJpgPath: jpgPath, proofs: proofRecords, preflight,
+      storagePath: pdfPath, digitalJpgPath: jpgPath, printRasters: printRasterRecords, proofs: proofRecords, preflight,
       printReadiness: preflight, uploadPreflight:artwork.snapshot?.report||null,marketingReadiness,
       providerArtifactHash: null, createdAt: at};
     await db.runTransaction(async (tx) => {

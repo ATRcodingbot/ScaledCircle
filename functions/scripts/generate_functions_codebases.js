@@ -417,7 +417,7 @@ function copyPackage(destination, mode) {
     if (mode === "application" && name.endsWith(".js") &&
         !["legal_consent.js", "tracking_security.js", "operational_layer.js"].includes(name)) continue;
     if (mode === "physical-marketing" && name.endsWith(".js") &&
-        !["physical_marketing.js", "physical_fulfillment_providers.js", "postcard_fulfillment.js", "postcard_artwork.js", "product_availability.js",
+        !["physical_marketing.js", "door_hanger_geometry.js", "physical_fulfillment_providers.js", "postcard_fulfillment.js", "postcard_artwork.js", "product_availability.js",
           "attribution_foundation.js"].includes(name)) continue;
     if (mode !== "physical-marketing" && ["postcard_fulfillment.js", "postcard_artwork.js"].includes(name)) continue;
     if (mode === "business-profile" && name.endsWith(".js") &&
@@ -435,7 +435,7 @@ function copyPackage(destination, mode) {
     if (mode === "landing-page" && name.endsWith(".js") &&
         !["landing_page.js", "landing_page_workspace.js", "landing_page_media.js"].includes(name)) continue;
     if (mode === "creative-media" && name.endsWith(".js") &&
-        !["creative_media.js", "generation_foundation.js", "generation_budget.js",
+        !["door_hanger_geometry.js", "creative_media.js", "generation_foundation.js", "generation_budget.js",
           "openai_image_adapter.js", "subscription_entitlements.js"].includes(name)) continue;
     if (mode !== "creative-media" &&
         ["creative_media.js", "generation_foundation.js", "generation_budget.js", "openai_image_adapter.js"].includes(name)) continue;

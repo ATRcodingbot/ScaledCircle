@@ -163,6 +163,7 @@ function buildPrompt(brief = {}) {
     `Workmanship must be ${clean(brief.workmanship, 300) || "physically plausible, clean, and professionally executed"}.`,
     "The result should be aspirational but attainable: avoid extravagant mansion bias, implausible architecture,",
     "physically absurd construction, unrelated geography, and generic stock-photo staging.",
+    ...(brief.printGeometry ? ["Required print geometry (inches): " + JSON.stringify(brief.printGeometry)] : []),
     `Compose for ${composition}; preserve both the service work and enough property context after cropping.`,
     "No people, faces, crews, logos, readable text, signage, credentials, awards, ratings, reviews, guarantees,",
     "before-and-after composition, or claim that the depicted work was completed by the Business.",
