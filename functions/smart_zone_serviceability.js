@@ -68,7 +68,7 @@ function permitted(way) {
   if (['driveway', 'parking_aisle', 'drive-through'].includes(way.service)) return false;
   return (!way.bridge || way.bridge === 'no') && (!way.tunnel || way.tunnel === 'no') && (!way.layer || way.layer === '0');
 }
-function shape({anchor, boundary, snapshot, workType, propertiesPerHour, desiredTargetLimit, maximumZones}, geo) {
+function shape({anchor, boundary, snapshot, workType, propertiesPerHour, desiredTargetLimit, maximumZones, desiredMinutes}, geo) {
   const targetIntent = intent(workType);
   const empty = reason => ({candidates: [], targetIntent, eligibleMappedFeatureCount: 0, reasons: [reason]});
   if (!snapshot || !Array.isArray(snapshot.targetFeatures) || !Array.isArray(snapshot.routeWays)) {
@@ -106,7 +106,7 @@ function shape({anchor, boundary, snapshot, workType, propertiesPerHour, desired
     eligibleMappedFeatureCount: features.length};
   if ((snapshot.unresolvedLandFeatures || []).some(feature => excluded(feature.kind, targetIntent))) {
     return {...empty('A mapped non-target feature has no reliable footprint. Review the surrounding area manually.'),
-      eligibleMappedFeatureCount: features.length};
+      eligibleMappedFeatureCount: features.length, eligibleMappedSourceIds: features.map(feature => feature.id)};
   }
   const edges = new Map(), adjacency = new Map();
   for (const way of snapshot.routeWays) {
@@ -185,7 +185,8 @@ function shape({anchor, boundary, snapshot, workType, propertiesPerHour, desired
     if (geo.polygonAreaSquareMeters(hull) / items.length > MAX_AREA_PER_TARGET ||
         walkingMeters / items.length > MAX_ROUTE_METERS_PER_TARGET) return null;
     const workload = geo.estimateWorkload({estimatedProperties: items.length, estimatedWalkingMeters: walkingMeters * 2, workType, propertiesPerHour});
-    if (workload.estimatedMinutes > geo.SINGLE_SCALER_MAX_MINUTES) return null;
+    if (workload.estimatedMinutes > Math.min(geo.SINGLE_SCALER_MAX_MINUTES,
+      Number.isFinite(desiredMinutes) ? Math.max(15, desiredMinutes) : geo.SINGLE_SCALER_MAX_MINUTES)) return null;
     return {geometry: hull, workload, features: items.map(({edge, snap, meters, component, ...rest}) => rest),
       networkSegments: [...routes.values()].map(edge => ({from: edge.a, to: edge.b})),
       sourceComponentIds: [String(items[0].component)], mappedRouteMeters: Math.round(walkingMeters)};
@@ -203,7 +204,9 @@ function shape({anchor, boundary, snapshot, workType, propertiesPerHour, desired
   }
   for (const items of groups.values()) partition(items);
   return {candidates, targetIntent, eligibleMappedFeatureCount: features.length,
+    eligibleMappedSourceIds: features.map(feature => feature.id),
     roadSupportedTargetCount: associated.length,
+    roadSupportedSourceIds: associated.map(feature => feature.id),
     reasons: candidates.length ? ['Mapped target features are near connected permitted local-road linework.',
       'Known campaign-ineligible land and mapped highway/rail barriers are excluded from each proposed polygon.',
       'OSM coverage and real-world pedestrian access are incomplete; inspect each proposed Zone before use.'] :

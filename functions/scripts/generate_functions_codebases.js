@@ -397,6 +397,8 @@ function copyPackage(destination, mode) {
           "marketplace_work_types.js", "scaler_profile_notifications.js",
           "signup_notifications.js", "operational_layer.js",
           "group_assignment.js", "smart_zone_planning.js", "smart_zone_geography.js", "smart_zone_serviceability.js",
+          "smart_zone_intelligence.js", "smart_zone_intelligence_runtime.js", "property_service_area_analysis.js",
+          "property_service_area_geometry.js", "property_intelligence.js", "property_source_http.js",
           "smart_zone_entry_contract.js", "service_area_resolution.js",
           "subscription_entitlements.js"].includes(name)) continue;
     if (mode === "job-room" && name.endsWith(".js") &&
@@ -475,7 +477,7 @@ function writePackageManifest(mode, destination) {
       : mode === "assignment"
         ? ["firebase-admin", "firebase-functions"]
       : mode === "discovery"
-        ? ["firebase-admin", "firebase-functions"]
+        ? ["firebase-admin", "firebase-functions", "polygon-clipping"]
       : mode === "job-room"
         ? ["firebase-admin", "firebase-functions"]
       : mode === "completion"

@@ -21,13 +21,20 @@ import '../../widgets/property_intelligence_panel.dart';
 
 class CampaignAreaRecommendationResult {
   const CampaignAreaRecommendationResult.adjust(this.adjustedBoundary)
-    : applied = false;
+    : applied = false,
+      drawOwn = false;
   const CampaignAreaRecommendationResult.applied()
     : adjustedBoundary = null,
-      applied = true;
+      applied = true,
+      drawOwn = false;
+  const CampaignAreaRecommendationResult.drawOwn()
+    : adjustedBoundary = null,
+      applied = false,
+      drawOwn = true;
 
   final List<Map<String, dynamic>>? adjustedBoundary;
   final bool applied;
+  final bool drawOwn;
 }
 
 class CampaignAreaScreen extends StatefulWidget {
@@ -610,6 +617,10 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
         // Apply owns persistence. This pending Zone must never enter the
         // caller's separate Save Zone path.
         Navigator.pop(context, false);
+        return;
+      }
+      if (result?.drawOwn == true) {
+        await _beginFreehand();
         return;
       }
       if (revision != _geometryRevision) return;

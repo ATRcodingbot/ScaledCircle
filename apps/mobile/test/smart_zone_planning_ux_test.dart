@@ -39,7 +39,7 @@ void main() {
       expect(source, contains('No saved Service Area is required.'));
       expect(source, contains("'areaSelection':"));
       expect(source, contains("'resultId': selectedArea.id"));
-      expect(source, contains('Large campaigns are split into Zones'));
+      expect(source, contains('Available evidence may support less work.'));
       expect(source, contains('Use My Service Area'));
       expect(source, contains('Finding future opportunities is separate'));
       expect(source, isNot(contains('AI neighborhood')));
@@ -54,8 +54,8 @@ void main() {
     final source = File(
       'lib/screens/business/campaign_zones_screen.dart',
     ).readAsStringSync();
-    expect(source, contains("We couldn't analyze this area yet."));
-    expect(source, contains('Try a smaller area or Draw My Area'));
+    expect(source, contains("We couldn't find enough reliable data"));
+    expect(source, contains('You can still draw your own area.'));
   });
 
   test(
@@ -428,14 +428,14 @@ void main() {
     expect(mapSource, contains('CameraFit.bounds'));
     expect(
       mapSource,
-      matches(RegExp(r'LatLngBounds\.fromPoints\(\s*operationalPoints,?\s*\)')),
+      matches(RegExp(r'LatLngBounds\.fromPoints\(\s*fitPoints,?\s*\)')),
     );
     expect(mapSource, isNot(contains('LatLngBounds.fromPoints(allPoints)')));
     expect(mapSource, contains('cameraPadding'));
     expect(mapSource, contains('smartZoneMarkerOffsets'));
     expect(source, contains('showZoneSelector: true'));
     expect(mapSource, contains('MapAttributionFrame('));
-    expect(mapSource, contains('Dashed: selected territory'));
+    expect(mapSource, contains('Gray dashed outline: selected territory'));
     expect(mapSource, contains('constraints.maxWidth < 520 ? 300.0 : 360.0'));
     expect(mapSource, contains('InteractiveFlag.all'));
   });

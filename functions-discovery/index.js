@@ -16,6 +16,9 @@ const {
   Timestamp
 } = require("firebase-admin/firestore");
 const logger = require("firebase-functions/logger");
+const crypto = require("node:crypto");
+const propertyIntelligence = require("./property_intelligence");
+const PROPERTY_INTELLIGENCE_CACHE_COLLECTION = "propertyIntelligenceCache";
 
 
 
@@ -4677,10 +4680,36 @@ async function smartZoneSelectedArea(request, campaign) {
   }
 }
 
-async function smartZoneCampaign(request) {
+async function smartZoneRecommendationContext(context, campaign, request, transaction = null) {
+  const read = reference => transaction ? transaction.get(reference) : reference.get();
+  const [profile, preferences] = await Promise.all([
+    read(db.collection("businessGrowthProfiles").doc(context.uid)),
+    read(db.collection("discoveryPreferences").doc(context.uid)),
+  ]);
+  if (request.data?.objective != null && (typeof request.data.objective !== "string" || request.data.objective.length > 800)) {
+    throw new HttpsError("invalid-argument", "Keep the recommendation goal within 800 characters.");
+  }
+  try {
+    const result = require('./property_service_area_analysis').buildMarketingContext({businessId: context.uid,
+      profile: profile.data(), preferences: preferences.data(), objective: request.data?.objective,
+      campaignType: readText(campaign.campaignType || campaign.type, 80) || "field_distribution"});
+    const marketingHistory = await require('./smart_zone_intelligence_runtime').loadMarketingHistory({db,
+      businessId: context.uid, transaction});
+    result.context.marketingHistory = marketingHistory;
+    result.contextVersion = crypto.createHash('sha256').update(JSON.stringify([result.contextVersion,
+      marketingHistory.status, marketingHistory.records, marketingHistory.inventoryComplete,
+      new Date(marketingHistory.checkedAtMs).toISOString().slice(0, 10)])).digest('hex');
+    return result;
+  } catch (error) {
+    if (error?.code) throw new HttpsError(error.code, error.message);
+    throw new HttpsError("failed-precondition", "Save your Business services and eligible service areas before requesting an intelligent recommendation.");
+  }
+}
+
+async function smartZoneCampaign(request, {requireCached = false} = {}) {
   const context = await authenticatedUserContext(
     request, "Sign in as a Business to plan campaign Zones.");
-  if (context.role !== "business") {
+  if (context.role !== "business" || context.isAdmin) {
     throw new HttpsError("permission-denied", "Business access is required.");
   }
   const campaignId = readText(request.data?.campaignId, 160);
@@ -4694,16 +4723,44 @@ async function smartZoneCampaign(request) {
   }
   const entitlement = (await db.collection("businessSubscriptions")
     .doc(context.uid).get()).data();
-  if (campaign.executionMode !== 'own_team' && !subscriptionEntitlements.hasActivePaidBusinessEntitlement(entitlement)) {
+  if (!subscriptionEntitlements.hasActiveScaleEntitlement(entitlement)) {
     throw new HttpsError("permission-denied",
-      "Smart Zone planning requires an active paid Business plan.");
+      "Intelligent area recommendations are included with an active Scale plan. You can still draw your own area.");
+  }
+  if (!Array.isArray(context.permissions) || !context.permissions.includes("intelligence") || !context.permissions.includes("campaigns")) {
+    throw new HttpsError("permission-denied", "Campaign and Intelligence permissions are required for intelligent area recommendations.");
   }
   if (String(campaign.status || "draft") !== "draft") {
     throw new HttpsError("failed-precondition", "Smart Zone planning is available before funding.");
   }
-  const selectedArea = await smartZoneSelectedArea(request, campaign);
+  let desiredHours;
+  try { desiredHours = smartZoneEntryContract.workloadHours(request.data?.desiredHours); }
+  catch (_) { throw new HttpsError('invalid-argument', 'Choose a supported number of planning hours.'); }
+  const alternativeIndex = request.data?.alternativeIndex ?? 0;
+  if (!Number.isSafeInteger(alternativeIndex) || alternativeIndex < 0 || alternativeIndex > 2) {
+    throw new HttpsError("invalid-argument", "Choose an available area recommendation.");
+  }
+  const intelligence = await smartZoneRecommendationContext(context, campaign, request);
+  const runtimeModule = require('./smart_zone_intelligence_runtime');
+  const requestFingerprint = runtimeModule.requestFingerprint({campaignId, campaign, data: request.data || {},
+    desiredHours, objective: intelligence.context.goal});
+  const cacheAuthority = {businessId: context.uid, actorUid: context.actorUid || context.uid, campaignId,
+    contextVersion: intelligence.contextVersion, requestFingerprint};
+  let cachedRecommendation = null;
+  // Frozen native clients repeat their Get inputs and planId, but omit runId.
+  // Apply may recover only the exact completed actor/input-bound run. It must
+  // never resolve the place again or initiate acquisition for compatibility.
+  const runId = request.data?.recommendationRunId || (requireCached ? runtimeModule.recommendationRunId(cacheAuthority) : null);
+  try { if (runId) cachedRecommendation = await runtimeModule.createRuntime({db}).load({...cacheAuthority, runId}); }
+  catch (error) { throw new HttpsError(error.code || 'failed-precondition', error.message); }
+  if (alternativeIndex > 0 && !cachedRecommendation) {
+    throw new HttpsError("failed-precondition", "Review the first recommendation before requesting an alternative.");
+  }
+  const selectedArea = cachedRecommendation?.selectedArea || await smartZoneSelectedArea(request, campaign);
   const anchor = smartZoneAnchor({serviceArea: selectedArea.geometry}) || selectedArea.center;
-  return {context, campaignId, reference, campaign, anchor, selectedArea,
+  return {context, campaignId, reference, campaign, anchor, selectedArea, desiredHours, alternativeIndex,
+    intelligenceContext: intelligence.context, contextVersion: intelligence.contextVersion,
+    eligibleGeography: intelligence.eligibleGeography, cacheAuthority, cachedRecommendation,
     selectedBoundary: selectedArea.geometry,
     sourceAreaDigest: selectedArea.geometry.length >= 3 ? operations.zoneGeometryDigest(selectedArea.geometry) :
       crypto.createHash("sha256").update(JSON.stringify({unresolvedResultId: selectedArea.resultId,
@@ -4717,67 +4774,48 @@ function smartZonePlanArguments(input, desiredHours, geographicSnapshot) {
     geographicSnapshot,
     desiredHours: desiredHours ?? 5,
     workType: readText(input.campaign.campaignType || input.campaign.type, 80) ||
-    "field_distribution",
+      "field_distribution",
     workerBasePayCents: Math.round(Number(input.campaign.basePay || 0) * 100),
     completionBonusCents: Math.round(Number(input.campaign.bonus || 0) * 100),
     qualityBonusCents: Math.round(Number(input.campaign.qualityBonus || 0) * 100),
     label: readText(input.selectedArea?.name, 120) || "Recommended Area",
-    sourceAreaDigest: input.sourceAreaDigest
+    sourceAreaDigest: input.sourceAreaDigest,
+    intelligenceContext: input.intelligenceContext, contextVersion: input.contextVersion,
+    eligibleGeography: input.eligibleGeography, alternativeIndex: input.alternativeIndex,
   };
 }
 
 async function generateSmartZonePlan(input, desiredHours) {
   desiredHours = smartZoneEntryContract.workloadHours(desiredHours);
-  let geographicAcquisition = null;
-  const geographicSnapshot = await smartZoneGeography.fetchSnapshot({
-    selectedBoundary: input.selectedBoundary, endpoint: OVERPASS_URL,
-    onDiagnostic: diagnostic => { geographicAcquisition = diagnostic; }});
-  let plan = smartZonePlanning.generatePlan(
-    smartZonePlanArguments(input, desiredHours, geographicSnapshot));
-  if (input.selectedArea?.boundaryKind === "unresolved_place_boundary") {
-    const explanation = "This location was found, but its full mapped boundary is unavailable. Your saved territory is unchanged. Choose Adjust Area to draw a smaller analysis area, or select a specific street address or mapped neighborhood.";
-    plan = {...plan, reasonCode: "selected_area_boundary_unavailable", explanation,
-      quality: {...plan.quality, reasons: [explanation]}};
-  } else if (geographicAcquisition?.status === "unavailable") {
-    const explanation = geographicAcquisition.reasonCode === "provider_partial_response" ?
-      "The map source returned incomplete data. A recommendation is unavailable until targets, streets and exclusion areas can all be checked. Your selected area is unchanged." :
-      "The map source could not be retrieved for this selection. This does not mean the area has no mapped targets. Your selected area is unchanged; you can adjust it or try again later.";
-    plan = {...plan, reasonCode: "geographic_source_unavailable", explanation,
-      quality: {...plan.quality, reasons: [explanation]}};
-  }
-  if (!geographicSnapshot) plan = {...plan, targetEvidence: {...plan.targetEvidence,
-    eligibleMappedFeatureCount: null, observedEligibleFeatureCount: null, roadSupportedTargetCount: null}};
-  const planningExclusions = geographicSnapshot ? {} : null;
-  if (geographicSnapshot) {
-    const serviceability = require('./smart_zone_serviceability');
-    for (const feature of geographicSnapshot.landFeatures || []) {
-      if (serviceability.excluded(feature.kind, plan.targetEvidence.targetIntent)) {
-        planningExclusions[feature.kind] = (planningExclusions[feature.kind] || 0) + 1;
-      }
-    }
-  }
-  // Record bounded acquisition facts, not credentials, full provider payloads,
-  // customer identifiers or raw provider error pages. A zero selected count is
-  // not proof that the provider successfully returned an empty inventory.
-  logger.info("Smart Zone planning evidence", {
-    acquisition: geographicAcquisition,
-    selectionSource: input.selectedArea?.source || null,
-    boundaryKind: input.selectedArea?.boundaryKind || null,
-    sourceAreaDigest: input.sourceAreaDigest,
-    targetIntent: plan.targetEvidence?.targetIntent || null,
-    planningExclusionCountsByKind: planningExclusions,
-    recommendationStatus: plan.recommendationStatus,
-    reasonCode: plan.reasonCode,
-    observedEligibleFeatureCount: plan.targetEvidence?.observedEligibleFeatureCount ?? null,
-    roadSupportedTargetCount: plan.targetEvidence?.roadSupportedTargetCount ?? null,
-    selectedCandidateFeatureCount: plan.totalEstimatedProperties,
-    candidateCount: plan.zones.length,
-  });
-  return {plan: {...plan, geographicAcquisition}, geographicSnapshot};
+  const intelligence = require('./smart_zone_intelligence');
+  const args = smartZonePlanArguments(input, desiredHours, null);
+  // Reuse only fresh, geometry-bound neutral PI evidence. This path neither
+  // invokes a property provider/model nor upgrades complimentary usage rights.
+  const loadPropertyAnalysis = async geometry => {
+    try {
+      const digest = propertyIntelligence.geometryDigest(propertyIntelligence.validateGeometry(geometry));
+      const id = crypto.createHash("sha256").update(
+        `${propertyIntelligence.ANALYSIS_VERSION}:${propertyIntelligence.DATA_SOURCE_BUNDLE_VERSION}:${digest}`).digest("hex");
+      const cached = (await db.collection(PROPERTY_INTELLIGENCE_CACHE_COLLECTION).doc(id).get()).data();
+      return propertyIntelligence.cacheIsReusable(cached, {digest}) ?
+        {...cached.analysis, analysisId: id, geometryDigest: digest} : null;
+    } catch (_) { return null; }
+  };
+  const record = input.cachedRecommendation || await require('./smart_zone_intelligence_runtime').createRuntime({db}).obtain(
+    {...input.cacheAuthority, selectedArea: input.selectedArea, sourceAreaDigest: input.sourceAreaDigest},
+    () => intelligence.search(args, {fetchSnapshot: smartZoneGeography.fetchSnapshot,
+      endpoint: OVERPASS_URL, loadPropertyAnalysis}));
+  const plan = intelligence.generate(args, record.searchEvidence);
+  logger.info("Smart Zone intelligence evidence", {sourceAreaDigest: input.sourceAreaDigest,
+    recommendationStatus: plan.recommendationStatus, reasonCode: plan.reasonCode || null,
+    selectedCandidateFeatureCount: plan.totalEstimatedProperties, candidateCount: plan.zones.length,
+    cached: record.cached === true, alternativeIndex: input.alternativeIndex});
+  return {plan: {...plan, recommendationRunId: record.runId,
+    alternativeIndex: input.alternativeIndex}, searchEvidence: record.searchEvidence};
 }
 
 exports.getSmartZonePlan = onCall(
-  { enforceAppCheck: false, maxInstances: 10 },
+  {enforceAppCheck: false, maxInstances: 10, timeoutSeconds: 180},
   businessOperation("getSmartZonePlan", async (request) => {
     if (stagingPhysicalQa.reserved(request.data?.campaignId)) {
       throw new HttpsError("failed-precondition", "The certification territory is server-bound.");
@@ -4786,29 +4824,35 @@ exports.getSmartZonePlan = onCall(
     try {
       return (await generateSmartZonePlan(input, request.data?.desiredHours)).plan;
     } catch (error) {
-      logger.warn("Smart Zone planning failed", { campaignId: input.campaignId,
-        reason: String(error?.message || 'unknown').slice(0, 160) });
+      logger.warn("Smart Zone planning failed", {campaignId: input.campaignId,
+        reason: String(error?.message || 'unknown').slice(0, 160)});
+      if (['aborted', 'resource-exhausted', 'failed-precondition', 'permission-denied'].includes(error?.code)) {
+        throw new HttpsError(error.code, error.message);
+      }
       const failure = smartZoneEntryContract.planningFailure(error);
       throw new HttpsError(failure.code, failure.message);
     }
-  })
+  }),
 );
 
 exports.applySmartZonePlan = onCall(
-  { enforceAppCheck: false, maxInstances: 5 },
+  {enforceAppCheck: false, maxInstances: 5},
   businessOperation("applySmartZonePlan", async (request) => {
     if (stagingPhysicalQa.reserved(request.data?.campaignId)) {
       throw new HttpsError("failed-precondition", "The certification territory is server-bound.");
     }
-    const input = await smartZoneCampaign(request);
+    const input = await smartZoneCampaign(request, {requireCached: true});
+    if (input.campaign.executionMode === 'own_team' && request.data?.useRecommendedPay === true) {
+      throw new HttpsError('failed-precondition', 'Own-team planning cannot set Scaler compensation.');
+    }
     let plan;
-    let geographicSnapshot;
+    let searchEvidence;
     try {
-      ({ plan, geographicSnapshot } = await generateSmartZonePlan(input, request.data?.desiredHours));
+      ({plan, searchEvidence} = await generateSmartZonePlan(input, request.data?.desiredHours));
       smartZonePlanning.assertApplicablePlan(plan);
     } catch (error) {
-      logger.warn("Smart Zone preparation failed", { campaignId: input.campaignId,
-        reason: String(error?.message || 'unknown').slice(0, 160) });
+      logger.warn("Smart Zone preparation failed", {campaignId: input.campaignId,
+        reason: String(error?.message || 'unknown').slice(0, 160)});
       const failure = smartZoneEntryContract.planningFailure(error);
       throw new HttpsError(failure.code, failure.message);
     }
@@ -4820,35 +4864,51 @@ exports.applySmartZonePlan = onCall(
       preparedZones = plan.zones.map((zone) => {
         const geometryEstimate = operations.calculateGeometryWalkingEstimate(zone.geometry);
         operations.assertZoneDuration(geometryEstimate.estimatedWalkingMinutes);
-        return { zone, geometryEstimate, reference: db.collection("campaignZones").doc() };
+        return {zone, geometryEstimate, reference: db.collection("campaignZones").doc()};
       });
     } catch (error) {
       logger.error("Smart Zone plan failed authoritative geometry validation.", {
         campaignId: input.campaignId,
         planId: plan.planId,
-        error: error instanceof Error ? error.message : String(error)
+        error: error instanceof Error ? error.message : String(error),
       });
       throw new HttpsError("failed-precondition",
-      "We couldn't apply this Smart Zone plan. Refresh the recommendation and try again.");
+        "We couldn't apply this Smart Zone plan. Refresh the recommendation and try again.");
     }
     const result = await db.runTransaction(async (transaction) => {
       const currentCampaignSnapshot = await transaction.get(input.reference);
       const currentCampaign = currentCampaignSnapshot.data() || {};
       if (!currentCampaignSnapshot.exists || String(currentCampaign.status || "draft") !== "draft" ||
-      currentCampaign.businessId !== input.context.uid) {
+          currentCampaign.businessId !== input.context.uid || currentCampaign.executionMode !== input.campaign.executionMode) {
         throw new HttpsError("failed-precondition", "The campaign changed. Review the plan again.");
       }
-      const currentInput = { ...input, campaign: currentCampaign };
-      const currentPlan = smartZonePlanning.generatePlan(
-        smartZonePlanArguments(currentInput, request.data?.desiredHours, geographicSnapshot));
+      const currentWorkspace = await businessWorkspaceService().authority({uid: input.context.actorUid || input.context.uid,
+        businessId: input.context.uid, permission: 'campaigns', transaction, allowExpired: true});
+      if (!currentWorkspace.permissions.includes('intelligence')) {
+        throw new HttpsError('permission-denied', 'Intelligence permission is required to apply this recommendation.');
+      }
+      if (!subscriptionEntitlements.hasActiveScaleEntitlement(currentWorkspace.entitlement)) {
+        throw new HttpsError("permission-denied", "Intelligent area recommendations require an active Scale plan.");
+      }
+      const currentIntelligence = await smartZoneRecommendationContext(input.context, currentCampaign, request, transaction);
+      const runtimeModule = require('./smart_zone_intelligence_runtime');
+      const currentAuthority = {...input.cacheAuthority, contextVersion: currentIntelligence.contextVersion,
+        requestFingerprint: runtimeModule.requestFingerprint({campaignId: input.campaignId, campaign: currentCampaign,
+          data: request.data || {}, desiredHours: input.desiredHours, objective: currentIntelligence.context.goal}),
+        runId: input.cachedRecommendation.runId};
+      await runtimeModule.createRuntime({db}).load(currentAuthority, transaction);
+      const currentInput = {...input, campaign: currentCampaign, intelligenceContext: currentIntelligence.context,
+        contextVersion: currentIntelligence.contextVersion, eligibleGeography: currentIntelligence.eligibleGeography};
+      const currentPlan = require('./smart_zone_intelligence').generate(
+        smartZonePlanArguments(currentInput, request.data?.desiredHours, null), searchEvidence);
       smartZonePlanning.assertApplicablePlan(currentPlan);
       if (currentPlan.planId !== plan.planId) {
         throw new HttpsError("failed-precondition", "The recommendation changed. Review it again.");
       }
-      const existing = await transaction.get(db.collection("campaignZones").
-      where("campaignId", "==", input.campaignId));
+      const existing = await transaction.get(db.collection("campaignZones")
+        .where("campaignId", "==", input.campaignId));
       if (existing.docs.length && existing.docs.every((doc) =>
-      doc.data()?.smartZonePlanId === plan.planId)) {
+        doc.data()?.smartZonePlanId === plan.planId)) {
         if (request.data?.useRecommendedPay === true) {
           transaction.set(input.reference, {
             basePay: plan.compensation.recommendedBasePayCents / 100,
@@ -4856,26 +4916,26 @@ exports.applySmartZonePlan = onCall(
             compensationEstimatedWorkMinutes: plan.compensation.estimatedWorkMinutes,
             compensationRecommendedBasePayCents: plan.compensation.recommendedBasePayCents,
             compensationMinimumEffectiveRateCentsPerHour:
-            plan.compensation.minimumEffectiveCompensationCentsPerHour,
+              plan.compensation.minimumEffectiveCompensationCentsPerHour,
             compensationRecommendationAccepted: true,
             compensationRecommendationAcceptedAt: FieldValue.serverTimestamp(),
-            updatedAt: FieldValue.serverTimestamp()
-          }, { merge: true });
+            updatedAt: FieldValue.serverTimestamp(),
+          }, {merge: true});
         }
-        return { success: true, campaignId: input.campaignId, planId: plan.planId,
+        return {success: true, campaignId: input.campaignId, planId: plan.planId,
           zoneCount: existing.docs.length, replay: true,
           recommendedPayApplied: request.data?.useRecommendedPay === true,
-          recommendedBasePayCents: plan.compensation.recommendedBasePayCents };
+          recommendedBasePayCents: plan.compensation.recommendedBasePayCents};
       }
       if (existing.docs.some((doc) => {
         const zone = doc.data() || {};
         return zone.assignedScalerId || !["", "unassigned"].includes(String(zone.status || ""));
       })) {
         throw new HttpsError("failed-precondition",
-        "Existing assigned or active Zones cannot be replaced by a recommendation.");
+          "Existing assigned or active Zones cannot be replaced by a recommendation.");
       }
       for (const document of existing.docs) transaction.delete(document.ref);
-      for (const { zone, geometryEstimate, reference } of preparedZones) transaction.set(reference, {
+      for (const {zone, geometryEstimate, reference} of preparedZones) transaction.set(reference, {
         campaignId: input.campaignId,
         businessId: currentCampaign.businessId,
         zoneName: zone.name,
@@ -4884,7 +4944,7 @@ exports.applySmartZonePlan = onCall(
         mapped: true,
         serviceArea: zone.geometry,
         serviceAreaType: zone.serviceability === "serviceable_geography" ?
-        "serviceable_territory" : "basic_area_estimate",
+          "serviceable_territory" : "basic_area_estimate",
         serviceAreaPointCount: zone.geometry.length,
         estimatedHomes: zone.workload.estimatedProperties,
         homeCountStatus: "estimated",
@@ -4909,40 +4969,46 @@ exports.applySmartZonePlan = onCall(
         serverZoneMetricsVersion: geometryEstimate.version,
         serverZoneGeometryDigest: operations.zoneGeometryDigest(zone.geometry),
         createdAt: FieldValue.serverTimestamp(),
-        updatedAt: FieldValue.serverTimestamp()
+        updatedAt: FieldValue.serverTimestamp(),
       });
       transaction.set(input.reference, {
-        serviceArea: input.selectedBoundary,
-        serviceAreaPointCount: input.selectedBoundary.length,
-        serviceAreaType: input.selectedArea.boundaryKind === "around_address" ?
-        "server_resolved_address_area" : "server_resolved_campaign_area",
-        serviceAreaTemplateName: input.selectedArea.name,
-        serviceAreaResolutionSource: input.selectedArea.resolutionSource || input.selectedArea.source,
-        serviceAreaResolutionVersion: input.selectedArea.resolutionVersion || null,
-        serviceAreaResultId: input.selectedArea.resultId || null,
-        estimatedHomes: plan.totalEstimatedProperties,
-        smartZonePlanId: plan.planId,
-        smartZonePolicyVersion: plan.policyVersion,
-        recommendedScalerCount: plan.recommendedScalerCount,
-        compensationRecommendationPolicyVersion: plan.compensation.policyVersion,
-        compensationEstimatedWorkMinutes: plan.compensation.estimatedWorkMinutes,
-        compensationRecommendedBasePayCents: plan.compensation.recommendedBasePayCents,
-        compensationMinimumEffectiveRateCentsPerHour:
+      serviceArea: plan.zones.length === 1 ? plan.zones[0].geometry : [],
+      geometryParts: plan.zones.map(zone => ({points: zone.geometry})),
+      geometryEncoding: "map-parts-v1",
+      serviceAreaPointCount: plan.zones.length === 1 ? plan.zones[0].geometry.length : 0,
+      serviceAreaType: "intelligence_recommended_territory",
+      smartZoneSearchRegion: {geometry: input.selectedBoundary, name: input.selectedArea.name,
+        geometryDigest: input.sourceAreaDigest, source: input.selectedArea.resolutionSource || input.selectedArea.source,
+        resultId: input.selectedArea.resultId || null},
+      smartZoneRecommendationRunId: input.cachedRecommendation.runId,
+      smartZoneIntelligenceContextVersion: input.contextVersion,
+      serviceAreaTemplateName: input.selectedArea.name,
+      serviceAreaResolutionSource: input.selectedArea.resolutionSource || input.selectedArea.source,
+      serviceAreaResolutionVersion: input.selectedArea.resolutionVersion || null,
+      serviceAreaResultId: input.selectedArea.resultId || null,
+      estimatedHomes: plan.totalEstimatedProperties,
+      smartZonePlanId: plan.planId,
+      smartZonePolicyVersion: plan.policyVersion,
+      recommendedScalerCount: plan.recommendedScalerCount,
+      compensationRecommendationPolicyVersion: plan.compensation.policyVersion,
+      compensationEstimatedWorkMinutes: plan.compensation.estimatedWorkMinutes,
+      compensationRecommendedBasePayCents: plan.compensation.recommendedBasePayCents,
+      compensationMinimumEffectiveRateCentsPerHour:
         plan.compensation.minimumEffectiveCompensationCentsPerHour,
-        ...(request.data?.useRecommendedPay === true ? {
-          basePay: plan.compensation.recommendedBasePayCents / 100,
-          compensationRecommendationAccepted: true,
-          compensationRecommendationAcceptedAt: FieldValue.serverTimestamp()
-        } : {}),
-        updatedAt: FieldValue.serverTimestamp()
-      }, { merge: true });
-      return { success: true, campaignId: input.campaignId, planId: plan.planId,
+      ...(request.data?.useRecommendedPay === true ? {
+        basePay: plan.compensation.recommendedBasePayCents / 100,
+        compensationRecommendationAccepted: true,
+        compensationRecommendationAcceptedAt: FieldValue.serverTimestamp(),
+      } : {}),
+      updatedAt: FieldValue.serverTimestamp(),
+      }, {merge: true});
+      return {success: true, campaignId: input.campaignId, planId: plan.planId,
         zoneCount: plan.zones.length, replay: false,
         recommendedPayApplied: request.data?.useRecommendedPay === true,
-        recommendedBasePayCents: plan.compensation.recommendedBasePayCents };
+        recommendedBasePayCents: plan.compensation.recommendedBasePayCents};
     });
     return result;
-  })
+  }),
 );
 
 /** Server-authoritative, industry-neutral property/housing-stock analysis. */

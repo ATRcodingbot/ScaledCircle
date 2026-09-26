@@ -277,8 +277,16 @@ function snapshotFromElements(selectedBoundary, rawElements, provenance = {}) {
     }
     if (center && Number.isFinite(center.lat) && Number.isFinite(center.lon)) {
       const target = targetKind(tags);
+      // Keep only public classification facts used by Property Intelligence.
+      // Names, contact/owner details, free text and full address tags are not
+      // copied into the scoring evidence.
+      const observedTags = Object.fromEntries(['building', 'building:levels', 'building:material',
+        'roof:shape', 'roof:material', 'shop', 'office', 'amenity', 'craft', 'landuse']
+        .filter(key => typeof tags[key] === 'string' && /^[a-zA-Z0-9_:; ./-]{1,80}$/.test(tags[key]))
+        .map(key => [key, tags[key].toLowerCase()]));
       if (target) targetFeatures.push({id: `${element.type || 'feature'}/${element.id}`,
         latitude: center.lat, longitude: center.lon, kind: target, timestamp: element.timestamp || null,
+        observedTags,
         addressKey: tags['addr:housenumber'] && tags['addr:street'] ?
           `${tags['addr:street']}|${tags['addr:housenumber']}`.toLowerCase() : null,
         footprint});

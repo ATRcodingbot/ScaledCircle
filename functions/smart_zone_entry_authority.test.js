@@ -12,7 +12,7 @@ test("Smart Zone entry keeps role, ownership, entitlement, and draft gates", () 
   const contract = source.slice(start, end);
   assert.match(contract, /context\.role !== "business"/);
   assert.match(contract, /campaign\.businessId !== context\.uid/);
-  assert.match(contract, /hasActivePaidBusinessEntitlement/);
+  assert.match(contract, /hasActiveScaleEntitlement/);
   assert.match(contract, /campaign\.status \|\| "draft"/);
 });
 
@@ -27,11 +27,12 @@ test("place selection is server resolved; explicit analysis boundary uses its se
   assert.doesNotMatch(contract, /request\.data\?\.(geometry|serviceArea|selectedBoundary)/);
 });
 
-test("apply stores only the server-selected boundary and its provenance", () => {
+test("apply stores recommended territory separately from the search region", () => {
   const start = source.indexOf("exports.applySmartZonePlan");
   const end = source.indexOf("analyzePropertyIntelligence", start);
   const contract = source.slice(start, end);
-  assert.match(contract, /serviceArea: input\.selectedBoundary/);
+  assert.match(contract, /serviceArea: plan\.zones\.length === 1 \? plan\.zones\[0\]\.geometry : \[\]/);
+  assert.match(contract, /smartZoneSearchRegion: \{geometry: input\.selectedBoundary/);
   assert.match(contract, /serviceAreaResolutionSource/);
   assert.doesNotMatch(contract, /serviceArea: request\.data/);
 });

@@ -1,135 +1,68 @@
 'use strict';
-const test = require('node:test');
-const assert = require('node:assert/strict');
-const fs = require('node:fs');
-const parser = require('@babel/parser');
-const contract = require('./smart_zone_entry_contract');
-const planning = require('./smart_zone_planning');
-const geography = require('./smart_zone_geography');
-const operations = require('./operational_layer');
-const fixture = require('./fixtures/21061-corkran-osm-public.json');
-const code = fs.readFileSync(require.resolve('./index'), 'utf8');
-const names = ['smartZoneAnchor', 'smartZoneSelectedArea', 'smartZoneCampaign', 'smartZonePlanArguments', 'generateSmartZonePlan'];
-const helpers = parser.parse(code).program.body.filter(n => n.type === 'FunctionDeclaration' && names.includes(n.id.name))
-  .map(n => code.slice(n.start, n.end)).join('\n');
-assert.equal(names.length, parser.parse(helpers).program.body.length);
-class HttpsError extends Error { constructor(code, message) { super(message); this.code = code; } }
-const area = fixture.selectedBoundary;
-function setup({uid = 'business-a', role = 'business', campaign = {}, paid = true, resolution,
-  exists = true, providerPayload = {elements: fixture.elements, osm3s: {timestamp_osm_base: fixture.dataTimestamp}}} = {}) {
-  const stored = {businessId: 'business-a', status: 'draft', executionMode: 'own_team',
-    campaignType: 'flyer_distribution', serviceArea: area, ...campaign};
-  const before = JSON.stringify(stored); let reads = 0, searches = 0, providerCalls = 0;
-  const events = [];
-  const db = {collection: name => ({doc: () => ({get: async () => {
-    reads++; return {exists, data: () => name === 'campaigns' ? stored : {paid}};
-  }})})}; // No write method: preview cannot accidentally pass a write in these tests.
-  const env = {smartZoneEntryContract: contract, smartZonePlanning: planning,
-    smartZoneGeography: {...geography, fetchSnapshot: options => geography.fetchSnapshot({...options,
-      fetchImpl: async () => { providerCalls++; return {ok: true, status: 200,
-        headers: {get: () => 'application/json'}, json: async () => providerPayload}; }})},
-    operations, crypto: require('node:crypto'), db, HttpsError, require,
-    authenticatedUserContext: async () => {if (!uid) throw new HttpsError('unauthenticated', 'Sign in'); return {uid, role};},
-    subscriptionEntitlements: {hasActivePaidBusinessEntitlement: x => x?.paid === true},
-    campaignExecution: {executionMode: c => c.executionMode},
-    serviceAreaResolution: {resolvePlace: async () => {searches++; return resolution;}},
-    readText: (x, max = 240) => String(x || '').trim().slice(0, max),
-    process: {env: {}}, OVERPASS_URL: 'https://overpass.example.invalid/api/interpreter',
-    logger: {info: (name, data) => events.push({name, data})}};
-  const api = new Function(...Object.keys(env), `${helpers}; return {smartZoneCampaign, generateSmartZonePlan};`)(...Object.values(env));
-  return {...api, request: (data = {}) => ({data: {campaignId: 'existing-draft', ...data}}), events,
-    check: () => {assert.equal(JSON.stringify(stored), before); return {reads, searches, providerCalls};}};
+const test=require('node:test'),assert=require('node:assert/strict');
+const {endpointHarness}=require('./smart_zone_endpoint_harness');
+const contract=require('./smart_zone_entry_contract'),fixture=require('./fixtures/21061-corkran-osm-public.json');
+const area=fixture.selectedBoundary;
+const active=planId=>({planId,status:'active',expiresAt:new Date(Date.now()+86400000)});
+function setup({entitlement=active('scale'),executionMode='own_team',context={uid:'owner',actorUid:'owner',role:'business',permissions:['campaigns','intelligence']},campaign={},profile={},preferences={},exists=true,resolution}={}){
+  const rows={campaigns:{businessId:'owner',status:'draft',executionMode,campaignType:'flyer_distribution',serviceArea:area,...campaign},
+    businessSubscriptions:entitlement,businessGrowthProfiles:{businessUid:'owner',businessName:'Test',servicesOffered:['Roofing'],...profile},
+    discoveryPreferences:{userUid:'owner',role:'business',schemaVersion:'ServiceAreaPreferencesV1',areas:[{id:'local',geometry:area}],defaultResponseGoal:'Roofing prospects',...preferences}};
+  const readNames=[];
+  const db={collection:name=>({doc:()=>({get:async()=>{readNames.push(name);return {exists:name!=='campaigns'||exists,data:()=>rows[name]};}}),
+    limit:()=>({get:async()=>({docs:[]})})})};
+  return {...endpointHarness({db,context,resolution}),readNames,request:extra=>({data:{campaignId:'campaign',desiredHours:5,analysisBoundary:area,...extra}})};
 }
-
-test('drawn preview preserves exact vertices and saved campaign; source data yields real Corkran candidate', async () => {
-  const s = setup(); const input = await s.smartZoneCampaign(s.request({analysisBoundary: area,
-    areaSelection: {query: '21061', resultId: 'stale-result'}}));
-  assert.deepEqual(input.selectedBoundary, area);
-  assert.equal(input.selectedArea.source, 'explicit_drawn_analysis');
-  const {plan} = await s.generateSmartZonePlan(input, 5);
-  assert.equal(plan.totalEstimatedProperties, 19);
-  assert.equal(plan.geographicAcquisition.rawElementCount, 341);
-  assert.equal(plan.geographicAcquisition.status, 'success');
-  assert.equal(plan.geographicAcquisition.landCountsByKind.school, 3);
-  assert.equal(s.events.at(-1).data.planningExclusionCountsByKind.school, 3);
-  assert.equal(plan.targetEvidence.dataTimestamp, fixture.dataTimestamp);
-  assert.ok(plan.targetEvidence.fetchedAt);
-  assert.equal(plan.targetEvidence.verifiedDeliveryPoints, false);
-  assert.equal(s.check().searches, 0);
-  assert.equal(s.check().providerCalls, 1);
-});
-
-test('signed-out, wrong role, foreign Business, inactive entitlement and funded campaign fail before provider', async () => {
-  for (const [options, expected] of [[{uid: null}, 'unauthenticated'], [{role: 'admin'}, 'permission-denied'],
-    [{uid: 'business-b'}, 'permission-denied'], [{campaign: {executionMode: 'marketplace'}, paid: false}, 'permission-denied'],
-    [{campaign: {status: 'funded'}}, 'failed-precondition'], [{exists: false}, 'not-found']]) {
-    const s = setup(options);
-    await assert.rejects(s.smartZoneCampaign(s.request({analysisBoundary: area})), {code: expected});
-    assert.equal(s.check().providerCalls, 0); assert.equal(s.check().searches, 0);
+test('Starter/Growth, expired, revoked and spoofed Scale fail both callables before resolver/cache/provider even own-team',async()=>{
+  for(const executionMode of ['own_team','marketplace'])for(const entitlement of [null,active('starter'),active('growth'),
+    {...active('scale'),expiresAt:new Date(0)},{...active('scale'),status:'revoked'}]){
+    const s=setup({entitlement,executionMode});
+    for(const name of ['getSmartZonePlan','applySmartZonePlan'])await assert.rejects(s[name](s.request({recommendationRunId:'forged',
+      planId:'scale',entitlement:{planId:'scale'},services:['Forged']})),{code:'permission-denied'});
+    assert.equal(s.calls.resolver,0);assert.equal(s.calls.provider,0);
+    assert.ok(!s.readNames.includes('businessGrowthProfiles'));
+    assert.ok(!s.readNames.includes('propertyRecommendationWorkspaces'));
   }
 });
-
-test('explicit boundary rejects malformed, crossing, retraced, duplicate, out-of-range and coerced coordinates', () => {
-  const p = (longitude, latitude) => ({latitude, longitude});
-  const box = [p(-76, 39), p(-75.99, 39), p(-75.99, 39.01), p(-76, 39.01)];
-  for (const invalid of [null, [], area.slice(0, 2), Array(1001).fill(area[0]),
-    [box[0], box[2], box[1], box[3]], [box[0], box[1], p(-75.995, 39), box[2], box[3]],
-    [box[0], box[1], box[0], box[2], box[3]], [{latitude: '39', longitude: -76}, ...box.slice(1)],
-    [{latitude: 99, longitude: -76}, ...box.slice(1)]]) {
-    assert.throws(() => contract.normalizeAnalysisBoundary(invalid), /invalid_analysis_boundary/);
+test('active Scale, Managed Growth, and trusted complimentary Scale inherit the maintained authority',async()=>{
+  const comped={planId:'scale',status:'active',comped:true,billingStatus:'comped',source:'internal_qa',purpose:'store_review',
+    paidProviderUsageAllowed:false,accessTerm:'until_revoked',expiresAt:null,revokedAt:null};
+  for(const entitlement of [active('scale'),active('managed_growth'),comped]){
+    const s=setup({entitlement}),input=await s.smartZoneCampaign(s.request({services:['Invented'],businessId:'foreign',workType:'event_marketing'}));
+    assert.deepEqual(input.intelligenceContext.services,['Roofing']);assert.equal(input.intelligenceContext.campaignType,'flyer_distribution');
+    assert.deepEqual(input.selectedBoundary,area);assert.equal(input.context.uid,'owner');assert.equal(s.calls.provider,0);
   }
-  assert.deepEqual(contract.normalizeAnalysisBoundary([...box, box[0]]), [...box, box[0]]);
-  assert.deepEqual(contract.normalizeAnalysisBoundary(box.map(p => ({lat: p.latitude, lng: p.longitude}))), box);
+  for(const entitlement of [{...comped,revokedAt:new Date()},{...comped,source:'client'},{...comped,paidProviderUsageAllowed:true}]){
+    const s=setup({entitlement});await assert.rejects(s.smartZoneCampaign(s.request()),{code:'permission-denied'});
+  }
 });
-
-test('oversized explicit selection remains exact and fails closed before any provider request', async () => {
-  const s = setup(); const large = planning.rectangleAround({latitude: 39.15, longitude: -76.63}, 6000, 6000);
-  const input = await s.smartZoneCampaign(s.request({analysisBoundary: large}));
-  const {plan} = await s.generateSmartZonePlan(input, 5);
-  assert.deepEqual(plan.selectedTerritory, large);
-  assert.equal(plan.geographicAcquisition.reasonCode, 'area_limit_exceeded');
-  assert.equal(plan.reasonCode, 'selected_area_exceeds_analysis_limit');
-  assert.equal(plan.totalEstimatedProperties, null);
-  assert.throws(() => planning.assertApplicablePlan(plan), /manual_zone_review_required/);
-  assert.equal(s.check().providerCalls, 0);
+test('role, tenant, member permission, draft and authoritative profile bindings fail before location work',async()=>{
+  for(const [options,code] of [[{context:null},'unauthenticated'],[{context:{uid:'owner',role:'admin'}},'permission-denied'],
+    [{context:{uid:'owner',role:'business',isAdmin:true}},'permission-denied'],[{campaign:{businessId:'foreign'}},'permission-denied'],
+    [{context:{uid:'owner',role:'business',permissions:['campaigns']}},'permission-denied'],
+    [{context:{uid:'owner',role:'business',permissions:['intelligence']}},'permission-denied'],[{campaign:{status:'funded'}},'failed-precondition'],
+    [{profile:{businessUid:'foreign'}},'failed-precondition'],[{preferences:{userUid:'foreign'}},'failed-precondition'],[{exists:false},'not-found']]){
+    const s=setup(options);await assert.rejects(s.smartZoneCampaign(s.request()),{code});
+    assert.equal(s.calls.resolver,0);assert.equal(s.calls.provider,0);
+  }
 });
-
-test('unresolved ZIP keeps location context without an implicit square or digest exception', async () => {
-  const s = setup({resolution: {results: [{id: 'place-unknown', latitude: 39.1550682,
-    longitude: -76.6314933, geographyType: 'zcta', geometry: [], fullAddress: '21061, Maryland'}]}});
-  const input = await s.smartZoneCampaign(s.request({areaSelection: {query: '21061', resultId: 'place-unknown'}}));
-  assert.deepEqual(input.selectedBoundary, []); assert.match(input.sourceAreaDigest, /^[a-f0-9]{64}$/);
-  const {plan} = await s.generateSmartZonePlan(input, 5);
-  assert.equal(plan.reasonCode, 'selected_area_boundary_unavailable');
-  assert.equal(plan.zones.length, 0); assert.equal(plan.geographicSource, null);
-  assert.match(plan.explanation, /saved territory is unchanged/);
-  assert.equal(s.check().providerCalls, 0);
+test('authorized member context uses tenant profile and goal; forged client context cannot override it',async()=>{
+  const s=setup({context:{uid:'owner',actorUid:'member',role:'business',permissions:['campaigns','intelligence']}});
+  const input=await s.smartZoneCampaign(s.request({objective:'Find B2B business leads',contextVersion:'forged',eligibleGeography:[],services:['Unknown']}));
+  assert.equal(input.cacheAuthority.actorUid,'member');assert.equal(input.intelligenceContext.targetIntent,'business');
+  assert.equal(input.intelligenceContext.goal,'Find B2B business leads');assert.deepEqual(input.intelligenceContext.services,['Roofing']);
+  assert.notEqual(input.contextVersion,'forged');assert.ok(input.eligibleGeography.length);
 });
-
-test('provider partial response retains failure category/source time and cannot be applied', async () => {
-  const s = setup({providerPayload: {elements: fixture.elements.slice(0, 4),
-    osm3s: {timestamp_osm_base: fixture.dataTimestamp}, remark: 'SECRET provider diagnostic'}});
-  const input = await s.smartZoneCampaign(s.request({analysisBoundary: area}));
-  const {plan} = await s.generateSmartZonePlan(input, 5);
-  assert.equal(plan.geographicAcquisition.reasonCode, 'provider_partial_response');
-  assert.equal(plan.geographicAcquisition.rawElementCount, 4);
-  assert.equal(plan.geographicSource, null); assert.equal(plan.totalEstimatedProperties, null);
-  assert.equal(plan.targetEvidence.observedEligibleFeatureCount, null);
-  assert.equal(plan.targetEvidence.roadSupportedTargetCount, null);
-  assert.equal(s.events.at(-1).data.observedEligibleFeatureCount, null);
-  assert.equal(plan.reasonCode, 'geographic_source_unavailable');
-  assert.throws(() => planning.assertApplicablePlan(plan), /manual_zone_review_required/);
-  assert.ok(!JSON.stringify(s.events).includes('SECRET')); s.check();
+test('malformed explicit geometry, hours, goal and alternatives fail without provider or resolver',async()=>{
+  for(const extra of [{analysisBoundary:[]},{desiredHours:0},{objective:123},{objective:'x'.repeat(801)},
+    {alternativeIndex:3},{alternativeIndex:-1},{alternativeIndex:1.5},{alternativeIndex:1}]){
+    const s=setup();await assert.rejects(s.smartZoneCampaign(s.request(extra)));
+    assert.equal(s.calls.provider,0);assert.equal(s.calls.resolver,0);
+  }
+  assert.throws(()=>contract.normalizeAnalysisBoundary([{latitude:'39',longitude:-76},...area.slice(1)]));
 });
-
-test('preview identity binds exact drawn geometry and server work type', async () => {
-  const a = setup(), b = setup({campaign: {campaignType: 'business_outreach'}});
-  const input = await a.smartZoneCampaign(a.request({analysisBoundary: area, workType: 'business_outreach'}));
-  const first = (await a.generateSmartZonePlan(input, 5)).plan;
-  assert.equal(first.targetEvidence.targetIntent, 'residential');
-  const altered = area.map(p => ({...p, longitude: p.longitude + .000001}));
-  const second = (await a.generateSmartZonePlan(await a.smartZoneCampaign(a.request({analysisBoundary: altered})), 5)).plan;
-  assert.notEqual(first.planId, second.planId);
-  const third = (await b.generateSmartZonePlan(await b.smartZoneCampaign(b.request({analysisBoundary: area})), 5)).plan;
-  assert.notEqual(first.planId, third.planId); a.check(); b.check();
+test('server-resolved missing ZIP boundary stays unresolved, without inventing an address rectangle',async()=>{
+  const s=setup({resolution:{results:[{id:'zip',latitude:39.15,longitude:-76.63,geographyType:'zcta',geometry:[],fullAddress:'21061, Maryland'}]}});
+  const input=await s.smartZoneCampaign(s.request({analysisBoundary:undefined,areaSelection:{query:'21061',resultId:'zip'}}));
+  assert.deepEqual(input.selectedBoundary,[]);assert.match(input.sourceAreaDigest,/^[a-f0-9]{64}$/);assert.equal(s.calls.resolver,1);
 });

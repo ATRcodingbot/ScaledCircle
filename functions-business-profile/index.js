@@ -13234,19 +13234,21 @@ exports.getBusinessTeam = workspaceEndpoint((request, service) => service.list({
 exports.inviteBusinessTeamMember = workspaceEndpoint((request, service) => service.invite({ uid: request.auth.uid, businessId: request.data?.businessId, data: request.data || {} }));
 exports.acceptBusinessTeamInvitation = workspaceEndpoint((request, service) => service.accept({ uid: request.auth.uid, businessId: request.data?.businessId, invitationId: request.data?.invitationId, token: request.data?.token }));
 exports.updateBusinessTeamMember = workspaceEndpoint((request, service) => service.changeMember({ uid: request.auth.uid, businessId: request.data?.businessId, data: request.data || {} }));
-exports.getBusinessWorkspaceContext = workspaceEndpoint(async (request, service) => {
-  const uid = request.auth.uid,profile = (await db.doc(`users/${uid}`).get()).data() || {};
-  const desired = request.data?.businessId || profile.activeBusinessId || uid;
-  const a = await service.authority({ uid, businessId: desired, allowExpired: true });
-  return { businessId: a.businessId, actorUid: uid, isOwner: a.isOwner, permissions: a.permissions,
-    businessName: await service.workspaceName(a.businessId, a.owner),
-    subscriptionActive: subscriptionEntitlements.hasActivePaidBusinessEntitlement(a.entitlement),
-    planId: String(a.entitlement.planId || a.entitlement.plan || ""),
-    propertyIntelligenceAvailable: subscriptionEntitlements.hasActiveScaleEntitlement(a.entitlement),
-    managedGrowthAvailable: subscriptionEntitlements.hasActiveManagedGrowthEntitlement(a.entitlement), seatLimit: a.capacity,
-    businessAssistantAvailable: subscriptionEntitlements.hasActiveProductEntitlement(a.entitlement, 'business_assistant'),
-    leadGenerationResearchAvailable: subscriptionEntitlements.hasActiveProductEntitlement(a.entitlement, 'lead_generation_research'),
-    billingBundle: a.entitlement.bundle || null };
+exports.getBusinessWorkspaceContext = workspaceEndpoint(async(request,service)=>{
+  const uid=request.auth.uid,profile=(await db.doc(`users/${uid}`).get()).data()||{};
+  const desired=request.data?.businessId||profile.activeBusinessId||uid;
+  const a=await service.authority({uid,businessId:desired,allowExpired:true});
+  return {businessId:a.businessId,actorUid:uid,isOwner:a.isOwner,permissions:a.permissions,
+    businessName:await service.workspaceName(a.businessId,a.owner),
+    subscriptionActive:subscriptionEntitlements.hasActivePaidBusinessEntitlement(a.entitlement),
+    planId:String(a.entitlement.planId||a.entitlement.plan||""),
+    propertyIntelligenceAvailable:subscriptionEntitlements.hasActiveScaleEntitlement(a.entitlement),
+    capabilities:{intelligentAreaRecommendation:subscriptionEntitlements.hasActiveScaleEntitlement(a.entitlement)&&
+      a.permissions.includes('campaigns')&&a.permissions.includes('intelligence')},
+    managedGrowthAvailable:subscriptionEntitlements.hasActiveManagedGrowthEntitlement(a.entitlement),seatLimit:a.capacity,
+    businessAssistantAvailable:subscriptionEntitlements.hasActiveProductEntitlement(a.entitlement,'business_assistant'),
+    leadGenerationResearchAvailable:subscriptionEntitlements.hasActiveProductEntitlement(a.entitlement,'lead_generation_research'),
+    billingBundle:a.entitlement.bundle||null};
 });
 exports.selectBusinessWorkspace = workspaceEndpoint(async (request, service) => {
   const a = await service.authority({ uid: request.auth.uid, businessId: request.data?.businessId, allowExpired: true });

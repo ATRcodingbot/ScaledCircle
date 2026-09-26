@@ -292,7 +292,10 @@ void main() {
         const CampaignAreaRecommendationResult.adjust(originalAnalysisArea),
       );
       await t.pump();
-      expect(t.widget<PolygonLayer>(find.byType(PolygonLayer)).polygons, isEmpty);
+      expect(
+        t.widget<PolygonLayer>(find.byType(PolygonLayer)).polygons,
+        isEmpty,
+      );
       expect(reference.calls, 0);
       final button = t.widget<OutlinedButton>(
         find.widgetWithText(OutlinedButton, 'Recommend within this area'),
@@ -976,6 +979,7 @@ void main() {
           builder: (context) => Scaffold(
             body: SingleChildScrollView(
               child: CampaignZoneAreaEntry(
+                recommendationEnabled: true,
                 locked: false,
                 hasSavedArea: false,
                 savedAreaName: '',
@@ -985,7 +989,7 @@ void main() {
                   expect(query, '21061');
                   return [glenBurnie];
                 },
-                onPlan: (area, hours) async {
+                onPlan: (area, hours, objective) async {
                   recommended = area;
                 },
                 onAdvancedEdit: (area) {
