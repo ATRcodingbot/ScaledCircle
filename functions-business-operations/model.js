@@ -13,11 +13,11 @@ function hash(v){return crypto.createHash('sha256').update(JSON.stringify(v)).di
 function normalize(v){return String(v||'').normalize('NFKC').trim().toLowerCase().replace(/\s+/g,' ');}
 function contactKeys(c){return [...new Set([c.email?`email:${normalize(c.email)}`:null,c.phone?`phone:${c.phone.replace(/\D/g,'')}`:null,`name:${normalize(c.name)}:${normalize(c.location)}`].filter(Boolean))];}
 function customer(input){
- strict(input,['name','company','phone','email','location','source','stage','notes','assignedPeople']);
+ strict(input,['name','company','phone','email','location','source','stage','notes','assignedPeople',...require('./contact_csv').EXTRA]);
  const result={name:text(input.name,160,true),company:text(input.company||'',160),phone:text(input.phone||'',40),email:text(input.email||'',254).toLowerCase(),location:text(input.location||'',400),source:text(input.source||'Owner recorded',180),stage:choice(input.stage||'new_lead',STAGES),notes:text(input.notes||'',4000),assignedPeople:people(input.assignedPeople||[])};
  if(result.email&&!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(result.email))fail('invalid-argument','Enter a valid email address.');
  if(result.phone&&result.phone.replace(/\D/g,'').length<7)fail('invalid-argument','Enter a complete phone number.');
- return result;
+ return {...result,...require('./contact_csv').extras(input)};
 }
 function people(v){if(!Array.isArray(v)||v.length>25||v.some(x=>typeof x!=='string'||!/^(user|crew):[a-zA-Z0-9_-]{1,128}$/.test(x)))fail('invalid-argument','Choose people from this workspace.');return [...new Set(v)];}
 function item(input){

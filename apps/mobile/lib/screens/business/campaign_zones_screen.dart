@@ -1,3 +1,4 @@
+import 'campaign_map_record_screen.dart';
 import 'package:flutter_app/navigation/authenticated_app_bar.dart';
 import '../../config/app_environment.dart';
 
@@ -1651,6 +1652,16 @@ class CampaignZonesScreen extends StatelessWidget {
         title: const Text('Campaign Zones'),
         centerTitle: true,
         actions: [
+          IconButton(
+            tooltip: 'Download / Print Map',
+            icon: const Icon(Icons.print_outlined),
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) =>
+                    CampaignMapRecordScreen(campaignId: campaign.id),
+              ),
+            ),
+          ),
           TextButton(
             style: TextButton.styleFrom(splashFactory: NoSplash.splashFactory),
             onPressed: () {

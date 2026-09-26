@@ -278,6 +278,7 @@ function createService({db,FieldValue,authority,now=Date.now}){
   }
   return {results};
  }
- return {load,timeline,mutate,acceptEmailOffer,async execute(request){m.strict(request.data,['businessId','operation','input','requestId']);if(request.data.operation==='appointmentOptions')return appointmentOptions(request);if(request.data.operation==='load')return load(request);if(request.data.operation==='timeline')return timeline(request);if(request.data.operation==='propose')return propose(request);return mutate(request);}};
+ return {load,timeline,mutate,acceptEmailOffer,async execute(request){m.strict(request.data,['businessId','operation','input','requestId']);if(['inspectContactCsv','previewContactImport','commitContactImport','exportContacts','listContactImports'].includes(request.data.operation))return require('./contact_portability').createContactPortability({db,authority,now}).execute(request);if(['listContactSources','importContactSource'].includes(request.data.operation))return require('./contact_sources').execute({db,authority,request,now});
+  if(request.data.operation==='campaignMapRecord')return require('./campaign_map_record').mapRecord({db,authority,request,now});if(request.data.operation==='appointmentOptions')return appointmentOptions(request);if(request.data.operation==='load')return load(request);if(request.data.operation==='timeline')return timeline(request);if(request.data.operation==='propose')return propose(request);return mutate(request);}};
 }
 module.exports={createService,READ_CAP};

@@ -446,6 +446,8 @@ function createService({db,authority,provider,providers,key,project,now=Date.now
         candidates:loaded.candidates.map(c=>({...c,sourceHash:require('./campaign_delivery').sourceHash(c)})),
         campaigns:await Promise.all(loaded.campaigns.map(c=>delivery.view(a,c)))};
     }
+    if(op==='listCampaignCrmContacts')return campaigns.crmContacts(a,input);
+    if(op==='importCampaignCrmContact')return campaigns.importCrm(a,input);
     if(op==='importCampaignWorkbook')return campaigns.importWorkbook(a,input);
     if(op==='discoverCampaignHistory')return campaigns.discover(a,input);
     if(op==='restrictCampaignContact')return campaigns.restrict(a,input);

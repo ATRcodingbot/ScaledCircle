@@ -33,6 +33,7 @@ class WorkspacePresentation {
       return can('billing');
     }
     if (path == '/business/attribution') return can('analytics');
+    if (path == '/business/map-record') return can('campaigns');
     if (path == '/business/campaigns') return can('campaigns');
     if (path == '/business/results') return can('analytics');
     if (path.startsWith('/campaign') || path.startsWith('/job-room')) {

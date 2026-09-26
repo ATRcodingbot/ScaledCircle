@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+import '../../widgets/contact_csv_actions.dart';
 import '../../config/native_release_policy.dart';
 import 'package:flutter_app/navigation/authenticated_app_bar.dart';
 import 'dart:async';
@@ -363,6 +365,20 @@ class _BusinessScheduleScreenState extends State<BusinessScheduleScreen>
     ],
   );
 
+  static const contactDetails = <String, String>{
+    'category': 'Contact/customer category',
+    'serviceNeeded': 'Service needed',
+    'interest': 'Area of interest',
+    'projectDetails': 'Project/request details',
+    'estimatedValue': 'Estimated project value',
+    'estimatedBudget': 'Estimated budget',
+    'attribution': 'Campaign/source attribution',
+    'preferredContactMethod': 'Preferred contact method',
+    'sourceDate': 'Source date (YYYY-MM-DD)',
+    'lastContactedDate': 'Last contacted date (YYYY-MM-DD)',
+    'nextFollowUpDate': 'Next follow-up date (YYYY-MM-DD)',
+    'conversionDate': 'Conversion/customer date (YYYY-MM-DD)',
+  };
   Future<void> editCustomer([Map<String, dynamic>? before]) async {
     final controllers = {
       for (final k in [
@@ -373,9 +389,13 @@ class _BusinessScheduleScreenState extends State<BusinessScheduleScreen>
         'location',
         'source',
         'notes',
+        ...contactDetails.keys,
       ])
         k: TextEditingController(text: before?[k]?.toString() ?? ''),
     };
+    final tags = TextEditingController(
+      text: (before?['tags'] as List? ?? []).join('\n'),
+    );
     var stage = before?['stage']?.toString() ?? 'new_lead';
     final assigned = Set<String>.from(before?['assignedPeople'] as List? ?? []);
     final value = await form<Map<String, dynamic>>(
@@ -406,6 +426,18 @@ class _BusinessScheduleScreenState extends State<BusinessScheduleScreen>
           ),
           field(controllers['source']!, 'Source', maxLength: 180),
           field(controllers['notes']!, 'Notes', lines: 3, maxLength: 4000),
+          ExpansionTile(
+            title: const Text('Contact details and follow-up'),
+            children: [
+              for (final e in contactDetails.entries)
+                field(
+                  controllers[e.key]!,
+                  e.value,
+                  maxLength: e.key == 'projectDetails' ? 4000 : 600,
+                ),
+              field(tags, 'Tags (one per line)', lines: 3, maxLength: 1800),
+            ],
+          ),
           if (can('assignPeople')) peoplePicker(assigned, update),
         ],
       ),
@@ -416,11 +448,17 @@ class _BusinessScheduleScreenState extends State<BusinessScheduleScreen>
         }
         return {
           for (final e in controllers.entries) e.key: e.value.text.trim(),
+          'tags': tags.text
+              .split('\n')
+              .map((s) => s.trim())
+              .where((s) => s.isNotEmpty)
+              .toList(),
           'stage': stage,
           'assignedPeople': assigned.toList(),
         };
       },
     );
+    tags.dispose();
     for (final c in controllers.values) {
       c.dispose();
     }
@@ -1364,6 +1402,15 @@ class _BusinessScheduleScreenState extends State<BusinessScheduleScreen>
                       for (final i in filteredItems) itemCard(i),
                     ],
                     if (section == 'Customers') ...[
+                      if (kIsWeb)
+                        ContactCsvActions(
+                          businessId: businessId,
+                          service: service,
+                          canImport: editable && can('customersEdit'),
+                          search: query,
+                          filter: filter,
+                          onChanged: load,
+                        ),
                       if (editable && can('customersEdit'))
                         Align(
                           alignment: Alignment.centerLeft,

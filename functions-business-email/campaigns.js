@@ -37,6 +37,13 @@ function createCampaigns({db,now=Date.now,current,adapter,credentialAccess,root,
   return {privateBeta:true,sender:a.beta.mailbox,sendingEnabled:false,maxAudience:25,history:review.data()||null,
    candidates:candidates.docs.map(d=>({id:d.id,...d.data()})),campaigns:campaigns.docs.map(d=>({id:d.id,...d.data()})),suppression:suppression.docs.map(d=>({recipient:d.data().recipient,reason:d.data().reason,source:d.data().source||'maintained_restriction'}))};
  }
+ async function crmContacts(a,input){
+  gate(a);strict(input,[]);if(a.actorUid!==a.businessId)fail('permission-denied','The owner must select CRM contacts.');const rows=await db.collection(`businessOperations/${a.businessId}/customers`).limit(1001).get();if(rows.size>1000)fail('resource-exhausted','Customer inventory needs a bounded review.');return {contacts:rows.docs.filter(d=>d.data().email).map(d=>({id:d.id,name:d.data().name,email:d.data().email,restricted:d.data().doNotContact===true}))};
+ }
+ async function importCrm(a,input){
+  gate(a);strict(input,['customerId','confirm']);if(a.actorUid!==a.businessId)fail('permission-denied','The owner must select CRM contacts.');if(input.confirm!==true||!/^[a-zA-Z0-9_-]{1,128}$/.test(input.customerId||''))fail('invalid-argument','Confirm a customer in your workspace.');
+  return db.runTransaction(async tx=>{const row=(await tx.get(db.doc(`businessOperations/${a.businessId}/customers/${input.customerId}`))).data();if(!row||row.businessId!==a.businessId)fail('not-found','Customer not found in this Business.');const email=gmail.email(row.email),ref=sourceRef(a.businessId,'campaignCandidates',hash(email)),old=(await tx.get(ref)).data(),restriction=(await tx.get(sub(a.businessId,'suppression',hash(email)))).data();await capacity(tx,a.businessId,old);const source={kind:'core_crm',customerId:input.customerId,label:'Business CRM customer',email,context:row.projectDetails||row.serviceNeeded||row.notes||'No prior inquiry context recorded',inquiryDate:row.sourceDate||'Not recorded',sha256:hash([input.customerId,row.version,row.projectDetails,row.serviceNeeded,row.notes,row.sourceDate])},sources=[...(old?.sources||[])];if(!sources.some(x=>hash(x)===hash(source)))sources.push(source);if(sources.length>20)fail('resource-exhausted','Contact provenance needs review.');tx.set(ref,{businessId:a.businessId,email,name:old?.name||row.name,sources,crmCustomerId:input.customerId,status:restriction?.active||row.doNotContact?'suppressed':old?.status||'needs_review',audienceCategory:old?.audienceCategory||'unclassified',roleReviewRequired:true,reviewedForSend:false,updatedAt:now(),...(old?{}:{createdAt:now()})},{merge:true});return {imported:1,sent:0,message:'CRM contact selected for relationship review. Consent and suppression are unchanged.'};});
+ }
  async function importWorkbook(a,input){
   gate(a);strict(input,['contacts','sourceName','sourceSha256']);const sourceName=text(input.sourceName,160);
   if(input.sourceSha256&&!/^[a-f0-9]{64}$/.test(input.sourceSha256)||!Array.isArray(input.contacts)||!input.contacts.length||input.contacts.length>25)fail('invalid-argument','Import at most 25 reviewed source rows.');
@@ -115,7 +122,7 @@ function createCampaigns({db,now=Date.now,current,adapter,credentialAccess,root,
   if(input.confirm!==true)fail('failed-precondition','Review the prior inquiry before marking this contact eligible.');
   const projectType=text(input.projectType,600),ref=sourceRef(a.businessId,'campaignCandidates',input.candidateId);
   return db.runTransaction(async tx=>{const c=(await tx.get(ref)).data(),restriction=c?(await tx.get(sub(a.businessId,'suppression',hash(c.email)))).data():null;
-    if(c?.businessId!==a.businessId||!c.evidence?.length||!c.sources?.some(s=>s.kind==='owner_workbook')||input.sourceHash!==require('./campaign_delivery').sourceHash(c))fail('failed-precondition','Review the saved inquiry source first.');
+    if(c?.businessId!==a.businessId||!c.evidence?.length||!c.sources?.some(s=>['owner_workbook','core_crm'].includes(s.kind))||input.sourceHash!==require('./campaign_delivery').sourceHash(c))fail('failed-precondition','Review the saved inquiry source first.');
     if(restriction?.active||['suppressed','excluded_automated'].includes(c.status))fail('failed-precondition','This contact is excluded.');
     tx.update(ref,{reviewedForSend:true,roleReviewRequired:false,projectType,reviewedSourceHash:input.sourceHash,reviewedBy:a.actorUid,reviewedAt:now()});
     return {saved:true,message:'Relationship and project context reviewed. No email was sent.'};});
@@ -134,7 +141,7 @@ function createCampaigns({db,now=Date.now,current,adapter,credentialAccess,root,
     if(detail){strict(detail,['candidateId','sourceHash','firstName','projectType']);if(detail.sourceHash!==sourceHash)fail('aborted','The inquiry source changed. Review it again.');}
     return {candidateId:d.id,email:c.email,name:c.name||'',firstName:detail?text(detail.firstName,120):(c.name||'').trim().split(/\s+/)[0],
       projectType:detail?text(detail.projectType,600):(c.reviewedSourceHash===sourceHash?c.projectType||'':''),sourceHash,
-      provenance:(c.sources||[]).filter(s=>s.kind==='owner_workbook').map(s=>({label:s.label,context:s.context,inquiryDate:s.inquiryDate,sha256:s.sha256})),
+      provenance:(c.sources||[]).filter(s=>['owner_workbook','core_crm'].includes(s.kind)).map(s=>({label:s.label,context:s.context,inquiryDate:s.inquiryDate,sha256:s.sha256})),
       category:c.audienceCategory,sourceCount:(c.sources||[]).length,reviewRequired:true};});
    const restrictions=await Promise.all(audience.map(c=>tx.get(sub(a.businessId,'suppression',hash(c.email)))));
    const links=await Promise.all(audience.map(c=>tx.get(sub(a.businessId,'optoutLinks',hash(c.email)))));
@@ -152,6 +159,6 @@ function createCampaigns({db,now=Date.now,current,adapter,credentialAccess,root,
     footerIdentitySource:mailingAddress?'owner_supplied':null,results:{sent:0,delivered:null,replies:0,bounced:0,unsubscribed:0,appointments:0,won:0},updatedAt:now(),actorUid:a.actorUid};
    tx.set(ref,saved);for(const c of audience)tx.create(sourceRef(a.businessId,'contactHistory',hash([campaignId,saved.version,c.email])),{businessId:a.businessId,recipient:c.email,candidateId:c.candidateId,campaignId,action:'campaign_draft_prepared',version:saved.version,actorUid:a.actorUid,recordedAt:now(),sent:false});return saved;});
  }
- return {load,importWorkbook,discover,restrict,saveDraft,reviewContact};
+ return {load,crmContacts,importCrm,importWorkbook,discover,restrict,saveDraft,reviewContact};
 }
 module.exports={createCampaigns,messages,mailbox,reasons};

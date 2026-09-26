@@ -5,7 +5,7 @@ const crypto=require('node:crypto'),contract=require('./mailbox_contract');
 const hash=v=>crypto.createHash('sha256').update(JSON.stringify(v)).digest('hex');
 const fail=(code,message)=>{throw Object.assign(Error(message),{code});};
 const bounded=(v,max)=>typeof v==='string'&&v.trim()&&v.length<=max&&!v.includes('\0');
-const sourceHash=c=>hash((c.sources||[]).filter(s=>s.kind==='owner_workbook').map(s=>({sha256:s.sha256,context:s.context,inquiryDate:s.inquiryDate,email:s.email})));
+const sourceHash=c=>hash((c.sources||[]).filter(s=>['owner_workbook','core_crm'].includes(s.kind)).map(s=>({sha256:s.sha256,context:s.context,inquiryDate:s.inquiryDate,email:s.email})));
 const contentHash=c=>hash([c.businessId,c.campaignId,c.version,c.sender,c.subject,c.body,c.mailingAddress,c.audience]);
 const operationId=(b,c,id)=>hash(['campaign',b,c,id]);
 function render(c,row){

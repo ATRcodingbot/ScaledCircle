@@ -88,3 +88,6 @@ test('unauthorized import cannot create contacts in owner workspace',async()=>{
  await assert.rejects(call('importCampaignWorkbook',{sourceName:'test.csv',contacts:[contact()]},'other'),{code:'permission-denied'});
  assert.equal((await db.collection('businessMailboxes/owner/campaignCandidates').get()).size,0);
 });
+test('canonical CRM selection preserves opt-outs and requires independent relationship review',async()=>{
+ await db.doc('businessOperations/owner/customers/fixture').set({businessId:'owner',name:'CRM customer',email:'one@example.test',doNotContact:true,notes:'A source note',version:1});assert.equal((await call('listCampaignCrmContacts')).contacts[0].id,'fixture');await call('importCampaignCrmContact',{customerId:'fixture',confirm:true});let c=(await call('loadCampaigns')).candidates[0];assert.equal(c.status,'suppressed');assert.equal(c.reviewedForSend,false);assert.equal(c.sources[0].kind,'core_crm');await call('importCampaignCrmContact',{customerId:'fixture',confirm:true});assert.equal((await call('loadCampaigns')).candidates[0].sources.length,1);await assert.rejects(call('importCampaignCrmContact',{customerId:'missing',confirm:true}));await assert.rejects(call('importCampaignCrmContact',{customerId:'fixture',confirm:true},'other'));assert.equal(reads,0);assert.equal(sends,0);
+});

@@ -10,7 +10,6 @@ String campaignContactStatus(dynamic status) => switch (status) {
   'excluded_automated' => 'Excluded · automated correspondence',
   _ => 'Needs relationship and message review',
 };
-
 List<Map<String, String>> campaignImportRows(String value) {
   final rows = value.trim().split('\n').where((l) => l.trim().isNotEmpty);
   if (rows.isEmpty || rows.length > 25) {
@@ -65,7 +64,6 @@ class _CampaignState extends State<BusinessEmailCampaignScreen> {
       : c['reviewedForSend'] == true
       ? 'Eligible'
       : 'Needs Review';
-
   Future<void> openCampaign(Map<String, dynamic> campaign) async {
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
@@ -226,6 +224,60 @@ class _CampaignState extends State<BusinessEmailCampaignScreen> {
       'candidateId': ?id,
       if (pages[key] != null) 'pageToken': pages[key],
     });
+  }
+
+  Future<void> importCrm() async {
+    try {
+      final result = await service.call('listCampaignCrmContacts');
+      if (!mounted) return;
+      final chosen = await showDialog<String>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Select a CRM contact for review'),
+          content: SizedBox(
+            width: 600,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text(
+                    'Selecting a contact does not grant consent or send email. Existing restrictions remain.',
+                  ),
+                  for (final row
+                      in (result['contacts'] as List? ?? []).whereType<Map>())
+                    ListTile(
+                      title: Text(row['name']),
+                      subtitle: Text(
+                        '${row['email']}${row['restricted'] == true ? ' · Do not contact' : ''}',
+                      ),
+                      trailing: TextButton(
+                        onPressed: () => Navigator.pop(ctx, row['id']),
+                        child: const Text('Confirm selection'),
+                      ),
+                    ),
+                  if ((result['contacts'] as List? ?? []).isEmpty)
+                    const Text('No CRM contacts with email addresses.'),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancel'),
+            ),
+          ],
+        ),
+      );
+      if (chosen != null) {
+        await run('importCampaignCrmContact', {
+          'customerId': chosen,
+          'confirm': true,
+        });
+      }
+    } catch (e) {
+      if (mounted) setState(() => feedback = e.toString());
+    }
   }
 
   Future<void> importContacts() async {
@@ -444,6 +496,10 @@ class _CampaignState extends State<BusinessEmailCampaignScreen> {
               runSpacing: 8,
               children: [
                 OutlinedButton(
+                  onPressed: busy ? null : importCrm,
+                  child: const Text('Select CRM contact'),
+                ),
+                OutlinedButton(
                   onPressed: busy ? null : importContacts,
                   child: const Text('Import Spreadsheet Contacts'),
                 ),
@@ -536,7 +592,6 @@ class _CampaignState extends State<BusinessEmailCampaignScreen> {
       ),
     ),
   );
-
   Widget candidate(Map<String, dynamic> c) {
     final restricted = [
       'suppressed',

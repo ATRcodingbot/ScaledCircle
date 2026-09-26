@@ -19,7 +19,7 @@ function createAuthority({db,auth,FieldValue,Timestamp,project,beta={},configure
       who.email===config.mailbox&&Number.isSafeInteger(invitation.expiresAt)&&invitation.expiresAt>Date.now()&&
       !!invitation.purpose&&!!invitation.grantedAt&&!!invitation.grantedBy);
     const invited=!!config.mailbox&&config.ownerUid===businessId&&invitationValid;
-    const readOnly=['load','loadCampaigns','loadAssistance','loadConversation'].includes(operation);
+    const readOnly=['load','loadCampaigns','loadAssistance','loadConversation','listCampaignCrmContacts'].includes(operation);
     const connectionAction=['connect','connectOther','callback','disconnect','checkConnection','preferences'].includes(operation);
     if(config.kind==='internal') {
       config.canManageConnection=true;
