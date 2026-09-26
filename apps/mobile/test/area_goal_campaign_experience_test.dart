@@ -146,7 +146,7 @@ void main() {
     await tester.tap(find.text('Flyer Distribution'));
     await tester.pumpAndSettle();
     expect(find.byType(FlyerCampaignScreen), findsOneWidget);
-    expect(find.text('Create Flyer Distribution'), findsOneWidget);
+    expect(find.text('Create Campaign'), findsWidgets);
     await tester.drag(find.byType(ListView).last, const Offset(0, -5000));
     await tester.pumpAndSettle();
     expect(find.text('Create & Define Zones'), findsOneWidget);

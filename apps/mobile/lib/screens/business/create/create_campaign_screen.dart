@@ -1,5 +1,6 @@
 import 'package:flutter_app/navigation/authenticated_app_bar.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 
 import '../../../../models/campaign/campaign.dart';
 import '../../../../navigation/business_back_button.dart';
@@ -66,6 +67,17 @@ class CreateCampaignScreen extends StatelessWidget {
               campaignType: CampaignType.doorHangerDistribution,
             ),
           ),
+
+          if (kIsWeb)
+            _campaignCard(
+              context,
+              Icons.contact_page_outlined,
+              'Business Card Distribution',
+              'Plan business card distribution with mapped territory and your chosen team.',
+              const MaterialDistributionCampaignScreen(
+                campaignType: CampaignType.businessCardDistribution,
+              ),
+            ),
 
           const SizedBox(height: 30),
 

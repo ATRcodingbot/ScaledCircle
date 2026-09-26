@@ -9,6 +9,7 @@ const {defineSecret} = require("firebase-functions/params");
 const {onSchedule} = require("firebase-functions/v2/scheduler");
 const logger = require("firebase-functions/logger");
 const lifecycle = require("./campaign_funding_lifecycle");
+const campaignExecution = require("./campaign_execution_authority");
 const adminRevenueNotifications = require("./admin_revenue_notifications");
 const legalConsent = require("./legal_consent");
 initializeApp();
@@ -74,6 +75,7 @@ async function ownedCampaign(request, permission='payments') {
     try {await workspace.authority({uid:request.auth.uid,businessId:campaign.businessId,permission,allowExpired:true});}
     catch(_){throw new HttpsError('permission-denied','Your workspace access does not include this responsibility.');}
   } else if(String(user.role||'').toLowerCase()!=='business'||(user.active!==true&&user.betaAccess!=='approved'))throw new HttpsError('permission-denied','Business access required.');
+  campaignExecution.assertMarketplace(campaign, HttpsError);
   return {uid:campaign.businessId,actorUid:request.auth.uid,campaignId,ref,campaign};
 }
 
@@ -88,6 +90,8 @@ async function assertFundable(input) {
 async function validatedCampaignZones(input, {forPublication = false} = {}) {
   const zoneSnapshots = await db.collection("campaignZones")
     .where("campaignId", "==", input.campaignId).get();
+  campaignExecution.assertMarketplace(input.campaign, HttpsError);
+  campaignExecution.assertPlanningReview(input.campaign, zoneSnapshots.docs.map(doc => ({...doc.data(), id: doc.id})), HttpsError);
   if ((process.env.GCLOUD_PROJECT || process.env.GOOGLE_CLOUD_PROJECT) === 'scaled-circle') {
     const {productionValidZones} = require('./production_publish_compatibility');
     const valid = productionValidZones(zoneSnapshots.docs, input.campaignId, input.uid);
@@ -198,7 +202,9 @@ async function transition(paymentId, paymentUpdate, campaignUpdate) {
     const currentPayment = paymentSnapshot.data() || {};
     if (!lifecycle.transitionAllowed(String(currentPayment.status || ""), paymentUpdate.status)) return;
     const campaignRef = db.collection("campaigns").doc(currentPayment.campaignId || "missing");
-    if (!(await transaction.get(campaignRef)).exists) throw new Error("campaign_missing");
+    const campaignSnapshot = await transaction.get(campaignRef);
+    if (!campaignSnapshot.exists) throw new Error("campaign_missing");
+    campaignExecution.assertMarketplace(campaignSnapshot.data(), HttpsError);
     transaction.set(paymentRef, {...paymentUpdate, updatedAt: FieldValue.serverTimestamp()}, {merge: true});
     transaction.set(campaignRef, {...campaignUpdate, updatedAt: FieldValue.serverTimestamp()}, {merge: true});
   });

@@ -159,7 +159,7 @@ service cloud.firestore {
     match /campaigns/{campaignId} {
 
       allow read:
-        if isApprovedAccount();
+        if isApprovedAccount() && (resource.data.businessId == request.auth.uid || resource.data.get('executionMode', 'marketplace') == 'marketplace');
 
 
       allow create:
@@ -174,6 +174,11 @@ service cloud.firestore {
         if request.resource.data.get("status", "") == resource.data.get("status", "")
         && isApprovedAccount()
         && resource.data.businessId == request.auth.uid
+        && request.resource.data.businessId == resource.data.businessId
+        && (resource.data.get('executionMode', 'marketplace') != 'own_team' || (resource.data.status == 'draft'
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'campaignName','description','instructions','updatedAt','zoneCount','mappedZoneCount','estimatedHomes',
+            'serviceArea','serviceAreaType','serviceAreaPointCount','shapeType','serviceAreaCenter','serviceAreaRadiusMeters'])))
         && !request.resource.data.diff(resource.data).affectedKeys()
           .hasAny(financialCampaignFields());
 
@@ -333,7 +338,7 @@ service cloud.firestore {
     match /campaignZones/{zoneId} {
 
       allow read:
-        if isApprovedAccount();
+        if isApprovedAccount() && (resource.data.businessId == request.auth.uid || get(/databases/$(database)/documents/campaigns/$(resource.data.campaignId)).data.get('executionMode', 'marketplace') == 'marketplace');
 
 
       allow create:
@@ -684,6 +689,8 @@ service cloud.firestore {
 
       allow read:
         if isApprovedAccount()
+        && (get(/databases/$(database)/documents/campaigns/$(resource.data.campaignId)).data.businessId == request.auth.uid
+          || get(/databases/$(database)/documents/campaigns/$(resource.data.campaignId)).data.get('executionMode', 'marketplace') == 'marketplace')
         && (
           isAdmin()
           || resource.data.assignedScalerId == request.auth.uid
@@ -1213,6 +1220,9 @@ service cloud.firestore {
 
     function financialCampaignFields() {
       return [
+        'executionMode', 'planningSchemaVersion', 'planningVersion', 'planningStage', 'materialsAreaDigest',
+        'scheduleItemId', 'scheduledStartAt', 'scheduledEndAt', 'materialPlan', 'materialReturnLocation',
+        'ownTeamCompletedAt', 'ownTeamCompletedBy', 'marketingCompletedAt', 'marketingCompletionSource',
         'fundingStatus', 'fundingPaymentId', 'fundingVersion', 'fundedAt',
         'workerAmountCents', 'platformFeeRateBasisPoints',
         'platformFeeCents', 'businessChargeCents',

@@ -15,6 +15,7 @@ function effectiveFrom() {
   return value;
 }
 function prospective(campaign) {
+  if(campaign.executionMode==='own_team')return false;
   if(!isCanvassing(campaign.campaignType||campaign.type))return false;
   if(process.env.CANVASSING_NEW_CONTRACTS_ENABLED!=='true')throw Error('new_canvassing_contracts_not_enabled');
   const createdAtMs=timestampMs(campaign.createdAt);
@@ -31,6 +32,7 @@ function planWithRoutes(input,plan,snapshot) {
     planId:hash({plannerPlanId:plan.planId,routeReviewDigest})};
 }
 function mappedZone(input,zone,zoneId,reviewDigest,plan) {
+  if(input.campaign.executionMode==='own_team')return {};
   if(!isCanvassing(input.campaign.campaignType||input.campaign.type))return {};
   if(reviewDigest!==plan.routeReviewDigest||!zone.executionRoute||!zone.coverageAuthority)throw Error('explicit_route_review_required');
   return {executionRoute:zone.executionRoute,coverageAuthority:{...zone.coverageAuthority,

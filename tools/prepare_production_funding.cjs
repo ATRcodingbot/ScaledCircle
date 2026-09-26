@@ -37,6 +37,8 @@ function prepare() {
   const campaignId = cleanId(request.data?.campaignId);`);
  source=replaceFunction(source,'validatedCampaignZones',`async function validatedCampaignZones(input, {forPublication=false}={}) {
   const docs=(await db.collection('campaignZones').where('campaignId','==',input.campaignId).get()).docs;
+  campaignExecution.assertMarketplace(input.campaign,HttpsError);
+  campaignExecution.assertPlanningReview(input.campaign,docs.map(d=>({...d.data(),id:d.id})),HttpsError);
   const valid=require('./production_publish_compatibility').productionValidZones(docs,input.campaignId,input.uid);
   if(!valid.length&&!forPublication)throw new HttpsError('failed-precondition','Map at least one valid campaign Zone before funding.');
   if(productionPolicy.applies(input.campaign))for(const doc of valid) {
@@ -56,6 +58,8 @@ function prepare() {
   if(quote.acceptedOffer)await db.runTransaction(async transaction=>{
     const fresh=(await transaction.get(input.ref)).data();
     const currentZones=await transaction.get(db.collection('campaignZones').where('campaignId','==',input.campaignId));
+    campaignExecution.assertMarketplace(fresh,HttpsError);
+    campaignExecution.assertPlanningReview(fresh,currentZones.docs.map(d=>({...d.data(),id:d.id})),HttpsError);
     const valid=require('./production_publish_compatibility').productionValidZones(currentZones.docs,input.campaignId,input.uid);
     const currentQuote=productionPolicy.quote(lifecycle,input.campaignId,fresh,valid.map(d=>({...d.data(),id:d.id})));
     if(currentQuote.quoteDigest!==quote.quoteDigest||fresh.status!=='draft')throw new HttpsError('failed-precondition','Review the changed funding quote.');
@@ -100,6 +104,8 @@ function prepare() {
     const docs=(await transaction.get(db.collection('campaignZones').where('campaignId','==',input.campaignId))).docs;
     const zones=require('./production_publish_compatibility').productionValidZones(docs,input.campaignId,input.uid);
     const payment=(await transaction.get(db.doc('campaignPayments/'+(cleanId(campaign.fundingPaymentId)||'missing')))).data();
+    campaignExecution.assertMarketplace(campaign,HttpsError);
+    if(campaign.status!=='open')campaignExecution.assertPlanningReview(campaign,docs.map(d=>({...d.data(),id:d.id})),HttpsError);
     if(campaign.status==='open')return {campaignId:input.campaignId,status:'open',replay:true};
     if(campaign.status!=='draft'||!zones.length||campaign.fundingStatus!=='funded'||payment?.status!=='paid'||
        payment.stripeMode!==PAYMENT_ENVIRONMENT.stripeMode||payment.campaignId!==input.campaignId||payment.businessUid!==input.uid) {
@@ -127,6 +133,7 @@ function prepare() {
      if(actor.disabled||!actor.emailVerified||profile.active!==true||!campaignId)throw new HttpsError('permission-denied','Verified Scaler access required.');
      const ref=db.doc('campaigns/'+campaignId),campaign=(await ref.get()).data();
      if(!campaign)throw new HttpsError('not-found','Campaign unavailable.');
+     campaignExecution.assertMarketplace(campaign,HttpsError);
      const assigned=await db.collection('campaignZones').where('campaignId','==',campaignId).get();
      if(!assigned.docs.some(d=>d.data().assignedScalerId===request.auth.uid))throw new HttpsError('permission-denied','No current assignment in this campaign.');
      input={ref,campaign,campaignId};scalerUid=request.auth.uid;

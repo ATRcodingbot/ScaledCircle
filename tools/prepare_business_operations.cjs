@@ -9,6 +9,7 @@ function copy(name){if(seen.has(name))return;seen.add(name);const bytes=fs.readF
  for(const [,dep] of bytes.toString().matchAll(/require\(['"]\.\/([a-z0-9_]+)['"]\)/g))copy(dep);}
 if(codebase!=='functions-agentic-growth')copy('email_conversation_context');
 copy('business_workspace');copy('legal_consent');copy('subscription_entitlements');
+if(codebase==='functions-business-operations'){copy('campaign_execution_authority');copy('operational_layer');}
 if(codebase==='functions-business-email'){copy('generation_budget');copy('lead_reply_alert');}
 if(codebase!=='functions-agentic-growth')fs.copyFileSync(path.join(root,'functions-agentic-growth/internal_growth_bridge.js'),path.join(target,'internal_growth_bridge.js'));
 console.log(JSON.stringify({codebase,modules:[...seen].sort()}));

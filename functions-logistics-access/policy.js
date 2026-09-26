@@ -9,6 +9,7 @@ const ACTIVE_ZONE = new Set(['assigned', 'accepted', 'in_progress', 'paused', 'p
 // addresses, exact coordinates and assignment records are never copied.
 function projection(id, source) {
   if (!source) return {document: null, reason: 'source_absent'};
+  if (Object.hasOwn(source, 'executionMode') && source.executionMode !== 'marketplace') return {document: null, reason: 'private_execution_mode'};
   const title = source.campaignName || source.title || source.name;
   const type = source.campaignType || source.type;
   if (!ID.test(id) || !ID.test(source.businessId || '') ||
@@ -64,7 +65,7 @@ function projection(id, source) {
 }
 
 function locationAllowed(uid, location, campaign) {
-  return location?.assignedScalerId === uid && ACTIVE_LOCATION.has(location.status) &&
+  return campaign && (!Object.hasOwn(campaign, 'executionMode') || campaign.executionMode === 'marketplace') && location?.assignedScalerId === uid && ACTIVE_LOCATION.has(location.status) &&
     ID.test(location.campaignId || '') && ID.test(location.businessId || '') &&
     campaign?.businessId === location.businessId &&
     !['cancelled', 'canceled', 'archived', 'completed', 'rejected'].includes(campaign.status);

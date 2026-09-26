@@ -4,6 +4,8 @@ import '../../../../../services/business_workspace_service.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
+import '../../../campaign_planner_screen.dart';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -130,9 +132,11 @@ class _FlyerCampaignScreenState extends State<FlyerCampaignScreen> {
           'Service: ${widget.initialService!.trim()}',
       ].join('\n');
     }
-    _loadSavedAreas();
-    _loadProfileAreas();
-    _loadBusinessPickupAddress();
+    if (!kIsWeb || !_distributionCampaignTypes.contains(widget.campaignType)) {
+      _loadSavedAreas();
+      _loadProfileAreas();
+      _loadBusinessPickupAddress();
+    }
   }
 
   Future<void> _loadBusinessPickupAddress() async {
@@ -1072,6 +1076,16 @@ class _FlyerCampaignScreenState extends State<FlyerCampaignScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (kIsWeb && _distributionCampaignTypes.contains(widget.campaignType)) {
+      return CampaignPlannerScreen(
+        campaignType: widget.campaignType,
+        initialServiceArea: widget.initialServiceArea,
+        initialServiceAreaName: widget.initialServiceAreaName,
+        initialGoal: widget.initialGoal,
+        initialService: widget.initialService,
+        propertyIntelligenceAnalysisId: widget.propertyIntelligenceAnalysisId,
+      );
+    }
     final previewBasePay = double.tryParse(payController.text.trim()) ?? 0;
 
     final previewBonus = double.tryParse(bonusController.text.trim()) ?? 0;

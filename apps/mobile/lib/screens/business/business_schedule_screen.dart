@@ -7,6 +7,7 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import '../../navigation/app_router.dart';
+import '../../navigation/app_routes.dart';
 import '../../services/business_operations_service.dart';
 import '../../services/business_workspace_service.dart';
 import 'business_member_home.dart';
@@ -1063,6 +1064,7 @@ class _BusinessScheduleScreenState extends State<BusinessScheduleScreen>
         .firstOrNull;
     final removed = i['removedAtMs'] != null;
     final editor = can(i['type'] == 'job' ? 'jobsEdit' : 'scheduleEdit');
+    final ownTeamCampaign = i['sourceKind'] == 'own_team_campaign';
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -1079,10 +1081,14 @@ class _BusinessScheduleScreenState extends State<BusinessScheduleScreen>
             if (i['location']?.toString().isNotEmpty == true)
               Text(i['location']),
             Text(
-              (i['assignedLabels'] as List? ?? []).isEmpty
+              ownTeamCampaign
+                  ? 'My Own Team · Managed from campaign'
+                  : (i['assignedLabels'] as List? ?? []).isEmpty
                   ? 'Unassigned'
                   : 'Assigned to ${(i['assignedLabels'] as List).join(' · ')}',
-              style: (i['assignedLabels'] as List? ?? []).isEmpty
+              style:
+                  !ownTeamCampaign &&
+                      (i['assignedLabels'] as List? ?? []).isEmpty
                   ? TextStyle(
                       fontWeight: FontWeight.w600,
                       color: Theme.of(context).colorScheme.error,
@@ -1108,7 +1114,16 @@ class _BusinessScheduleScreenState extends State<BusinessScheduleScreen>
                   ),
                 ),
               ),
-            if (editable && !removed)
+            if (ownTeamCampaign && can('campaigns'))
+              TextButton.icon(
+                onPressed: () => AppNavigation.push(
+                  context,
+                  AppRoutes.campaignDetail(i['campaignId'].toString()),
+                ),
+                icon: const Icon(Icons.campaign_outlined),
+                label: const Text('Open campaign'),
+              ),
+            if (editable && !removed && !ownTeamCampaign)
               Wrap(
                 spacing: 8,
                 runSpacing: 4,

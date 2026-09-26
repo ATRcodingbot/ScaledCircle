@@ -3,6 +3,8 @@ import 'package:flutter_app/navigation/authenticated_app_bar.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
+import 'campaign_planner_screen.dart';
 
 import '../../config/app_environment.dart';
 import '../../navigation/app_routes.dart';
@@ -780,6 +782,12 @@ class _CreateCampaignScreenState extends State<CreateCampaignScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (kIsWeb) {
+      return CampaignPlannerScreen(
+        initialServiceArea: widget.initialServiceArea,
+        propertyIntelligenceAnalysisId: widget.propertyIntelligenceAnalysisId,
+      );
+    }
     final previewBasePay = double.tryParse(payController.text.trim()) ?? 0;
 
     final previewBonus = double.tryParse(bonusController.text.trim()) ?? 0;

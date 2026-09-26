@@ -204,11 +204,13 @@ bool campaignCanAddZone(
 class CampaignZonesScreen extends StatelessWidget {
   final DocumentSnapshot campaign;
   final bool startWithAreaBuilder;
+  final bool planningFlow;
 
   const CampaignZonesScreen({
     super.key,
     required this.campaign,
     this.startWithAreaBuilder = false,
+    this.planningFlow = false,
   });
 
   CollectionReference<Map<String, dynamic>> get _zonesCollection {
@@ -231,6 +233,10 @@ class CampaignZonesScreen extends StatelessWidget {
     return status != 'draft';
   }
 
+  bool get _ownTeam =>
+      (campaign.data() as Map<String, dynamic>?)?['executionMode'] ==
+      'own_team';
+
   bool get _hasTransferredAnalysisArea {
     final data = campaign.data() as Map<String, dynamic>?;
     return data?['propertyIntelligenceAnalysisId'] != null &&
@@ -249,7 +255,9 @@ class CampaignZonesScreen extends StatelessWidget {
 
   String get _serviceAreaName {
     final data = campaign.data() as Map<String, dynamic>?;
-    final name = data?['serviceAreaTemplateName']?.toString().trim();
+    final name = (data?['serviceAreaTemplateName'] ?? data?['serviceAreaName'])
+        ?.toString()
+        .trim();
     return name == null || name.isEmpty ? 'your selected Service Area' : name;
   }
 
@@ -348,10 +356,12 @@ class CampaignZonesScreen extends StatelessWidget {
                         title: const Text(
                           'I reviewed the mapped routes for authorized public access.',
                         ),
-                        subtitle: const Text(
-                          'Exclude inaccessible or unsafe areas before funding. '
-                          'Route Coverage Estimate uses unique mapped route length, not household counts. '
-                          'Full base requires 80%; an offered coverage bonus requires 95%.',
+                        subtitle: Text(
+                          _ownTeam
+                              ? 'Exclude inaccessible or unsafe areas before scheduling your team.'
+                              : 'Exclude inaccessible or unsafe areas before funding. '
+                                    'Route Coverage Estimate uses unique mapped route length, not household counts. '
+                                    'Full base requires 80%; an offered coverage bonus requires 95%.',
                         ),
                         controlAffinity: ListTileControlAffinity.leading,
                       ),
@@ -361,9 +371,10 @@ class CampaignZonesScreen extends StatelessWidget {
                       style: Theme.of(context).textTheme.titleMedium,
                     ),
                     const SizedBox(height: 8),
-                    Text(
-                      '${plan['recommendedScalerCount']} Scaler${plan['recommendedScalerCount'] == 1 ? '' : 's'} recommended',
-                    ),
+                    if (!_ownTeam)
+                      Text(
+                        '${plan['recommendedScalerCount']} Scaler${plan['recommendedScalerCount'] == 1 ? '' : 's'} recommended',
+                      ),
                     const SizedBox(height: 8),
                     Text(
                       plan['serviceabilityMode'] == 'serviceable_geography'
@@ -374,92 +385,96 @@ class CampaignZonesScreen extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 8),
-                    const Text(
-                      'These are planning estimates, not guaranteed completion times. '
-                      'Each recommended Zone is kept within the six-hour single-Scaler '
-                      'limit and validated again before funding.',
+                    Text(
+                      _ownTeam
+                          ? 'These are planning estimates. Review the Zones and workload before scheduling your team.'
+                          : 'These are planning estimates, not guaranteed completion times. '
+                                'Each recommended Zone is kept within the six-hour single-Scaler '
+                                'limit and validated again before funding.',
                     ),
                     const SizedBox(height: 12),
-                    Card(
-                      child: Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            Text(
-                              'Scaler compensation recommendation',
-                              style: Theme.of(
-                                dialogContext,
-                              ).textTheme.titleMedium,
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              'Estimated workload: '
-                              '${compensation['estimatedWorkHours']} hours',
-                            ),
-                            Text(
-                              'Recommended base payout: '
-                              '${_compensationMoney(compensation['recommendedBasePayCents'])}',
-                            ),
-                            Text(
-                              'Estimated effective compensation: '
-                              '${_compensationRate(compensation['estimatedEffectiveCompensationCentsPerHour'])}',
-                            ),
-                            Text(
-                              'Optional completion incentive: +'
-                              '${_compensationMoney(compensation['suggestedCompletionBonusCents'])}',
-                            ),
-                            Text(
-                              'Optional quality incentive: +'
-                              '${_compensationMoney(compensation['suggestedQualityBonusCents'])}',
-                            ),
-                            Text(
-                              'Potential recommended payout: '
-                              '${_compensationMoney(compensation['recommendedPotentialPayoutCents'])}',
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            const Text(
-                              'Campaign compensation remains fixed-price. The hourly '
-                              'equivalent is a planning-quality estimate, not an employment '
-                              'classification or guarantee. Optional incentives are not '
-                              'applied automatically.',
-                            ),
-                            if (compensation['belowRecommendedFloor'] ==
-                                true) ...[
-                              const SizedBox(height: 12),
+                    if (!_ownTeam)
+                      Card(
+                        child: Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
                               Text(
-                                'Below ScaledCircle recommended compensation',
-                                style: TextStyle(
-                                  color: Theme.of(
-                                    dialogContext,
-                                  ).colorScheme.error,
-                                  fontWeight: FontWeight.w800,
+                                'Scaler compensation recommendation',
+                                style: Theme.of(
+                                  dialogContext,
+                                ).textTheme.titleMedium,
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                'Estimated workload: '
+                                '${compensation['estimatedWorkHours']} hours',
+                              ),
+                              Text(
+                                'Recommended base payout: '
+                                '${_compensationMoney(compensation['recommendedBasePayCents'])}',
+                              ),
+                              Text(
+                                'Estimated effective compensation: '
+                                '${_compensationRate(compensation['estimatedEffectiveCompensationCentsPerHour'])}',
+                              ),
+                              Text(
+                                'Optional completion incentive: +'
+                                '${_compensationMoney(compensation['suggestedCompletionBonusCents'])}',
+                              ),
+                              Text(
+                                'Optional quality incentive: +'
+                                '${_compensationMoney(compensation['suggestedQualityBonusCents'])}',
+                              ),
+                              Text(
+                                'Potential recommended payout: '
+                                '${_compensationMoney(compensation['recommendedPotentialPayoutCents'])}',
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w700,
                                 ),
                               ),
-                              const SizedBox(height: 4),
-                              OutlinedButton.icon(
-                                onPressed: () => setDialogState(
-                                  () => useRecommendedPay = !useRecommendedPay,
-                                ),
-                                icon: Icon(
-                                  useRecommendedPay
-                                      ? Icons.check_circle
-                                      : Icons.price_check_outlined,
-                                ),
-                                label: Text(
-                                  useRecommendedPay
-                                      ? 'Recommended Pay Selected'
-                                      : 'Use Recommended Pay',
-                                ),
+                              const SizedBox(height: 8),
+                              const Text(
+                                'Campaign compensation remains fixed-price. The hourly '
+                                'equivalent is a planning-quality estimate, not an employment '
+                                'classification or guarantee. Optional incentives are not '
+                                'applied automatically.',
                               ),
+                              if (compensation['belowRecommendedFloor'] ==
+                                  true) ...[
+                                const SizedBox(height: 12),
+                                Text(
+                                  'Below ScaledCircle recommended compensation',
+                                  style: TextStyle(
+                                    color: Theme.of(
+                                      dialogContext,
+                                    ).colorScheme.error,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                OutlinedButton.icon(
+                                  onPressed: () => setDialogState(
+                                    () =>
+                                        useRecommendedPay = !useRecommendedPay,
+                                  ),
+                                  icon: Icon(
+                                    useRecommendedPay
+                                        ? Icons.check_circle
+                                        : Icons.price_check_outlined,
+                                  ),
+                                  label: Text(
+                                    useRecommendedPay
+                                        ? 'Recommended Pay Selected'
+                                        : 'Use Recommended Pay',
+                                  ),
+                                ),
+                              ],
                             ],
-                          ],
+                          ),
                         ),
                       ),
-                    ),
                     if (plan['requiresSplit'] == true) ...[
                       const SizedBox(height: 12),
                       const Card(
@@ -477,8 +492,9 @@ class CampaignZonesScreen extends StatelessWidget {
                         ),
                       ),
                     ],
-                    if (compensation['attractiveness'] ==
-                        'low_acceptance_likelihood') ...[
+                    if (!_ownTeam &&
+                        compensation['attractiveness'] ==
+                            'low_acceptance_likelihood') ...[
                       const SizedBox(height: 12),
                       const Card(
                         child: ListTile(
@@ -953,7 +969,7 @@ class CampaignZonesScreen extends StatelessWidget {
       'zoneCount': zonesSnapshot.docs.length,
       'mappedZoneCount': mappedZones,
       'estimatedHomes': estimatedHomes,
-      'assignedScalerCount': assignedZones,
+      if (!_ownTeam) 'assignedScalerCount': assignedZones,
       'zonesUpdatedAt': FieldValue.serverTimestamp(),
     });
   }
@@ -1704,7 +1720,11 @@ class CampaignZonesScreen extends StatelessWidget {
                               ? () => Navigator.pop(context, true)
                               : null,
                           icon: const Icon(Icons.arrow_forward),
-                          label: const Text('Continue to Review & Launch'),
+                          label: Text(
+                            planningFlow
+                                ? 'Save Area & Return to Planner'
+                                : 'Continue to Review & Launch',
+                          ),
                         ),
                       ),
                     ],
@@ -1808,6 +1828,8 @@ class CampaignZonesScreen extends StatelessWidget {
                       ? (_serviceAreaBoundary.length >= 3
                             ? 'Saved option: $_serviceAreaName'
                             : 'No saved Service Area is required.')
+                      : _ownTeam
+                      ? 'Zones organize the territory for your own team.'
                       : 'One Zone is one practical Scaler assignment area.',
                 ),
 
@@ -1827,8 +1849,10 @@ class CampaignZonesScreen extends StatelessWidget {
                     showZoneSelector: true,
                   ),
                   const SizedBox(height: 18),
-                  const Text(
-                    'Dashed outline: selected campaign territory. Colored areas: individual Scaler Zones.',
+                  Text(
+                    _ownTeam
+                        ? 'Dashed outline: selected campaign territory. Colored areas: your team’s Zones.'
+                        : 'Dashed outline: selected campaign territory. Colored areas: individual Scaler Zones.',
                     textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 22),

@@ -19,6 +19,7 @@ function emit(name,sha,output,guard=false) {
   `      const campaign = campaignSnapshot.data() || {};const zone = zoneSnapshot.data() || {};
       if(campaign.completionPolicyVersion)throw new HttpsError('failed-precondition','Assign one Scaler to each versioned canvassing zone through the accepted application.');`));
  const selected=selectedProgram(parser.parse(source),new Set([name]));
+ require('./campaign_execution_source_guard.cjs').guardLegacyProgram(selected,name,parser);
  // Nested adapters inherit the same maxInstances/region from their parent.
  // Do not alter Functions global options when a request first loads an adapter.
  if(name!=='approveZonePayout')selected.program.body=selected.program.body.filter(n=>
@@ -30,7 +31,7 @@ function emit(name,sha,output,guard=false) {
  const copied=new Set();
  function deps(text,current=false) {for(const m of text.matchAll(/require\(['"]\.\/([\w./-]+)['"]\)/g)) {
    const n=m[1].replace(/\.js$/,'')+'.js';if(copied.has(n))continue;copied.add(n);
-   const shared=['workspace_access.js','business_workspace.js','subscription_entitlements.js','legal_consent.js'];
+   const shared=['workspace_access.js','business_workspace.js','subscription_entitlements.js','legal_consent.js','campaign_execution_authority.js'];
    const useCurrent=current||shared.includes(n);
    const content=useCurrent?fs.readFileSync(path.join(root,'functions',n),'utf8'):files[n];
    if(!content)throw Error('Missing reviewed dependency '+n);

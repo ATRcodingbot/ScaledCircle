@@ -11,6 +11,7 @@ class FakeOperations extends BusinessOperationsService {
   bool fieldUser = false;
   bool teamEditor = false;
   bool scheduleViewer = false;
+  bool activePaid = true;
   Map<String, dynamic>? removedItem;
   Map<String, dynamic>? savedItem;
   final existingItems = <Map<String, dynamic>>[];
@@ -50,7 +51,7 @@ class FakeOperations extends BusinessOperationsService {
     }
     if (operation != 'load') return {'saved': true};
     return {
-      'activePaid': true,
+      'activePaid': activePaid,
       'isOwner': !fieldUser && !teamEditor && !scheduleViewer,
       'seatLimit': 3,
       'permissions': fieldUser
@@ -90,6 +91,41 @@ class FakeOperations extends BusinessOperationsService {
 }
 
 void main() {
+  testWidgets(
+    'own-team campaign schedule stays linked without generic status or edit controls',
+    (tester) async {
+      final service = FakeOperations()..activePaid = false;
+      service.existingItems.add({
+        'id': 'campaign_plan1',
+        'sourceKind': 'own_team_campaign',
+        'campaignId': 'plan1',
+        'title': 'Own-team neighborhood campaign',
+        'type': 'task',
+        'status': 'open',
+        'startMs': DateTime.now().millisecondsSinceEpoch,
+        'durationMinutes': 120,
+        'assignedLabels': [],
+        'version': 1,
+      });
+      await tester.pumpWidget(
+        MaterialApp(
+          home: BusinessScheduleScreen(businessId: 'owner', service: service),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(
+        find.text('Open campaign'),
+        150,
+        scrollable: find.byType(Scrollable).first,
+      );
+      expect(find.text('My Own Team · Managed from campaign'), findsOneWidget);
+      expect(find.text('Unassigned'), findsNothing);
+      expect(find.text('Update status'), findsNothing);
+      expect(find.text('Edit'), findsNothing);
+      expect(service.calls.where((v) => v != 'load'), isEmpty);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
   for (final width in [320.0, 390.0]) {
     for (final scale in [1.0, 2.0]) {
       testWidgets('Schedule title stays readable at $width and $scale', (

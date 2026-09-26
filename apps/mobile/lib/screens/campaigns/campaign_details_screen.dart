@@ -4,6 +4,8 @@ import '../../widgets/campaign_card_header.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
+import '../business/campaign_planner_screen.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import '../../models/campaign_card_compensation.dart';
@@ -31,11 +33,13 @@ import '../reviews/create_review_screen.dart';
 class CampaignDetailsScreen extends StatefulWidget {
   final DocumentSnapshot campaign;
   final String fallbackRoute;
+  final bool plannerReview;
 
   const CampaignDetailsScreen({
     super.key,
     required this.campaign,
     this.fallbackRoute = AppRoutes.businessDashboard,
+    this.plannerReview = false,
   });
 
   @override
@@ -2056,6 +2060,14 @@ class _CampaignDetailsScreenState extends State<CampaignDetailsScreen> {
         }
 
         final data = liveCampaign.data() as Map<String, dynamic>;
+
+        if (kIsWeb &&
+            !widget.plannerReview &&
+            (data['executionMode'] == 'own_team' ||
+                (data['planningVersion'] != null &&
+                    data['status'] == 'draft'))) {
+          return CampaignPlannerScreen(campaignId: campaign.id);
+        }
 
         final campaignName = campaignDisplayName(
           data['campaignName']?.toString() ?? 'Untitled Campaign',

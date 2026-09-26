@@ -294,6 +294,15 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
       if (!BusinessWorkspaceSession.can('campaigns')) {
         throw StateError('Campaign access is required.');
       }
+      // The web planner chooses own-team or marketplace execution first.
+      // Marketplace subscription and compensation checks remain server-owned.
+      if (kIsWeb) {
+        await Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const CreateCampaignScreen()),
+        );
+        return;
+      }
       final planId = workspace['planId']?.toString() ?? '';
       final subscriptionActive = workspace['subscriptionActive'] == true;
       if (!subscriptionActive) {

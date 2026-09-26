@@ -315,7 +315,7 @@ service cloud.firestore {
 
     match /campaigns/{campaignId} {
 
-      allow read: if isAdmin() || (isApprovedAccount() && resource.data.businessId == request.auth.uid);
+      allow read: if (isAdmin() && resource.data.get('executionMode', 'marketplace') == 'marketplace') || (isApprovedBusiness() && resource.data.businessId == request.auth.uid);
 
 
       allow create:
@@ -332,6 +332,10 @@ service cloud.firestore {
         && isApprovedAccount()
         && resource.data.businessId == request.auth.uid
         && request.resource.data.businessId == resource.data.businessId
+        && (resource.data.get('executionMode', 'marketplace') != 'own_team' || (resource.data.status == 'draft'
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'campaignName','description','instructions','updatedAt','zoneCount','mappedZoneCount','estimatedHomes',
+            'serviceArea','serviceAreaType','serviceAreaPointCount','shapeType','serviceAreaCenter','serviceAreaRadiusMeters'])))
         && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['createdAt'])
         && (!('completionPolicyVersion' in resource.data)
           || !request.resource.data.diff(resource.data).affectedKeys().hasAny(['status']))
@@ -497,7 +501,7 @@ service cloud.firestore {
     match /campaignZones/{zoneId} {
 
       allow read:
-        if isAdmin() || (isApprovedAccount() && (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'scaler' || resource.data.businessId == request.auth.uid));
+        if (resource.data.businessId == request.auth.uid && isApprovedBusiness()) || (get(/databases/$(database)/documents/campaigns/$(resource.data.campaignId)).data.get('executionMode', 'marketplace') == 'marketplace' && (isAdmin() || (isApprovedAccount() && (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'scaler' || resource.data.businessId == request.auth.uid))));
 
 
       allow create:
@@ -848,6 +852,8 @@ service cloud.firestore {
 
       allow read:
         if isApprovedAccount()
+        && (get(/databases/$(database)/documents/campaigns/$(resource.data.campaignId)).data.businessId == request.auth.uid
+          || get(/databases/$(database)/documents/campaigns/$(resource.data.campaignId)).data.get('executionMode', 'marketplace') == 'marketplace')
         && (
           isAdmin()
           || (resource.data.assignedScalerId == request.auth.uid
@@ -1393,6 +1399,9 @@ service cloud.firestore {
 
     function financialCampaignFields() {
       return [
+        'executionMode', 'planningSchemaVersion', 'planningVersion', 'planningStage', 'materialsAreaDigest',
+        'scheduleItemId', 'scheduledStartAt', 'scheduledEndAt', 'materialPlan', 'materialReturnLocation',
+        'ownTeamCompletedAt', 'ownTeamCompletedBy', 'marketingCompletedAt', 'marketingCompletionSource',
         'fundingStatus', 'fundingPaymentId', 'fundingVersion', 'fundedAt',
         'workerAmountCents', 'platformFeeRateBasisPoints',
         'platformFeeCents', 'businessChargeCents',

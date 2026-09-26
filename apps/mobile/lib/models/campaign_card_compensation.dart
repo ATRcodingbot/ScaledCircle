@@ -10,6 +10,13 @@ class CampaignCardCompensation {
   final bool isGroupCampaign;
 
   factory CampaignCardCompensation.fromCampaign(Map<String, dynamic> data) {
+    if (data['executionMode'] == 'own_team') {
+      return const CampaignCardCompensation(
+        primaryText: 'My Own Team',
+        secondaryText: 'No Scaler compensation funding',
+        isGroupCampaign: false,
+      );
+    }
     final scalerCount =
         (data['requiredScalerCount'] as num?)?.round() ??
         (data['requestedScalerCount'] as num?)?.round() ??
@@ -17,9 +24,12 @@ class CampaignCardCompensation {
     final workerPoolCents = (data['workerPoolCents'] as num?)?.round() ?? 0;
     if (scalerCount > 1 && workerPoolCents > 0) {
       final storedShare = (data['scheduledShareCents'] as num?)?.round() ?? 0;
-      final share = storedShare > 0 ? storedShare : workerPoolCents ~/ scalerCount;
+      final share = storedShare > 0
+          ? storedShare
+          : workerPoolCents ~/ scalerCount;
       return CampaignCardCompensation(
-        primaryText: '${_dollars(workerPoolCents)} group worker pay \u2022 $scalerCount Scalers',
+        primaryText:
+            '${_dollars(workerPoolCents)} group worker pay \u2022 $scalerCount Scalers',
         secondaryText: '${_dollars(share)} scheduled share per Scaler',
         isGroupCampaign: true,
       );
@@ -31,7 +41,8 @@ class CampaignCardCompensation {
     final basePay = (data['basePay'] as num?)?.toDouble() ?? 0;
     final bonus = (data['bonus'] as num?)?.toDouble() ?? 0;
     return CampaignCardCompensation(
-      primaryText: '$homes homes \u2022 \$${basePay.toStringAsFixed(2)} base pay'
+      primaryText:
+          '$homes homes \u2022 \$${basePay.toStringAsFixed(2)} base pay'
           '${bonus > 0 ? ' \u2022 \$${bonus.toStringAsFixed(2)} bonus' : ''}',
       isGroupCampaign: false,
     );

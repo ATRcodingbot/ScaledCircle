@@ -25,7 +25,10 @@ function createService({db,FieldValue,authority,now=Date.now}){
   const {fromMs,toMs}=input;if(!Number.isSafeInteger(fromMs)||!Number.isSafeInteger(toMs)||toMs<=fromMs||toMs-fromMs>45*86400000)m.fail('invalid-argument','Choose a date range of up to 45 days.');
   if(!['customersView','scheduleView','jobsView','jobsAssigned'].some(p=>can(a,p)))m.fail('permission-denied','Ask your Business owner for Customers or Schedule access.');
   const [roster,allCustomers,allItems,prefs,scheduling]=await Promise.all([people(a),can(a,'customersView')?bounded(root(a.businessId).collection('customers')):[],bounded(root(a.businessId).collection('items').where('startMs','>=',fromMs-86400000).where('startMs','<',toMs)),ref(a.businessId,'preferences',a.actorUid).get(),ref(a.businessId,'settings','scheduling').get()]);
-  const visibleItems=allItems.filter(x=>x.removedAtMs==null&&x.endMs>fromMs&&itemAccess(a,x,roster));
+  // Multi-day own-team plans remain visible on every overlapping day.
+  const campaignPlans=await bounded(root(a.businessId).collection('items').where('sourceKind','==','own_team_campaign'));
+  const scheduleRows=[...new Map([...allItems,...campaignPlans.filter(x=>x.startMs<toMs&&x.endMs>fromMs)].map(x=>[x.id,x])).values()];
+  const visibleItems=scheduleRows.filter(x=>x.removedAtMs==null&&x.endMs>fromMs&&itemAccess(a,x,roster));
   const full=can(a,'customersView');const labels=Object.fromEntries(roster.map(p=>[p.id,p.name]));
   const linked=new Map(allCustomers.map(c=>[c.id,c]));
   if(!full)for(const key of new Set(visibleItems.map(i=>i.customerId).filter(Boolean))){const d=await ref(a.businessId,'customers',key).get();if(d.exists)linked.set(d.id,{name:d.data().name,company:d.data().company});}
@@ -123,6 +126,7 @@ function createService({db,FieldValue,authority,now=Date.now}){
    }else if(operation==='saveItem'){
     m.strict(input,['itemId','expectedVersion','item','newCustomer','overrideConflict','overrideReason','emailConversation']);
     let data=m.item(input.item),itemId=input.itemId?m.id(input.itemId):'item_'+key,current=(await tx.get(ref(a.businessId,'items',itemId))).data();
+    if(current?.sourceKind==='own_team_campaign')m.fail('failed-precondition','Manage this marketing plan and its actual completion from the campaign.');
     requirePermission(a,data.type==='job'?'jobsEdit':'scheduleEdit');
     if(current&&current.type!==data.type)requirePermission(a,current.type==='job'?'jobsEdit':'scheduleEdit');
     const ver=version(current,input.expectedVersion);if(input.itemId&&!current)m.fail('not-found','Scheduled item not found.');
@@ -190,6 +194,7 @@ function createService({db,FieldValue,authority,now=Date.now}){
     result={saved:true,itemId,removalAction:action,historyPreserved:true,financialEffect:false};
    }else if(operation==='setItemStatus'){
     m.strict(input,['itemId','expectedVersion','status']);const itemId=m.id(input.itemId),before=(await tx.get(ref(a.businessId,'items',itemId))).data();if(!before)m.fail('not-found','Scheduled item not found.');
+    if(before.sourceKind==='own_team_campaign')m.fail('failed-precondition','Record actual marketed geography from the campaign; a Schedule status cannot certify completion.');
     if(before.removedAtMs!=null)m.fail('failed-precondition','This item was removed from the schedule. Its history is preserved.');
     const ver=version(before,input.expectedVersion);const editor=can(a,before.type==='job'?'jobsEdit':'scheduleEdit');
     if(!editor&&!(before.type==='job'&&can(a,'jobsStatus')&&ownAssignment(a,before,roster)))m.fail('permission-denied','You can update only your assigned work.');
@@ -279,6 +284,8 @@ function createService({db,FieldValue,authority,now=Date.now}){
   return {results};
  }
  return {load,timeline,mutate,acceptEmailOffer,async execute(request){m.strict(request.data,['businessId','operation','input','requestId']);if(['inspectContactCsv','previewContactImport','commitContactImport','exportContacts','listContactImports'].includes(request.data.operation))return require('./contact_portability').createContactPortability({db,authority,now}).execute(request);if(['listContactSources','importContactSource'].includes(request.data.operation))return require('./contact_sources').execute({db,authority,request,now});
+  if(['createCampaignPlan','campaignPlanningContext','saveCampaignPlanningArea','saveCampaignMaterials','scheduleOwnTeamCampaign'].includes(request.data.operation))return require('./campaign_planning').createPlanner({db,FieldValue,authority,now}).execute(request);
+  if(['marketingAreaHistory','markMarketingComplete'].includes(request.data.operation))return require('./marketing_history').createHistoryService({db,FieldValue,authority,now}).execute(request);
   if(request.data.operation==='campaignMapRecord')return require('./campaign_map_record').mapRecord({db,authority,request,now});if(request.data.operation==='appointmentOptions')return appointmentOptions(request);if(request.data.operation==='load')return load(request);if(request.data.operation==='timeline')return timeline(request);if(request.data.operation==='propose')return propose(request);return mutate(request);}};
 }
 module.exports={createService,READ_CAP};

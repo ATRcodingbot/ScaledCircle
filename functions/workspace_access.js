@@ -14,6 +14,7 @@ const ACTIONS=Object.freeze({
  getBusinessMediaWorkspace:'intelligence',createBusinessMediaUploadIntent:'intelligence',finalizeBusinessMediaUpload:'intelligence',updateBusinessMediaRevisionMetadata:'intelligence',approveBusinessMediaRevision:'intelligence',rejectBusinessMediaRevision:'intelligence',removeBusinessMediaAsset:'intelligence',updateBusinessBrandProfile:'intelligence',getGeneratedServiceVisualWorkspace:'intelligence',requestGeneratedServiceVisual:'intelligence',processGeneratedServiceVisual:'intelligence',approveGeneratedServiceVisual:'intelligence',rejectGeneratedServiceVisual:'intelligence',
  getAttributionOverview:'analytics',getJobRoom:'analytics',getTrackingPhoneWorkspace:'analytics',getLandingPageWorkspace:'intelligence',mutateLandingPageDraft:'campaigns',transitionLandingPage:'authorizeCampaigns',reconcileLandingPageInquiryDelivery:'intelligence',createResponseAsset:'campaigns',bridgeResponseLead:'intelligence',getPhysicalMarketingWorkspace:'intelligence',mutatePhysicalMarketingMaterial:'campaigns',preparePhysicalMarketingVersion:'campaigns',approvePhysicalMarketingVersion:'authorizeCampaigns',
 });
+const OWN_TEAM_PLANNING=new Set(['getSmartZonePlan','applySmartZonePlan','analyzeCampaignZone']);
 const NEW_PAID=new Set(['getSmartZonePlan','applySmartZonePlan','analyzeCampaignZone','publishFundedCampaign','createSubscriptionCheckoutSession',
  'analyzeScaleIntelligence','analyzePropertyIntelligence','generateManagedGrowthArtifact','requestGeneratedServiceVisual']);
 function createAccessAdapter({db,workspace,FieldValue}) {
@@ -33,7 +34,13 @@ function createAccessAdapter({db,workspace,FieldValue}) {
   // Scaler Job Room reads retain their original assignment checks.
   if((name==='getJobRoom'||(name==='reviewPausedWorkV1'&&['accept_offer','decline_offer'].includes(data.action)))&&profile.role==='scaler'&&(target?.assignedScalerId===uid || target?.assignedScalerIds?.includes(uid)))return handler(request);
   if(target?.businessId)businessId=target.businessId;
-  const a=await workspace.authority({uid,businessId,permission:name==='getJobRoom'?null:permission,allowExpired:!NEW_PAID.has(name)||name==='createSubscriptionCheckoutSession'||(name==='publishFundedCampaign'&&target?.fundingStatus==='funded')});
+  let planningCampaign=target;
+  if(OWN_TEAM_PLANNING.has(name)&&data.zoneId&&target?.campaignId){
+    planningCampaign=(await db.doc('campaigns/'+resourceId(target.campaignId)).get()).data();
+    if(!planningCampaign||planningCampaign.businessId!==target.businessId){const e=new Error('Campaign authority is unavailable.');e.code='permission-denied';throw e;}
+  }
+  const ownTeamPlanning=OWN_TEAM_PLANNING.has(name)&&planningCampaign?.executionMode==='own_team';
+  const a=await workspace.authority({uid,businessId,permission:name==='getJobRoom'?null:permission,allowExpired:ownTeamPlanning||!NEW_PAID.has(name)||name==='createSubscriptionCheckoutSession'||(name==='publishFundedCampaign'&&target?.fundingStatus==='funded')});
   if(name==='getJobRoom'&&!a.permissions.some(p=>['analytics','payments'].includes(p))){const e=new Error('Results or completion payment authority is required.');e.code='permission-denied';throw e;}
   if(target?.certificationFixture===true && uid!==businessId){const e=new Error('This certification job is private.');e.code='permission-denied';throw e;}
   const scoped={...request,[CONTEXT]:{uid:a.businessId,actorUid:uid,businessId:a.businessId,user:a.owner,role:'business',isAdmin:false,emailVerified:request.auth.token?.email_verified===true,permissions:a.permissions}};

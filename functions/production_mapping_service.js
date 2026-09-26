@@ -15,7 +15,7 @@ async function analyze({db,FieldValue,zoneId,uid,reviewDigest,endpoint,estimateH
  eligible(campaign,zone);
  // A saved target can be researched while new paid contracts remain held.
  // Planning does not approve a route or attach a compensation policy.
- if(process.env.CANVASSING_NEW_CONTRACTS_ENABLED!=='true') {
+ if(campaign.executionMode==='own_team'||process.env.CANVASSING_NEW_CONTRACTS_ENABLED!=='true') {
   if(reviewDigest)throw Error('paid_route_approval_unavailable_while_execution_held');
   return analyzePlanning({db,FieldValue,zoneRef,campaignRef,zone,campaign,eligible});
  }
