@@ -60,6 +60,17 @@ function polygonsOverlap(a, b, geo) {
   return a.some((p, i) => lineHitsPolygon(p, a[(i + 1) % a.length], b, geo)) ||
     b.some(p => geo.pointInsidePolygon(p, a));
 }
+function landContains(point, land, geo) {
+  return geo.pointInsidePolygon(point,land.polygon) && !(land.holes||[]).some(h=>geo.pointInsidePolygon(point,h));
+}
+function lineHitsLand(a,b,land,geo) {
+  return landContains(a,land,geo) || landContains(b,land,geo) || [land.polygon,...(land.holes||[])].some(ring=>
+    ring.slice(1).some((p,i)=>intersects(a,b,ring[i],p)));
+}
+function polygonHitsLand(polygon,land,geo) {
+  return polygon.some((p,i)=>lineHitsLand(p,polygon[(i+1)%polygon.length],land,geo)) ||
+    land.polygon.some(p=>geo.pointInsidePolygon(p,polygon));
+}
 function permitted(way) {
   if (!['residential', 'living_street', 'pedestrian', 'unclassified', 'tertiary', 'service'].includes(way.highway)) return false;
   if (['private', 'no', 'customers', 'delivery', 'permit', 'destination'].includes(way.access) ||
@@ -70,7 +81,8 @@ function permitted(way) {
 }
 function shape({anchor, boundary, snapshot, workType, propertiesPerHour, desiredTargetLimit, maximumZones, desiredMinutes}, geo) {
   const targetIntent = intent(workType);
-  const empty = reason => ({candidates: [], targetIntent, eligibleMappedFeatureCount: 0, reasons: [reason]});
+  let geometryDiagnostics = null;
+  const empty = reason => ({candidates: [], targetIntent, eligibleMappedFeatureCount: 0, reasons: [reason],geometryDiagnostics});
   if (!snapshot || !Array.isArray(snapshot.targetFeatures) || !Array.isArray(snapshot.routeWays)) {
     return empty('Reliable classified targets and local-road linework are unavailable. Review or draw the area manually.');
   }
@@ -83,19 +95,32 @@ function shape({anchor, boundary, snapshot, workType, propertiesPerHour, desired
       !(check.reason === 'non_zero_area_required' && check.areaSquareMeters >= 1); })) {
     return empty('Some non-target land has incomplete geometry. Review the area manually.');
   }
-  const exclusions = lands.map(p => p.polygon);
-  if (lands.length > 1000 || lands.reduce((sum, p) => sum + p.polygon.length, 0) > 20000) {
+  const uncertain = (snapshot.unresolvedLandFeatures || []).filter(f=>excluded(f.kind,targetIntent));
+  const guards = uncertain.filter(f=>f.guard && f.disposition!=='covered_by_mapped_footprint');
+  const unbounded = uncertain.filter(f=>f.disposition!=='covered_by_mapped_footprint' && !f.guard);
+  geometryDiagnostics = {mappedFootprints:lands.length,innerHoles:lands.reduce((n,f)=>n+(f.holes||[]).length,0),
+    localizedUncertainties:guards.length,unboundedUncertainties:unbounded.length,
+    mappedPointAssociations:uncertain.filter(f=>f.disposition==='covered_by_mapped_footprint').length,
+    features:uncertain.map(f=>({sourceId:f.sourceId||f.id,kind:f.kind,reasons:f.reasons||[],
+      disposition:f.disposition||'unbounded_manual_review',guardMeters:f.guardMeters||null,coveredBy:f.coveredBy||[]}))};
+  if (unbounded.length) return empty('Some non-target land has no reliable footprint or bounded extent. Review the affected section manually.');
+  if (guards.some(f=>!geo.validateGeometry(f.guard).valid)) return empty('The uncertain land bounds could not be validated. Review the section manually.');
+  lands.push(...guards.map(f=>({polygon:f.guard,holes:[]})));
+  if (lands.length > 1000 || lands.reduce((sum, p) => sum + p.polygon.length + (p.holes||[]).reduce((n,h)=>n+h.length,0), 0) > 20000) {
     return empty('The land evidence exceeds the bounded planning limit. Select a smaller area for review.');
   }
+  if ((snapshot.barrierWays||[]).some(w=>!Array.isArray(w.geometry)||w.geometry.length<2||w.geometry.some(p=>
+    !Number.isFinite(p.latitude)||!Number.isFinite(p.longitude)))) return empty('Mapped barrier geometry is incomplete. Review the section manually.');
   const barriers = (snapshot.barrierWays || []).flatMap(way => (way.geometry || []).slice(1)
     .map((p, i) => [way.geometry[i], p]));
-  const blocked = (a, b) => exclusions.some(p => lineHitsPolygon(a, b, p, geo)) ||
+  const blocked = (a, b) => lands.some(p => lineHitsLand(a, b, p, geo)) ||
     barriers.some(([c, d]) => intersects(a, b, c, d));
   const features = [];
   const seen = new Set();
   for (const feature of [...snapshot.targetFeatures].sort((a, b) => String(a.id).localeCompare(String(b.id)))) {
     if (feature.kind !== targetIntent || !Number.isFinite(feature.latitude) || !Number.isFinite(feature.longitude) ||
-        !geo.pointInsidePolygon(feature, boundary) || exclusions.some(p => geo.pointInsidePolygon(feature, p))) continue;
+        !geo.pointInsidePolygon(feature, boundary) || lands.some(p => landContains(feature,p,geo) ||
+          feature.footprint && polygonHitsLand(feature.footprint,p,geo))) continue;
     const duplicateKey = feature.addressKey || key(feature);
     if (seen.has(duplicateKey) || features.some(f => distance(feature, f) < 1 ||
         (f.footprint && geo.pointInsidePolygon(feature, f.footprint)) ||
@@ -104,10 +129,6 @@ function shape({anchor, boundary, snapshot, workType, propertiesPerHour, desired
   }
   if (targetIntent === 'event') return {...empty('Mapped venues can be relevant to this campaign. Event access and work duration require manual review.'),
     eligibleMappedFeatureCount: features.length};
-  if ((snapshot.unresolvedLandFeatures || []).some(feature => excluded(feature.kind, targetIntent))) {
-    return {...empty('A mapped non-target feature has no reliable footprint. Review the surrounding area manually.'),
-      eligibleMappedFeatureCount: features.length, eligibleMappedSourceIds: features.map(feature => feature.id)};
-  }
   const edges = new Map(), adjacency = new Map();
   for (const way of snapshot.routeWays) {
     if (!permitted(way) || !Array.isArray(way.geometry)) continue;
@@ -178,9 +199,7 @@ function shape({anchor, boundary, snapshot, workType, propertiesPerHour, desired
     }));
     if (!geo.validateGeometry(hull).valid || hull.some(p => !geo.pointInsidePolygon(p, boundary)) ||
         hull.some((p, i) => boundary.some((q, j) => intersects(p, hull[(i + 1) % hull.length], q, boundary[(j + 1) % boundary.length])))) return null;
-    if (exclusions.some(p => polygonsOverlap(hull, p, geo)) || barriers.some(([a, b]) => lineHitsPolygon(a, b, hull, geo))) return null;
-    if ((snapshot.unresolvedLandFeatures || []).some(f => excluded(f.kind, targetIntent) && (!f.center ||
-        geo.pointInsidePolygon({latitude: f.center.lat, longitude: f.center.lon}, hull)))) return null;
+    if (lands.some(p => polygonHitsLand(hull, p, geo)) || barriers.some(([a, b]) => lineHitsPolygon(a, b, hull, geo))) return null;
     const walkingMeters = [...routes.values()].reduce((s, edge) => s + edge.meters, 0);
     if (geo.polygonAreaSquareMeters(hull) / items.length > MAX_AREA_PER_TARGET ||
         walkingMeters / items.length > MAX_ROUTE_METERS_PER_TARGET) return null;
@@ -203,13 +222,14 @@ function shape({anchor, boundary, snapshot, workType, propertiesPerHour, desired
     partition(items.slice(0, middle)); partition(items.slice(middle));
   }
   for (const items of groups.values()) partition(items);
-  return {candidates, targetIntent, eligibleMappedFeatureCount: features.length,
+  return {candidates, targetIntent, geometryDiagnostics, eligibleMappedFeatureCount: features.length,
     eligibleMappedSourceIds: features.map(feature => feature.id),
     roadSupportedTargetCount: associated.length,
     roadSupportedSourceIds: associated.map(feature => feature.id),
     reasons: candidates.length ? ['Mapped target features are near connected permitted local-road linework.',
       'Known campaign-ineligible land and mapped highway/rail barriers are excluded from each proposed polygon.',
+      ...(guards.length ? ['Conservative local avoidance areas surround incomplete mapped features; these are planning guards, not verified land boundaries.'] : []),
       'OSM coverage and real-world pedestrian access are incomplete; inspect each proposed Zone before use.'] :
       ['We found insufficient connected target and road evidence to automatically create a practical Zone. Review or draw it manually.']};
 }
-module.exports = {shape, intent, excluded, polygonsOverlap, permitted, MIN_TARGETS};
+module.exports = {shape, intent, excluded, polygonsOverlap, permitted, MIN_TARGETS, landContains, lineHitsLand, polygonHitsLand};

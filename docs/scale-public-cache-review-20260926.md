@@ -1,5 +1,7 @@
 # Scale public evidence cache — review candidate, not deployed
 
+Historical baseline at `19a4305`. The geometry correction and updated 21061 result are recorded in [scale-cache-geometry-review-20260926.md](scale-cache-geometry-review-20260926.md); the original measurements below are preserved.
+
 Parent: `387636b96dac5fdee358b2cc35b7949ad4678068`. Implementation is limited to server modules, deployment mirrors, operator import tools, tests and this evidence package. The frozen native checkout remains clean at `0f57f0894a06fc0de0b769d3c4fa012c62e51cb1`. No cloud deployment, object upload, scheduled job, model call, financial action, campaign mutation or native build occurred.
 
 **Disposition: keep Limited/Beta.** Acquisition now works from the maintained local cache without Overpass, but production cache reads have not been deployed/accepted. This 21061 source supports one 24-minute area, not five hours or multiple usable areas. The remaining limitation is exclusion-footprint/connected-territory evidence, not a cache transport failure.

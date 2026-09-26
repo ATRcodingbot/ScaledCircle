@@ -5,7 +5,7 @@
 const crypto=require('node:crypto'),zlib=require('node:zlib');
 const geography=require('./smart_zone_geography'),planning=require('./smart_zone_planning');
 const areas=require('./property_service_area_geometry'),pi=require('./property_intelligence');
-const VERSION='SmartZonePublicCacheV1',PARSER_VERSION='SmartZoneOsmGeometryV1';
+const VERSION='SmartZonePublicCacheV1',PARSER_VERSION='SmartZoneOsmGeometryV2';
 const PREFIX='smart-zone-public/v1/',GRID=.04,DAY=86400000;
 const MAX_BLOB_BYTES=8*1024*1024,MAX_RAW_BYTES=32*1024*1024,MAX_ELEMENTS=20000;
 const hash=value=>crypto.createHash('sha256').update(value).digest('hex');
@@ -20,6 +20,12 @@ const boundsOf=points=>[Math.min(...points.map(p=>p.longitude)),Math.min(...poin
 const overlaps=(a,b)=>a[0]<=b[2]&&a[2]>=b[0]&&a[1]<=b[3]&&a[3]>=b[1];
 function elementBounds(e){
   const points=e.type==='node'?[e]:(e.geometry||e.members?.flatMap(m=>m.geometry||[])||[]);
+  const b=e.bounds;
+  if(b&&[b.minlon,b.minlat,b.maxlon,b.maxlat].every(Number.isFinite)&&b.minlon<b.maxlon&&b.minlat<b.maxlat&&
+    points.every(p=>p.lon>=b.minlon&&p.lon<=b.maxlon&&p.lat>=b.minlat&&p.lat<=b.maxlat))return [b.minlon,b.minlat,b.maxlon,b.maxlat];
+  // Known members cannot narrow away an unknown school/restricted member.
+  // Keep such a source record in every imported tile unless full bounds exist.
+  if(e.type==='relation'&&geography.landKind(e.tags||{})&&e.members?.some(m=>m.type!=='way'||!m.geometry?.length))return null;
   if(!points.length)return null;
   let w=180,s=90,ea=-180,n=-90;
   for(const p of points){if(!Number.isFinite(p.lon)||!Number.isFinite(p.lat))return null;
@@ -77,7 +83,7 @@ const blobPath=digest=>`${PREFIX}blobs/${digest}.json.gz`;
 function decorate(snapshot,meta,now,extra={}){
   return {...snapshot,cacheEvidence:{provider:meta.provider,snapshotAt:meta.snapshotAt,
     retrievedAt:meta.retrievedAt,importedAt:meta.importedAt,sourceHash:meta.sourceHash,
-    bounds:meta.bounds,geometryVersion:'WGS84_OSM_complete_geometry_v1',datasetVersion:meta.version,parserVersion:meta.parserVersion,
+    bounds:meta.bounds,geometryVersion:'WGS84_OSM_complete_geometry_v2',datasetVersion:meta.version,parserVersion:meta.parserVersion,
     freshness:freshness(meta.snapshotAt,now),transport:meta.provider==='overpass'?'cached_overpass':'regional_cache',
     evidenceHash:meta.evidenceHash||meta.sourceHash,...extra}};
 }
@@ -86,6 +92,11 @@ function counts(snapshot){
   return {classifiedTargetCounts,targetFeatureCount:snapshot.targetFeatures?.length||0,routeWayCount:snapshot.routeWays?.length||0,
     exclusionPolygonCount:snapshot.exclusionPolygons?.length||0,landFeatureCount:snapshot.landFeatures?.length||0,
     unresolvedLandFeatureCount:snapshot.unresolvedLandFeatures?.length||0,barrierWayCount:snapshot.barrierWays?.length||0};
+}
+// Read a halo so a point guard cannot disappear across a section/tile seam.
+function evidenceBounds(bounds) {
+  const lat=geography.POINT_GUARD_METERS/111320,lon=lat/Math.cos(Math.max(Math.abs(bounds[1]),Math.abs(bounds[3]))*Math.PI/180);
+  return [bounds[0]-lon,bounds[1]-lat,bounds[2]+lon,bounds[3]+lat];
 }
 function createReader({store,now=Date.now}){
   let manifestPromise;const blobs=new Map();let bytesRead=0,rawBytesRead=0;
@@ -100,16 +111,18 @@ function createReader({store,now=Date.now}){
   };
   return async boundary=>{
     const bounds=boundsOf(boundary),m=await(manifestPromise??=store.readManifest());
+    const halo=evidenceBounds(bounds),coverageBoundary=[{longitude:halo[0],latitude:halo[1]},{longitude:halo[2],latitude:halo[1]},
+      {longitude:halo[2],latitude:halo[3]},{longitude:halo[0],latitude:halo[3]}];
     if(!safeMetadata(m)||m.provider!=='geofabrik_maryland'||m.complete!==true||
-      !Array.isArray(m.coverage)||!areas.isContained(boundary,m.coverage))return null;
-    const keys=tileKeys(bounds);if(keys.length>16)return null;
+      !Array.isArray(m.coverage)||!areas.isContained(coverageBoundary,m.coverage))return null;
+    const keys=tileKeys(halo);if(keys.length>16)return null;
     const elements=new Map();
     for(const key of keys){
       const ref=m.tiles?.[key];if(!ref||ref.complete!==true)return null;
       const tile=await blob(ref.hash);
       if(tile.version!==VERSION||tile.sourceHash!==m.sourceHash||tile.key!==key||!Array.isArray(tile.elements))throw Error('cache_integrity');
       for(const e of tile.elements){
-        if(!intersectsBounds(e,bounds))continue;
+        if(!intersectsBounds(e,bounds)&&!(geography.landKind(e.tags||{})&&intersectsBounds(e,halo)))continue;
         const id=`${e.type}/${e.id}`,previous=elements.get(id);
         // Overlap copies from a single immutable dataset must agree exactly.
         if(previous&&JSON.stringify(previous)!==JSON.stringify(e))throw Error('cache_conflicting_evidence');
@@ -118,7 +131,7 @@ function createReader({store,now=Date.now}){
     }
     const snap=geography.snapshotFromElements(boundary,[...elements.values()],{dataTimestamp:m.snapshotAt,fetchedAt:m.retrievedAt});
     return {snapshot:decorate(snap,{...m,evidenceHash:hash(JSON.stringify(keys.map(k=>m.tiles[k].hash)))},now(),
-      {queryBounds:bounds,geometryDigest:pi.geometryDigest(boundary)}),
+      {queryBounds:bounds,evidenceBounds:halo,geometryDigest:pi.geometryDigest(boundary)}),
       rawElementCount:elements.size};
   };
 }
@@ -173,4 +186,4 @@ function createAcquirer({store,liveFetch=geography.fetchSnapshot,now=Date.now}){
   };
 }
 module.exports={VERSION,PARSER_VERSION,PREFIX,GRID,DAY,MAX_BLOB_BYTES,MAX_RAW_BYTES,MAX_ELEMENTS,hash,
-  freshness,boundsOf,overlaps,elementBounds,intersectsBounds,tileKeys,safeMetadata,encode,decode,blobPath,createReader,createAcquirer};
+  freshness,boundsOf,evidenceBounds,overlaps,elementBounds,intersectsBounds,tileKeys,safeMetadata,encode,decode,blobPath,createReader,createAcquirer};

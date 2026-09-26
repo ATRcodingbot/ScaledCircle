@@ -19,7 +19,7 @@ download = json.loads(Path(opts.download_metadata).read_text(encoding='utf-8'))
 with PBF.open('rb') as source:
     if hashlib.file_digest(source, 'sha256').hexdigest() != download['sha256']:
         raise ValueError('source_checksum_mismatch')
-ALLOWED = set('building building:levels building:material roof:shape roof:material shop office amenity craft landuse access foot highway railway natural waterway leisure boundary place type service bridge tunnel layer addr:housenumber addr:street'.split())
+ALLOWED = set('building building:levels building:material roof:shape roof:material shop office amenity craft landuse access foot barrier entrance area highway railway natural waterway leisure boundary place type service bridge tunnel layer addr:housenumber addr:street'.split())
 BUILDINGS = set('apartments bungalow detached house residential semidetached_house terrace commercial retail school college university hospital civic government industrial warehouse'.split())
 AMENITIES = set('school kindergarten college university hospital prison community_centre theatre place_of_worship grave_yard townhall courthouse police fire_station parking'.split())
 ROADS = set('residential living_street service unclassified tertiary pedestrian motorway motorway_link trunk trunk_link'.split())

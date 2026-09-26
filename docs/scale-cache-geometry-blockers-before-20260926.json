@@ -1,0 +1,1879 @@
+{
+  "source": "19a43051b6a2342eec518cc0687bca9ba125bd66",
+  "sourceSnapshot": "2026-09-25T20:24:36Z",
+  "sections": [
+    {
+      "sectionId": "e786b3231a2a007097a23d1162ca6220c835699e79ac0043426391ea6fee938b",
+      "bounds": [
+        -76.64,
+        39.2,
+        -76.6205213494102,
+        39.20550632199956
+      ],
+      "rank": 1,
+      "fit": 97,
+      "baseline": "available",
+      "failures": []
+    },
+    {
+      "sectionId": "957fb5ab29577ed00a56e96e44a67b37e130f343b86665567a5665344a091f9e",
+      "bounds": [
+        -76.64,
+        39.12,
+        -76.61868456320674,
+        39.160000000000004
+      ],
+      "rank": 2,
+      "fit": 92,
+      "baseline": "needs_review",
+      "failures": [
+        {
+          "id": "node/358240121",
+          "kind": "institution",
+          "center": {
+            "lat": 39.1506642,
+            "lon": -76.6232996
+          },
+          "tags": {
+            "amenity": "place_of_worship"
+          },
+          "geometryPoints": 0,
+          "members": [],
+          "sourceBounds": [
+            -76.6232996,
+            39.1506642,
+            -76.6232996,
+            39.1506642
+          ],
+          "reason": "point_only_no_footprint",
+          "coveredBySameKind": []
+        },
+        {
+          "id": "node/358249487",
+          "kind": "institution",
+          "center": {
+            "lat": 39.1513437,
+            "lon": -76.6229029
+          },
+          "tags": {
+            "amenity": "place_of_worship"
+          },
+          "geometryPoints": 0,
+          "members": [],
+          "sourceBounds": [
+            -76.6229029,
+            39.1513437,
+            -76.6229029,
+            39.1513437
+          ],
+          "reason": "point_only_no_footprint",
+          "coveredBySameKind": []
+        },
+        {
+          "id": "node/358249633",
+          "kind": "school",
+          "center": {
+            "lat": 39.138442,
+            "lon": -76.6335777
+          },
+          "tags": {
+            "amenity": "school"
+          },
+          "geometryPoints": 0,
+          "members": [],
+          "sourceBounds": [
+            -76.6335777,
+            39.138442,
+            -76.6335777,
+            39.138442
+          ],
+          "reason": "point_only_no_footprint",
+          "coveredBySameKind": []
+        },
+        {
+          "id": "node/358249673",
+          "kind": "school",
+          "center": {
+            "lat": 39.1284762,
+            "lon": -76.6285181
+          },
+          "tags": {
+            "amenity": "school"
+          },
+          "geometryPoints": 0,
+          "members": [],
+          "sourceBounds": [
+            -76.6285181,
+            39.1284762,
+            -76.6285181,
+            39.1284762
+          ],
+          "reason": "point_only_no_footprint",
+          "coveredBySameKind": [
+            "263989562"
+          ]
+        },
+        {
+          "id": "node/358254530",
+          "kind": "school",
+          "center": {
+            "lat": 39.148307,
+            "lon": -76.6321763
+          },
+          "tags": {
+            "amenity": "school"
+          },
+          "geometryPoints": 0,
+          "members": [],
+          "sourceBounds": [
+            -76.6321763,
+            39.148307,
+            -76.6321763,
+            39.148307
+          ],
+          "reason": "point_only_no_footprint",
+          "coveredBySameKind": []
+        },
+        {
+          "id": "node/358254803",
+          "kind": "school",
+          "center": {
+            "lat": 39.1419689,
+            "lon": -76.6260591
+          },
+          "tags": {
+            "amenity": "school"
+          },
+          "geometryPoints": 0,
+          "members": [],
+          "sourceBounds": [
+            -76.6260591,
+            39.1419689,
+            -76.6260591,
+            39.1419689
+          ],
+          "reason": "point_only_no_footprint",
+          "coveredBySameKind": [
+            "265074490"
+          ]
+        },
+        {
+          "id": "node/583448545",
+          "kind": "institution",
+          "center": {
+            "lat": 39.1521208,
+            "lon": -76.619015
+          },
+          "tags": {
+            "amenity": "place_of_worship"
+          },
+          "geometryPoints": 0,
+          "members": [],
+          "sourceBounds": [
+            -76.619015,
+            39.1521208,
+            -76.619015,
+            39.1521208
+          ],
+          "reason": "point_only_no_footprint",
+          "coveredBySameKind": []
+        },
+        {
+          "id": "node/588471855",
+          "kind": "parking",
+          "center": {
+            "lat": 39.1214521,
+            "lon": -76.6279492
+          },
+          "tags": {
+            "amenity": "parking"
+          },
+          "geometryPoints": 0,
+          "members": [],
+          "sourceBounds": [
+            -76.6279492,
+            39.1214521,
+            -76.6279492,
+            39.1214521
+          ],
+          "reason": "point_only_no_footprint",
+          "coveredBySameKind": []
+        },
+        {
+          "id": "node/595914600",
+          "kind": "parking",
+          "center": {
+            "lat": 39.1447159,
+            "lon": -76.6306117
+          },
+          "tags": {
+            "amenity": "parking"
+          },
+          "geometryPoints": 0,
+          "members": [],
+          "sourceBounds": [
+            -76.6306117,
+            39.1447159,
+            -76.6306117,
+            39.1447159
+          ],
+          "reason": "point_only_no_footprint",
+          "coveredBySameKind": []
+        },
+        {
+          "id": "node/1677622971",
+          "kind": "institution",
+          "center": {
+            "lat": 39.129628,
+            "lon": -76.6391559
+          },
+          "tags": {
+            "amenity": "place_of_worship"
+          },
+          "geometryPoints": 0,
+          "members": [],
+          "sourceBounds": [
+            -76.6391559,
+            39.129628,
+            -76.6391559,
+            39.129628
+          ],
+          "reason": "point_only_no_footprint",
+          "coveredBySameKind": []
+        },
+        {
+          "id": "node/3802810516",
+          "kind": "institution",
+          "center": {
+            "lat": 39.1597656,
+            "lon": -76.6281879
+          },
+          "tags": {
+            "amenity": "place_of_worship"
+          },
+          "geometryPoints": 0,
+          "members": [],
+          "sourceBounds": [
+            -76.6281879,
+            39.1597656,
+            -76.6281879,
+            39.1597656
+          ],
+          "reason": "point_only_no_footprint",
+          "coveredBySameKind": []
+        },
+        {
+          "id": "node/11860457540",
+          "kind": "institution",
+          "center": {
+            "lat": 39.1412456,
+            "lon": -76.6311238
+          },
+          "tags": {
+            "office": "government"
+          },
+          "geometryPoints": 0,
+          "members": [],
+          "sourceBounds": [
+            -76.6311238,
+            39.1412456,
+            -76.6311238,
+            39.1412456
+          ],
+          "reason": "point_only_no_footprint",
+          "coveredBySameKind": []
+        },
+        {
+          "id": "node/13653965640",
+          "kind": "restricted",
+          "center": {
+            "lat": 39.1585518,
+            "lon": -76.620816
+          },
+          "tags": {
+            "access": "no"
+          },
+          "geometryPoints": 0,
+          "members": [],
+          "sourceBounds": [
+            -76.620816,
+            39.1585518,
+            -76.620816,
+            39.1585518
+          ],
+          "reason": "point_only_no_footprint",
+          "coveredBySameKind": []
+        }
+      ]
+    },
+    {
+      "sectionId": "0ca799bf6ced812681413d864274d86d4d4f050c1caed53b331235d3b51a8a25",
+      "bounds": [
+        -76.64210136985103,
+        39.2,
+        -76.64,
+        39.205445000332894
+      ],
+      "rank": 3,
+      "fit": 90,
+      "baseline": "needs_review",
+      "failures": []
+    },
+    {
+      "sectionId": "1fef6a2bccfb97c43adc71c5e4c94c2c815138ce174deeb0588c7d4924304ca6",
+      "bounds": [
+        -76.68,
+        39.1257422405891,
+        -76.64,
+        39.160000000000004
+      ],
+      "rank": 4,
+      "fit": 87,
+      "baseline": "needs_review",
+      "failures": [
+        {
+          "id": "node/358240585",
+          "kind": "school",
+          "center": {
+            "lat": 39.1442753,
+            "lon": -76.6519117
+          },
+          "tags": {
+            "amenity": "school"
+          },
+          "geometryPoints": 0,
+          "members": [],
+          "sourceBounds": [
+            -76.6519117,
+            39.1442753,
+            -76.6519117,
+            39.1442753
+          ],
+          "reason": "point_only_no_footprint",
+          "coveredBySameKind": []
+        },
+        {
+          "id": "node/358249663",
+          "kind": "institution",
+          "center": {
+            "lat": 39.1414975,
+            "lon": -76.6508005
+          },
+          "tags": {
+            "amenity": "place_of_worship"
+          },
+          "geometryPoints": 0,
+          "members": [],
+          "sourceBounds": [
+            -76.6508005,
+            39.1414975,
+            -76.6508005,
+            39.1414975
+          ],
+          "reason": "point_only_no_footprint",
+          "coveredBySameKind": []
+        },
+        {
+          "id": "node/358249677",
+          "kind": "institution",
+          "center": {
+            "lat": 39.1342753,
+            "lon": -76.6713568
+          },
+          "tags": {
+            "amenity": "place_of_worship"
+          },
+          "geometryPoints": 0,
+          "members": [],
+          "sourceBounds": [
+            -76.6713568,
+            39.1342753,
+            -76.6713568,
+            39.1342753
+          ],
+          "reason": "point_only_no_footprint",
+          "coveredBySameKind": []
+        },
+        {
+          "id": "node/358250355",
+          "kind": "park",
+          "center": {
+            "lat": 39.1359963,
+            "lon": -76.6423364
+          },
+          "tags": {
+            "leisure": "park"
+          },
+          "geometryPoints": 0,
+          "members": [],
+          "sourceBounds": [
+            -76.6423364,
+            39.1359963,
+            -76.6423364,
+            39.1359963
+          ],
+          "reason": "point_only_no_footprint",
+          "coveredBySameKind": [
+            "265059629"
+          ]
+        },
+        {
+          "id": "node/358250357",
+          "kind": "institution",
+          "center": {
+            "lat": 39.1558599,
+            "lon": -76.6435336
+          },
+          "tags": {
+            "amenity": "place_of_worship"
+          },
+          "geometryPoints": 0,
+          "members": [],
+          "sourceBounds": [
+            -76.6435336,
+            39.1558599,
+            -76.6435336,
+            39.1558599
+          ],
+          "reason": "point_only_no_footprint",
+          "coveredBySameKind": []
+        },
+        {
+          "id": "node/358250366",
+          "kind": "park",
+          "center": {
+            "lat": 39.1259421,
+            "lon": -76.6535783
+          },
+          "tags": {
+            "leisure": "park"
+          },
+          "geometryPoints": 0,
+          "members": [],
+          "sourceBounds": [
+            -76.6535783,
+            39.1259421,
+            -76.6535783,
+            39.1259421
+          ],
+          "reason": "point_only_no_footprint",
+          "coveredBySameKind": [
+            "286994061"
+          ]
+        },
+        {
+          "id": "node/1485358718",
+          "kind": "restricted",
+          "center": {
+            "lat": 39.1560428,
+            "lon": -76.6760817
+          },
+          "tags": {
+            "access": "private"
+          },
+          "geometryPoints": 0,
+          "members": [],
+          "sourceBounds": [
+            -76.6760817,
+            39.1560428,
+            -76.6760817,
+            39.1560428
+          ],
+          "reason": "point_only_no_footprint",
+          "coveredBySameKind": []
+        },
+        {
+          "id": "node/8833862222",
+          "kind": "parking",
+          "center": {
+            "lat": 39.1279921,
+            "lon": -76.6500717
+          },
+          "tags": {
+            "amenity": "parking"
+          },
+          "geometryPoints": 0,
+          "members": [],
+          "sourceBounds": [
+            -76.6500717,
+            39.1279921,
+            -76.6500717,
+            39.1279921
+          ],
+          "reason": "point_only_no_footprint",
+          "coveredBySameKind": []
+        },
+        {
+          "id": "node/10863419434",
+          "kind": "restricted",
+          "center": {
+            "lat": 39.1590004,
+            "lon": -76.6776623
+          },
+          "tags": {
+            "access": "private"
+          },
+          "geometryPoints": 0,
+          "members": [],
+          "sourceBounds": [
+            -76.6776623,
+            39.1590004,
+            -76.6776623,
+            39.1590004
+          ],
+          "reason": "point_only_no_footprint",
+          "coveredBySameKind": []
+        },
+        {
+          "id": "node/10863419439",
+          "kind": "restricted",
+          "center": {
+            "lat": 39.1586164,
+            "lon": -76.6790744
+          },
+          "tags": {
+            "access": "private"
+          },
+          "geometryPoints": 0,
+          "members": [],
+          "sourceBounds": [
+            -76.6790744,
+            39.1586164,
+            -76.6790744,
+            39.1586164
+          ],
+          "reason": "point_only_no_footprint",
+          "coveredBySameKind": []
+        }
+      ]
+    },
+    {
+      "sectionId": "a113f3725c305ef71f4f6a16b9a33d4e12ec1aaeaa99af925ef81e40a37c4576",
+      "bounds": [
+        -76.64,
+        39.160000000000004,
+        -76.61960151515059,
+        39.2
+      ],
+      "rank": 5,
+      "fit": 87,
+      "baseline": "needs_review",
+      "failures": [
+        {
+          "id": "node/358239673",
+          "kind": "institution",
+          "center": {
+            "lat": 39.1917747,
+            "lon": -76.6238555
+          },
+          "tags": {
+            "amenity": "place_of_worship"
+          },
+          "geometryPoints": 0,
+          "members": [],
+          "sourceBounds": [
+            -76.6238555,
+            39.1917747,
+            -76.6238555,
+            39.1917747
+          ],
+          "reason": "point_only_no_footprint",
+          "coveredBySameKind": []
+        },
+        {
+          "id": "node/358249648",
+          "kind": "institution",
+          "center": {
+            "lat": 39.1614973,
+            "lon": -76.6263554
+          },
+          "tags": {
+            "amenity": "place_of_worship"
+          },
+          "geometryPoints": 0,
+          "members": [],
+          "sourceBounds": [
+            -76.6263554,
+            39.1614973,
+            -76.6263554,
+            39.1614973
+          ],
+          "reason": "point_only_no_footprint",
+          "coveredBySameKind": []
+        },
+        {
+          "id": "node/358250354",
+          "kind": "institution",
+          "center": {
+            "lat": 39.1751082,
+            "lon": -76.6338558
+          },
+          "tags": {
+            "amenity": "place_of_worship"
+          },
+          "geometryPoints": 0,
+          "members": [],
+          "sourceBounds": [
+            -76.6338558,
+            39.1751082,
+            -76.6338558,
+            39.1751082
+          ],
+          "reason": "point_only_no_footprint",
+          "coveredBySameKind": []
+        },
+        {
+          "id": "node/358250361",
+          "kind": "park",
+          "center": {
+            "lat": 39.1814971,
+            "lon": -76.6249666
+          },
+          "tags": {
+            "leisure": "park"
+          },
+          "geometryPoints": 0,
+          "members": [],
+          "sourceBounds": [
+            -76.6249666,
+            39.1814971,
+            -76.6249666,
+            39.1814971
+          ],
+          "reason": "point_only_no_footprint",
+          "coveredBySameKind": [
+            "263914498"
+          ]
+        },
+        {
+          "id": "node/358250363",
+          "kind": "institution",
+          "center": {
+            "lat": 39.1632839,
+            "lon": -76.6281787
+          },
+          "tags": {
+            "amenity": "place_of_worship"
+          },
+          "geometryPoints": 0,
+          "members": [],
+          "sourceBounds": [
+            -76.6281787,
+            39.1632839,
+            -76.6281787,
+            39.1632839
+          ],
+          "reason": "point_only_no_footprint",
+          "coveredBySameKind": [
+            "431334271"
+          ]
+        },
+        {
+          "id": "node/358255519",
+          "kind": "school",
+          "center": {
+            "lat": 39.1647103,
+            "lon": -76.6245167
+          },
+          "tags": {
+            "amenity": "school"
+          },
+          "geometryPoints": 0,
+          "members": [],
+          "sourceBounds": [
+            -76.6245167,
+            39.1647103,
+            -76.6245167,
+            39.1647103
+          ],
+          "reason": "point_only_no_footprint",
+          "coveredBySameKind": []
+        },
+        {
+          "id": "node/358255520",
+          "kind": "school",
+          "center": {
+            "lat": 39.1637742,
+            "lon": -76.6242751
+          },
+          "tags": {
+            "amenity": "school"
+          },
+          "geometryPoints": 0,
+          "members": [],
+          "sourceBounds": [
+            -76.6242751,
+            39.1637742,
+            -76.6242751,
+            39.1637742
+          ],
+          "reason": "point_only_no_footprint",
+          "coveredBySameKind": []
+        },
+        {
+          "id": "node/367797332",
+          "kind": "institution",
+          "center": {
+            "lat": 39.1640321,
+            "lon": -76.6269889
+          },
+          "tags": {
+            "amenity": "fire_station"
+          },
+          "geometryPoints": 0,
+          "members": [],
+          "sourceBounds": [
+            -76.6269889,
+            39.1640321,
+            -76.6269889,
+            39.1640321
+          ],
+          "reason": "point_only_no_footprint",
+          "coveredBySameKind": []
+        },
+        {
+          "id": "node/587703198",
+          "kind": "parking",
+          "center": {
+            "lat": 39.1715268,
+            "lon": -76.6312768
+          },
+          "tags": {
+            "amenity": "parking"
+          },
+          "geometryPoints": 0,
+          "members": [],
+          "sourceBounds": [
+            -76.6312768,
+            39.1715268,
+            -76.6312768,
+            39.1715268
+          ],
+          "reason": "point_only_no_footprint",
+          "coveredBySameKind": []
+        },
+        {
+          "id": "node/850370926",
+          "kind": "restricted",
+          "center": {
+            "lat": 39.1739873,
+            "lon": -76.6345226
+          },
+          "tags": {
+            "access": "private",
+            "railway": "level_crossing"
+          },
+          "geometryPoints": 0,
+          "members": [],
+          "sourceBounds": [
+            -76.6345226,
+            39.1739873,
+            -76.6345226,
+            39.1739873
+          ],
+          "reason": "point_only_no_footprint",
+          "coveredBySameKind": []
+        },
+        {
+          "id": "node/850371558",
+          "kind": "restricted",
+          "center": {
+            "lat": 39.1739673,
+            "lon": -76.6345569
+          },
+          "tags": {
+            "access": "private",
+            "railway": "level_crossing"
+          },
+          "geometryPoints": 0,
+          "members": [],
+          "sourceBounds": [
+            -76.6345569,
+            39.1739673,
+            -76.6345569,
+            39.1739673
+          ],
+          "reason": "point_only_no_footprint",
+          "coveredBySameKind": []
+        },
+        {
+          "id": "node/3798858835",
+          "kind": "park",
+          "center": {
+            "lat": 39.1645433,
+            "lon": -76.6249637
+          },
+          "tags": {
+            "leisure": "park"
+          },
+          "geometryPoints": 0,
+          "members": [],
+          "sourceBounds": [
+            -76.6249637,
+            39.1645433,
+            -76.6249637,
+            39.1645433
+          ],
+          "reason": "point_only_no_footprint",
+          "coveredBySameKind": []
+        },
+        {
+          "id": "node/3798858837",
+          "kind": "park",
+          "center": {
+            "lat": 39.1652105,
+            "lon": -76.6251695
+          },
+          "tags": {
+            "leisure": "park"
+          },
+          "geometryPoints": 0,
+          "members": [],
+          "sourceBounds": [
+            -76.6251695,
+            39.1652105,
+            -76.6251695,
+            39.1652105
+          ],
+          "reason": "point_only_no_footprint",
+          "coveredBySameKind": []
+        },
+        {
+          "id": "node/3802702960",
+          "kind": "institution",
+          "center": {
+            "lat": 39.1627421,
+            "lon": -76.6233301
+          },
+          "tags": {
+            "amenity": "courthouse"
+          },
+          "geometryPoints": 0,
+          "members": [],
+          "sourceBounds": [
+            -76.6233301,
+            39.1627421,
+            -76.6233301,
+            39.1627421
+          ],
+          "reason": "point_only_no_footprint",
+          "coveredBySameKind": [
+            "376481617"
+          ]
+        },
+        {
+          "id": "node/3802817962",
+          "kind": "institution",
+          "center": {
+            "lat": 39.1621117,
+            "lon": -76.6248717
+          },
+          "tags": {
+            "amenity": "place_of_worship"
+          },
+          "geometryPoints": 0,
+          "members": [],
+          "sourceBounds": [
+            -76.6248717,
+            39.1621117,
+            -76.6248717,
+            39.1621117
+          ],
+          "reason": "point_only_no_footprint",
+          "coveredBySameKind": [
+            "431335264"
+          ]
+        },
+        {
+          "id": "node/3812783994",
+          "kind": "restricted",
+          "center": {
+            "lat": 39.1785482,
+            "lon": -76.6382765
+          },
+          "tags": {
+            "access": "private",
+            "railway": "level_crossing"
+          },
+          "geometryPoints": 0,
+          "members": [],
+          "sourceBounds": [
+            -76.6382765,
+            39.1785482,
+            -76.6382765,
+            39.1785482
+          ],
+          "reason": "point_only_no_footprint",
+          "coveredBySameKind": []
+        },
+        {
+          "id": "node/3812783997",
+          "kind": "restricted",
+          "center": {
+            "lat": 39.1785646,
+            "lon": -76.6382346
+          },
+          "tags": {
+            "access": "private",
+            "railway": "level_crossing"
+          },
+          "geometryPoints": 0,
+          "members": [],
+          "sourceBounds": [
+            -76.6382346,
+            39.1785646,
+            -76.6382346,
+            39.1785646
+          ],
+          "reason": "point_only_no_footprint",
+          "coveredBySameKind": []
+        },
+        {
+          "id": "node/7230081115",
+          "kind": "restricted",
+          "center": {
+            "lat": 39.1988146,
+            "lon": -76.633026
+          },
+          "tags": {
+            "access": "private"
+          },
+          "geometryPoints": 0,
+          "members": [],
+          "sourceBounds": [
+            -76.633026,
+            39.1988146,
+            -76.633026,
+            39.1988146
+          ],
+          "reason": "point_only_no_footprint",
+          "coveredBySameKind": []
+        },
+        {
+          "id": "node/10931458958",
+          "kind": "restricted",
+          "center": {
+            "lat": 39.16991,
+            "lon": -76.6388908
+          },
+          "tags": {
+            "access": "private",
+            "railway": "level_crossing"
+          },
+          "geometryPoints": 0,
+          "members": [],
+          "sourceBounds": [
+            -76.6388908,
+            39.16991,
+            -76.6388908,
+            39.16991
+          ],
+          "reason": "point_only_no_footprint",
+          "coveredBySameKind": []
+        },
+        {
+          "id": "node/10931458959",
+          "kind": "restricted",
+          "center": {
+            "lat": 39.1699008,
+            "lon": -76.6388528
+          },
+          "tags": {
+            "access": "private",
+            "railway": "level_crossing"
+          },
+          "geometryPoints": 0,
+          "members": [],
+          "sourceBounds": [
+            -76.6388528,
+            39.1699008,
+            -76.6388528,
+            39.1699008
+          ],
+          "reason": "point_only_no_footprint",
+          "coveredBySameKind": []
+        },
+        {
+          "id": "node/10931458960",
+          "kind": "restricted",
+          "center": {
+            "lat": 39.1698852,
+            "lon": -76.6387881
+          },
+          "tags": {
+            "access": "private",
+            "railway": "level_crossing"
+          },
+          "geometryPoints": 0,
+          "members": [],
+          "sourceBounds": [
+            -76.6387881,
+            39.1698852,
+            -76.6387881,
+            39.1698852
+          ],
+          "reason": "point_only_no_footprint",
+          "coveredBySameKind": []
+        },
+        {
+          "id": "node/10931458961",
+          "kind": "restricted",
+          "center": {
+            "lat": 39.1698767,
+            "lon": -76.6387531
+          },
+          "tags": {
+            "access": "private",
+            "railway": "level_crossing"
+          },
+          "geometryPoints": 0,
+          "members": [],
+          "sourceBounds": [
+            -76.6387531,
+            39.1698767,
+            -76.6387531,
+            39.1698767
+          ],
+          "reason": "point_only_no_footprint",
+          "coveredBySameKind": []
+        },
+        {
+          "id": "node/11874878148",
+          "kind": "institution",
+          "center": {
+            "lat": 39.1638078,
+            "lon": -76.6257853
+          },
+          "tags": {
+            "amenity": "place_of_worship"
+          },
+          "geometryPoints": 0,
+          "members": [],
+          "sourceBounds": [
+            -76.6257853,
+            39.1638078,
+            -76.6257853,
+            39.1638078
+          ],
+          "reason": "point_only_no_footprint",
+          "coveredBySameKind": []
+        },
+        {
+          "id": "node/13041518635",
+          "kind": "restricted",
+          "center": {
+            "lat": 39.1771412,
+            "lon": -76.6204338
+          },
+          "tags": {
+            "access": "private"
+          },
+          "geometryPoints": 0,
+          "members": [],
+          "sourceBounds": [
+            -76.6204338,
+            39.1771412,
+            -76.6204338,
+            39.1771412
+          ],
+          "reason": "point_only_no_footprint",
+          "coveredBySameKind": []
+        }
+      ]
+    },
+    {
+      "sectionId": "abcefede9b88c53bb70faba52062d838f39449220bd5da8a1009603d2a364886",
+      "bounds": [
+        -76.68,
+        39.160000000000004,
+        -76.64,
+        39.2
+      ],
+      "rank": 6,
+      "fit": 82,
+      "baseline": "needs_review",
+      "failures": [
+        {
+          "id": "node/265022620",
+          "kind": "restricted",
+          "center": {
+            "lat": 39.184261,
+            "lon": -76.6741666
+          },
+          "tags": {
+            "access": "permit"
+          },
+          "geometryPoints": 0,
+          "members": [],
+          "sourceBounds": [
+            -76.6741666,
+            39.184261,
+            -76.6741666,
+            39.184261
+          ],
+          "reason": "point_only_no_footprint",
+          "coveredBySameKind": []
+        },
+        {
+          "id": "node/358249635",
+          "kind": "school",
+          "center": {
+            "lat": 39.1839969,
+            "lon": -76.6424673
+          },
+          "tags": {
+            "amenity": "school"
+          },
+          "geometryPoints": 0,
+          "members": [],
+          "sourceBounds": [
+            -76.6424673,
+            39.1839969,
+            -76.6424673,
+            39.1839969
+          ],
+          "reason": "point_only_no_footprint",
+          "coveredBySameKind": [
+            "1517305322"
+          ]
+        },
+        {
+          "id": "node/358249637",
+          "kind": "institution",
+          "center": {
+            "lat": 39.1828858,
+            "lon": -76.6433006
+          },
+          "tags": {
+            "amenity": "place_of_worship"
+          },
+          "geometryPoints": 0,
+          "members": [],
+          "sourceBounds": [
+            -76.6433006,
+            39.1828858,
+            -76.6433006,
+            39.1828858
+          ],
+          "reason": "point_only_no_footprint",
+          "coveredBySameKind": []
+        },
+        {
+          "id": "node/358249684",
+          "kind": "cemetery",
+          "center": {
+            "lat": 39.1962188,
+            "lon": -76.6755241
+          },
+          "tags": {
+            "amenity": "grave_yard"
+          },
+          "geometryPoints": 0,
+          "members": [],
+          "sourceBounds": [
+            -76.6755241,
+            39.1962188,
+            -76.6755241,
+            39.1962188
+          ],
+          "reason": "point_only_no_footprint",
+          "coveredBySameKind": []
+        },
+        {
+          "id": "node/358250309",
+          "kind": "cemetery",
+          "center": {
+            "lat": 39.1970521,
+            "lon": -76.6735797
+          },
+          "tags": {
+            "amenity": "grave_yard"
+          },
+          "geometryPoints": 0,
+          "members": [],
+          "sourceBounds": [
+            -76.6735797,
+            39.1970521,
+            -76.6735797,
+            39.1970521
+          ],
+          "reason": "point_only_no_footprint",
+          "coveredBySameKind": []
+        },
+        {
+          "id": "node/358254538",
+          "kind": "school",
+          "center": {
+            "lat": 39.1839881,
+            "lon": -76.6425761
+          },
+          "tags": {
+            "amenity": "school"
+          },
+          "geometryPoints": 0,
+          "members": [],
+          "sourceBounds": [
+            -76.6425761,
+            39.1839881,
+            -76.6425761,
+            39.1839881
+          ],
+          "reason": "point_only_no_footprint",
+          "coveredBySameKind": [
+            "1517305322"
+          ]
+        },
+        {
+          "id": "node/3956013096",
+          "kind": "restricted",
+          "center": {
+            "lat": 39.1633599,
+            "lon": -76.6703992
+          },
+          "tags": {
+            "access": "private",
+            "foot": "yes"
+          },
+          "geometryPoints": 0,
+          "members": [],
+          "sourceBounds": [
+            -76.6703992,
+            39.1633599,
+            -76.6703992,
+            39.1633599
+          ],
+          "reason": "point_only_no_footprint",
+          "coveredBySameKind": []
+        },
+        {
+          "id": "node/3956013866",
+          "kind": "restricted",
+          "center": {
+            "lat": 39.1661696,
+            "lon": -76.6701661
+          },
+          "tags": {
+            "access": "private",
+            "foot": "yes"
+          },
+          "geometryPoints": 0,
+          "members": [],
+          "sourceBounds": [
+            -76.6701661,
+            39.1661696,
+            -76.6701661,
+            39.1661696
+          ],
+          "reason": "point_only_no_footprint",
+          "coveredBySameKind": []
+        },
+        {
+          "id": "node/3956013889",
+          "kind": "restricted",
+          "center": {
+            "lat": 39.167133,
+            "lon": -76.6759786
+          },
+          "tags": {
+            "access": "private"
+          },
+          "geometryPoints": 0,
+          "members": [],
+          "sourceBounds": [
+            -76.6759786,
+            39.167133,
+            -76.6759786,
+            39.167133
+          ],
+          "reason": "point_only_no_footprint",
+          "coveredBySameKind": []
+        },
+        {
+          "id": "node/3956013891",
+          "kind": "restricted",
+          "center": {
+            "lat": 39.1671819,
+            "lon": -76.6760214
+          },
+          "tags": {
+            "access": "private"
+          },
+          "geometryPoints": 0,
+          "members": [],
+          "sourceBounds": [
+            -76.6760214,
+            39.1671819,
+            -76.6760214,
+            39.1671819
+          ],
+          "reason": "point_only_no_footprint",
+          "coveredBySameKind": []
+        },
+        {
+          "id": "node/3956040388",
+          "kind": "restricted",
+          "center": {
+            "lat": 39.1691789,
+            "lon": -76.6736816
+          },
+          "tags": {
+            "access": "private",
+            "foot": "yes"
+          },
+          "geometryPoints": 0,
+          "members": [],
+          "sourceBounds": [
+            -76.6736816,
+            39.1691789,
+            -76.6736816,
+            39.1691789
+          ],
+          "reason": "point_only_no_footprint",
+          "coveredBySameKind": []
+        },
+        {
+          "id": "node/3956040672",
+          "kind": "restricted",
+          "center": {
+            "lat": 39.1702399,
+            "lon": -76.6747922
+          },
+          "tags": {
+            "access": "private",
+            "foot": "yes"
+          },
+          "geometryPoints": 0,
+          "members": [],
+          "sourceBounds": [
+            -76.6747922,
+            39.1702399,
+            -76.6747922,
+            39.1702399
+          ],
+          "reason": "point_only_no_footprint",
+          "coveredBySameKind": []
+        },
+        {
+          "id": "node/3956040675",
+          "kind": "restricted",
+          "center": {
+            "lat": 39.1702629,
+            "lon": -76.6741995
+          },
+          "tags": {
+            "access": "private",
+            "foot": "yes"
+          },
+          "geometryPoints": 0,
+          "members": [],
+          "sourceBounds": [
+            -76.6741995,
+            39.1702629,
+            -76.6741995,
+            39.1702629
+          ],
+          "reason": "point_only_no_footprint",
+          "coveredBySameKind": []
+        },
+        {
+          "id": "node/5029239897",
+          "kind": "restricted",
+          "center": {
+            "lat": 39.1880541,
+            "lon": -76.6572108
+          },
+          "tags": {
+            "access": "private"
+          },
+          "geometryPoints": 0,
+          "members": [],
+          "sourceBounds": [
+            -76.6572108,
+            39.1880541,
+            -76.6572108,
+            39.1880541
+          ],
+          "reason": "point_only_no_footprint",
+          "coveredBySameKind": []
+        },
+        {
+          "id": "node/7094834065",
+          "kind": "restricted",
+          "center": {
+            "lat": 39.1958744,
+            "lon": -76.6698971
+          },
+          "tags": {
+            "access": "private"
+          },
+          "geometryPoints": 0,
+          "members": [],
+          "sourceBounds": [
+            -76.6698971,
+            39.1958744,
+            -76.6698971,
+            39.1958744
+          ],
+          "reason": "point_only_no_footprint",
+          "coveredBySameKind": []
+        },
+        {
+          "id": "node/7094834066",
+          "kind": "restricted",
+          "center": {
+            "lat": 39.1966194,
+            "lon": -76.670324
+          },
+          "tags": {
+            "access": "private"
+          },
+          "geometryPoints": 0,
+          "members": [],
+          "sourceBounds": [
+            -76.670324,
+            39.1966194,
+            -76.670324,
+            39.1966194
+          ],
+          "reason": "point_only_no_footprint",
+          "coveredBySameKind": []
+        },
+        {
+          "id": "node/7357297675",
+          "kind": "restricted",
+          "center": {
+            "lat": 39.1833147,
+            "lon": -76.6734159
+          },
+          "tags": {
+            "access": "permit"
+          },
+          "geometryPoints": 0,
+          "members": [],
+          "sourceBounds": [
+            -76.6734159,
+            39.1833147,
+            -76.6734159,
+            39.1833147
+          ],
+          "reason": "point_only_no_footprint",
+          "coveredBySameKind": []
+        },
+        {
+          "id": "node/7357297677",
+          "kind": "restricted",
+          "center": {
+            "lat": 39.1834788,
+            "lon": -76.6747439
+          },
+          "tags": {
+            "access": "permit"
+          },
+          "geometryPoints": 0,
+          "members": [],
+          "sourceBounds": [
+            -76.6747439,
+            39.1834788,
+            -76.6747439,
+            39.1834788
+          ],
+          "reason": "point_only_no_footprint",
+          "coveredBySameKind": []
+        },
+        {
+          "id": "node/7385761973",
+          "kind": "restricted",
+          "center": {
+            "lat": 39.1847533,
+            "lon": -76.6740253
+          },
+          "tags": {
+            "access": "permit"
+          },
+          "geometryPoints": 0,
+          "members": [],
+          "sourceBounds": [
+            -76.6740253,
+            39.1847533,
+            -76.6740253,
+            39.1847533
+          ],
+          "reason": "point_only_no_footprint",
+          "coveredBySameKind": []
+        },
+        {
+          "id": "node/7387026729",
+          "kind": "restricted",
+          "center": {
+            "lat": 39.1820067,
+            "lon": -76.6720728
+          },
+          "tags": {
+            "access": "permit"
+          },
+          "geometryPoints": 0,
+          "members": [],
+          "sourceBounds": [
+            -76.6720728,
+            39.1820067,
+            -76.6720728,
+            39.1820067
+          ],
+          "reason": "point_only_no_footprint",
+          "coveredBySameKind": []
+        },
+        {
+          "id": "node/7387048587",
+          "kind": "restricted",
+          "center": {
+            "lat": 39.1833375,
+            "lon": -76.6710503
+          },
+          "tags": {
+            "access": "permit"
+          },
+          "geometryPoints": 0,
+          "members": [],
+          "sourceBounds": [
+            -76.6710503,
+            39.1833375,
+            -76.6710503,
+            39.1833375
+          ],
+          "reason": "point_only_no_footprint",
+          "coveredBySameKind": []
+        },
+        {
+          "id": "node/7387048611",
+          "kind": "restricted",
+          "center": {
+            "lat": 39.1824526,
+            "lon": -76.6707206
+          },
+          "tags": {
+            "access": "permit"
+          },
+          "geometryPoints": 0,
+          "members": [],
+          "sourceBounds": [
+            -76.6707206,
+            39.1824526,
+            -76.6707206,
+            39.1824526
+          ],
+          "reason": "point_only_no_footprint",
+          "coveredBySameKind": []
+        },
+        {
+          "id": "node/7387048943",
+          "kind": "restricted",
+          "center": {
+            "lat": 39.1820387,
+            "lon": -76.6720162
+          },
+          "tags": {
+            "access": "permit"
+          },
+          "geometryPoints": 0,
+          "members": [],
+          "sourceBounds": [
+            -76.6720162,
+            39.1820387,
+            -76.6720162,
+            39.1820387
+          ],
+          "reason": "point_only_no_footprint",
+          "coveredBySameKind": []
+        },
+        {
+          "id": "node/7387048992",
+          "kind": "restricted",
+          "center": {
+            "lat": 39.182527,
+            "lon": -76.6711986
+          },
+          "tags": {
+            "access": "permit"
+          },
+          "geometryPoints": 0,
+          "members": [],
+          "sourceBounds": [
+            -76.6711986,
+            39.182527,
+            -76.6711986,
+            39.182527
+          ],
+          "reason": "point_only_no_footprint",
+          "coveredBySameKind": []
+        },
+        {
+          "id": "node/7505095369",
+          "kind": "restricted",
+          "center": {
+            "lat": 39.1709408,
+            "lon": -76.6788521
+          },
+          "tags": {
+            "access": "permit",
+            "foot": "no"
+          },
+          "geometryPoints": 0,
+          "members": [],
+          "sourceBounds": [
+            -76.6788521,
+            39.1709408,
+            -76.6788521,
+            39.1709408
+          ],
+          "reason": "point_only_no_footprint",
+          "coveredBySameKind": []
+        },
+        {
+          "id": "node/8565516809",
+          "kind": "restricted",
+          "center": {
+            "lat": 39.1720099,
+            "lon": -76.6471351
+          },
+          "tags": {
+            "access": "private"
+          },
+          "geometryPoints": 0,
+          "members": [],
+          "sourceBounds": [
+            -76.6471351,
+            39.1720099,
+            -76.6471351,
+            39.1720099
+          ],
+          "reason": "point_only_no_footprint",
+          "coveredBySameKind": []
+        },
+        {
+          "id": "node/8796439584",
+          "kind": "restricted",
+          "center": {
+            "lat": 39.1936084,
+            "lon": -76.660687
+          },
+          "tags": {
+            "access": "private"
+          },
+          "geometryPoints": 0,
+          "members": [],
+          "sourceBounds": [
+            -76.660687,
+            39.1936084,
+            -76.660687,
+            39.1936084
+          ],
+          "reason": "point_only_no_footprint",
+          "coveredBySameKind": [
+            "112182491"
+          ]
+        },
+        {
+          "id": "node/10863223005",
+          "kind": "restricted",
+          "center": {
+            "lat": 39.1606464,
+            "lon": -76.6787681
+          },
+          "tags": {
+            "access": "private"
+          },
+          "geometryPoints": 0,
+          "members": [],
+          "sourceBounds": [
+            -76.6787681,
+            39.1606464,
+            -76.6787681,
+            39.1606464
+          ],
+          "reason": "point_only_no_footprint",
+          "coveredBySameKind": []
+        },
+        {
+          "id": "node/10863223006",
+          "kind": "restricted",
+          "center": {
+            "lat": 39.1606531,
+            "lon": -76.6792119
+          },
+          "tags": {
+            "access": "private"
+          },
+          "geometryPoints": 0,
+          "members": [],
+          "sourceBounds": [
+            -76.6792119,
+            39.1606531,
+            -76.6792119,
+            39.1606531
+          ],
+          "reason": "point_only_no_footprint",
+          "coveredBySameKind": []
+        },
+        {
+          "id": "node/10863223007",
+          "kind": "restricted",
+          "center": {
+            "lat": 39.1604835,
+            "lon": -76.6795828
+          },
+          "tags": {
+            "access": "private"
+          },
+          "geometryPoints": 0,
+          "members": [],
+          "sourceBounds": [
+            -76.6795828,
+            39.1604835,
+            -76.6795828,
+            39.1604835
+          ],
+          "reason": "point_only_no_footprint",
+          "coveredBySameKind": []
+        },
+        {
+          "id": "node/10863419470",
+          "kind": "restricted",
+          "center": {
+            "lat": 39.1604193,
+            "lon": -76.6799652
+          },
+          "tags": {
+            "access": "private"
+          },
+          "geometryPoints": 0,
+          "members": [],
+          "sourceBounds": [
+            -76.6799652,
+            39.1604193,
+            -76.6799652,
+            39.1604193
+          ],
+          "reason": "point_only_no_footprint",
+          "coveredBySameKind": []
+        },
+        {
+          "id": "node/11469840041",
+          "kind": "institution",
+          "center": {
+            "lat": 39.1805181,
+            "lon": -76.6676717
+          },
+          "tags": {
+            "amenity": "police"
+          },
+          "geometryPoints": 0,
+          "members": [],
+          "sourceBounds": [
+            -76.6676717,
+            39.1805181,
+            -76.6676717,
+            39.1805181
+          ],
+          "reason": "point_only_no_footprint",
+          "coveredBySameKind": []
+        },
+        {
+          "id": "node/12313212763",
+          "kind": "restricted",
+          "center": {
+            "lat": 39.176588,
+            "lon": -76.650993
+          },
+          "tags": {
+            "access": "private"
+          },
+          "geometryPoints": 0,
+          "members": [],
+          "sourceBounds": [
+            -76.650993,
+            39.176588,
+            -76.650993,
+            39.176588
+          ],
+          "reason": "point_only_no_footprint",
+          "coveredBySameKind": []
+        },
+        {
+          "id": "node/12313212767",
+          "kind": "restricted",
+          "center": {
+            "lat": 39.1638782,
+            "lon": -76.6477633
+          },
+          "tags": {
+            "access": "private"
+          },
+          "geometryPoints": 0,
+          "members": [],
+          "sourceBounds": [
+            -76.6477633,
+            39.1638782,
+            -76.6477633,
+            39.1638782
+          ],
+          "reason": "point_only_no_footprint",
+          "coveredBySameKind": []
+        },
+        {
+          "id": "way/790161680",
+          "kind": "restricted",
+          "center": null,
+          "tags": {
+            "access": "permit"
+          },
+          "geometryPoints": 3,
+          "members": [],
+          "sourceBounds": [
+            -76.6734524,
+            39.1833092,
+            -76.6733923,
+            39.1833233
+          ],
+          "reason": "open_way_no_area",
+          "coveredBySameKind": []
+        },
+        {
+          "id": "way/790161682",
+          "kind": "restricted",
+          "center": null,
+          "tags": {
+            "access": "permit"
+          },
+          "geometryPoints": 3,
+          "members": [],
+          "sourceBounds": [
+            -76.6720543,
+            39.1820012,
+            -76.6719782,
+            39.1820763
+          ],
+          "reason": "open_way_no_area",
+          "coveredBySameKind": []
+        },
+        {
+          "id": "way/790161686",
+          "kind": "restricted",
+          "center": null,
+          "tags": {
+            "access": "permit"
+          },
+          "geometryPoints": 3,
+          "members": [],
+          "sourceBounds": [
+            -76.6712424,
+            39.1824762,
+            -76.6711532,
+            39.182576
+          ],
+          "reason": "open_way_no_area",
+          "coveredBySameKind": []
+        }
+      ]
+    }
+  ]
+}

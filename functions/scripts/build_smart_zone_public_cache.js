@@ -14,11 +14,18 @@ function parsePoly(text){
   let result=clipping.union(...outer.map(r=>[r]));if(holes.length)result=clipping.difference(result,...holes.map(r=>[r]));return result;
 }
 function build({payload,sourceCoverage,now=Date.now()}){
+  if (payload.referenceIncomplete) {
+    const unresolved=payload.elements?.flatMap(e=>(e.members||[]).filter(m=>m.type==='relation'||m.type==='way'&&!m.geometry?.length))||[];
+    if (!unresolved.length || [...(payload.missingMemberWays||[]),...(payload.unsupportedNestedRelations||[])].some(id=>!unresolved.some(m=>m.ref===id))) throw Error('untraceable_incomplete_geometry');
+  }
   const b=payload.bounds,rect=[[[b?.[0],b?.[1]],[b?.[2],b?.[1]],[b?.[2],b?.[3]],[b?.[0],b?.[3]],[b?.[0],b?.[1]]]];
   const manifest={version:cache.VERSION,parserVersion:cache.PARSER_VERSION,provider:'geofabrik_maryland',
     snapshotAt:payload.sourceDataTimestamp,retrievedAt:payload.retrievedAt,importedAt:new Date(now).toISOString(),
     sourceHash:payload.sourceSha256,bounds:b,sourceCoverageHash:cache.hash(JSON.stringify(sourceCoverage)),
-    coverage:clipping.intersection(sourceCoverage,rect),complete:payload.referenceIncomplete===false&&!(payload.invalidSourceWays>0),tiles:{}};
+    coverage:clipping.intersection(sourceCoverage,rect),// Completeness describes acquisition of source records, not certainty of
+    // every footprint. Retained missing members are localized by the parser.
+    complete:typeof payload.referenceIncomplete==='boolean'&&!(payload.invalidSourceWays>0),
+    unresolvedReferenceCount:(payload.missingMemberWays||[]).length+(payload.unsupportedNestedRelations||[]).length,tiles:{}};
   if(!cache.safeMetadata(manifest)||!manifest.coverage.length||!Array.isArray(payload.elements))throw Error('invalid_source_metadata');
   if(!manifest.complete)throw Error('incomplete_source_geometry');
   const tiles=new Map(cache.tileKeys(b).map(k=>[k,new Map()]));

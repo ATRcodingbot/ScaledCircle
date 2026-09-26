@@ -1,0 +1,553 @@
+{
+  "sourceSnapshot": "2026-09-25T20:24:36Z",
+  "sourceHash": "fca54b6b3d2cf6632e79a6a93413d77c0019743ff1bbef52e93188a28d79fc20",
+  "classifications": [
+    {
+      "sourceId": "node/265022620",
+      "classificationTags": {
+        "access": "permit",
+        "barrier": "gate"
+      }
+    },
+    {
+      "sourceId": "node/358239673",
+      "classificationTags": {
+        "amenity": "place_of_worship"
+      }
+    },
+    {
+      "sourceId": "node/358240121",
+      "classificationTags": {
+        "amenity": "place_of_worship"
+      }
+    },
+    {
+      "sourceId": "node/358240585",
+      "classificationTags": {
+        "amenity": "school"
+      }
+    },
+    {
+      "sourceId": "node/358249487",
+      "classificationTags": {
+        "amenity": "place_of_worship"
+      }
+    },
+    {
+      "sourceId": "node/358249633",
+      "classificationTags": {
+        "amenity": "school"
+      }
+    },
+    {
+      "sourceId": "node/358249635",
+      "classificationTags": {
+        "amenity": "school"
+      }
+    },
+    {
+      "sourceId": "node/358249637",
+      "classificationTags": {
+        "amenity": "place_of_worship"
+      }
+    },
+    {
+      "sourceId": "node/358249648",
+      "classificationTags": {
+        "amenity": "place_of_worship"
+      }
+    },
+    {
+      "sourceId": "node/358249663",
+      "classificationTags": {
+        "amenity": "place_of_worship"
+      }
+    },
+    {
+      "sourceId": "node/358249673",
+      "classificationTags": {
+        "amenity": "school"
+      }
+    },
+    {
+      "sourceId": "node/358249677",
+      "classificationTags": {
+        "amenity": "place_of_worship"
+      }
+    },
+    {
+      "sourceId": "node/358249684",
+      "classificationTags": {
+        "amenity": "grave_yard"
+      }
+    },
+    {
+      "sourceId": "node/358250309",
+      "classificationTags": {
+        "amenity": "grave_yard"
+      }
+    },
+    {
+      "sourceId": "node/358250354",
+      "classificationTags": {
+        "amenity": "place_of_worship"
+      }
+    },
+    {
+      "sourceId": "node/358250355",
+      "classificationTags": {
+        "leisure": "park"
+      }
+    },
+    {
+      "sourceId": "node/358250357",
+      "classificationTags": {
+        "amenity": "place_of_worship"
+      }
+    },
+    {
+      "sourceId": "node/358250361",
+      "classificationTags": {
+        "leisure": "park"
+      }
+    },
+    {
+      "sourceId": "node/358250363",
+      "classificationTags": {
+        "amenity": "place_of_worship"
+      }
+    },
+    {
+      "sourceId": "node/358250366",
+      "classificationTags": {
+        "leisure": "park"
+      }
+    },
+    {
+      "sourceId": "node/358254530",
+      "classificationTags": {
+        "amenity": "school"
+      }
+    },
+    {
+      "sourceId": "node/358254538",
+      "classificationTags": {
+        "amenity": "school"
+      }
+    },
+    {
+      "sourceId": "node/358254803",
+      "classificationTags": {
+        "amenity": "school"
+      }
+    },
+    {
+      "sourceId": "node/358255519",
+      "classificationTags": {
+        "amenity": "school"
+      }
+    },
+    {
+      "sourceId": "node/358255520",
+      "classificationTags": {
+        "amenity": "school"
+      }
+    },
+    {
+      "sourceId": "node/367797332",
+      "classificationTags": {
+        "amenity": "fire_station"
+      }
+    },
+    {
+      "sourceId": "node/583448545",
+      "classificationTags": {
+        "amenity": "place_of_worship"
+      }
+    },
+    {
+      "sourceId": "node/587703198",
+      "classificationTags": {
+        "amenity": "parking"
+      }
+    },
+    {
+      "sourceId": "node/588471855",
+      "classificationTags": {
+        "amenity": "parking"
+      }
+    },
+    {
+      "sourceId": "node/595914600",
+      "classificationTags": {
+        "amenity": "parking"
+      }
+    },
+    {
+      "sourceId": "node/850370926",
+      "classificationTags": {
+        "access": "private"
+      }
+    },
+    {
+      "sourceId": "node/850371558",
+      "classificationTags": {
+        "access": "private"
+      }
+    },
+    {
+      "sourceId": "node/1485358718",
+      "classificationTags": {
+        "access": "private",
+        "barrier": "gate"
+      }
+    },
+    {
+      "sourceId": "node/1677622971",
+      "classificationTags": {
+        "amenity": "place_of_worship"
+      }
+    },
+    {
+      "sourceId": "node/3798858835",
+      "classificationTags": {
+        "leisure": "park"
+      }
+    },
+    {
+      "sourceId": "node/3798858837",
+      "classificationTags": {
+        "leisure": "park"
+      }
+    },
+    {
+      "sourceId": "node/3802702960",
+      "classificationTags": {
+        "amenity": "courthouse"
+      }
+    },
+    {
+      "sourceId": "node/3802810516",
+      "classificationTags": {
+        "amenity": "place_of_worship"
+      }
+    },
+    {
+      "sourceId": "node/3802817962",
+      "classificationTags": {
+        "amenity": "place_of_worship"
+      }
+    },
+    {
+      "sourceId": "node/3812783994",
+      "classificationTags": {
+        "access": "private"
+      }
+    },
+    {
+      "sourceId": "node/3812783997",
+      "classificationTags": {
+        "access": "private"
+      }
+    },
+    {
+      "sourceId": "node/3956013096",
+      "classificationTags": {
+        "access": "private",
+        "foot": "yes",
+        "barrier": "gate"
+      }
+    },
+    {
+      "sourceId": "node/3956013866",
+      "classificationTags": {
+        "access": "private",
+        "foot": "yes",
+        "barrier": "gate"
+      }
+    },
+    {
+      "sourceId": "node/3956013889",
+      "classificationTags": {
+        "access": "private",
+        "barrier": "gate"
+      }
+    },
+    {
+      "sourceId": "node/3956013891",
+      "classificationTags": {
+        "access": "private",
+        "barrier": "gate"
+      }
+    },
+    {
+      "sourceId": "node/3956040388",
+      "classificationTags": {
+        "access": "private",
+        "foot": "yes",
+        "barrier": "gate"
+      }
+    },
+    {
+      "sourceId": "node/3956040672",
+      "classificationTags": {
+        "access": "private",
+        "foot": "yes",
+        "barrier": "gate"
+      }
+    },
+    {
+      "sourceId": "node/3956040675",
+      "classificationTags": {
+        "access": "private",
+        "foot": "yes",
+        "barrier": "gate"
+      }
+    },
+    {
+      "sourceId": "node/5029239897",
+      "classificationTags": {
+        "access": "private",
+        "barrier": "gate"
+      }
+    },
+    {
+      "sourceId": "node/7094834065",
+      "classificationTags": {
+        "access": "private",
+        "barrier": "gate"
+      }
+    },
+    {
+      "sourceId": "node/7094834066",
+      "classificationTags": {
+        "access": "private",
+        "barrier": "gate"
+      }
+    },
+    {
+      "sourceId": "node/7230081115",
+      "classificationTags": {
+        "access": "private",
+        "barrier": "gate"
+      }
+    },
+    {
+      "sourceId": "node/7357297675",
+      "classificationTags": {
+        "access": "permit",
+        "barrier": "gate"
+      }
+    },
+    {
+      "sourceId": "node/7357297677",
+      "classificationTags": {
+        "access": "permit",
+        "barrier": "gate"
+      }
+    },
+    {
+      "sourceId": "node/7385761973",
+      "classificationTags": {
+        "access": "permit",
+        "barrier": "lift_gate"
+      }
+    },
+    {
+      "sourceId": "node/7387026729",
+      "classificationTags": {
+        "access": "permit",
+        "barrier": "gate"
+      }
+    },
+    {
+      "sourceId": "node/7387048587",
+      "classificationTags": {
+        "access": "permit",
+        "barrier": "gate"
+      }
+    },
+    {
+      "sourceId": "node/7387048611",
+      "classificationTags": {
+        "access": "permit",
+        "barrier": "lift_gate"
+      }
+    },
+    {
+      "sourceId": "node/7387048943",
+      "classificationTags": {
+        "access": "permit",
+        "barrier": "gate"
+      }
+    },
+    {
+      "sourceId": "node/7387048992",
+      "classificationTags": {
+        "access": "permit",
+        "barrier": "gate"
+      }
+    },
+    {
+      "sourceId": "node/7505095369",
+      "classificationTags": {
+        "access": "permit",
+        "foot": "no",
+        "barrier": "gate"
+      }
+    },
+    {
+      "sourceId": "node/8565516809",
+      "classificationTags": {
+        "access": "private",
+        "barrier": "gate"
+      }
+    },
+    {
+      "sourceId": "node/8796439584",
+      "classificationTags": {
+        "access": "private",
+        "barrier": "gate"
+      }
+    },
+    {
+      "sourceId": "node/8833862222",
+      "classificationTags": {
+        "amenity": "parking"
+      }
+    },
+    {
+      "sourceId": "node/10863223005",
+      "classificationTags": {
+        "access": "private",
+        "entrance": "yes"
+      }
+    },
+    {
+      "sourceId": "node/10863223006",
+      "classificationTags": {
+        "access": "private",
+        "entrance": "yes"
+      }
+    },
+    {
+      "sourceId": "node/10863223007",
+      "classificationTags": {
+        "access": "private",
+        "entrance": "yes"
+      }
+    },
+    {
+      "sourceId": "node/10863419434",
+      "classificationTags": {
+        "access": "private",
+        "barrier": "gate"
+      }
+    },
+    {
+      "sourceId": "node/10863419439",
+      "classificationTags": {
+        "access": "private",
+        "barrier": "gate"
+      }
+    },
+    {
+      "sourceId": "node/10863419470",
+      "classificationTags": {
+        "access": "private",
+        "entrance": "yes"
+      }
+    },
+    {
+      "sourceId": "node/10931458958",
+      "classificationTags": {
+        "access": "private"
+      }
+    },
+    {
+      "sourceId": "node/10931458959",
+      "classificationTags": {
+        "access": "private"
+      }
+    },
+    {
+      "sourceId": "node/10931458960",
+      "classificationTags": {
+        "access": "private"
+      }
+    },
+    {
+      "sourceId": "node/10931458961",
+      "classificationTags": {
+        "access": "private"
+      }
+    },
+    {
+      "sourceId": "node/11469840041",
+      "classificationTags": {
+        "amenity": "police"
+      }
+    },
+    {
+      "sourceId": "node/11860457540",
+      "classificationTags": {
+        "office": "government"
+      }
+    },
+    {
+      "sourceId": "node/11874878148",
+      "classificationTags": {
+        "amenity": "place_of_worship"
+      }
+    },
+    {
+      "sourceId": "node/12313212763",
+      "classificationTags": {
+        "access": "private",
+        "barrier": "gate"
+      }
+    },
+    {
+      "sourceId": "node/12313212767",
+      "classificationTags": {
+        "access": "private",
+        "barrier": "gate"
+      }
+    },
+    {
+      "sourceId": "node/13041518635",
+      "classificationTags": {
+        "access": "private",
+        "barrier": "gate"
+      }
+    },
+    {
+      "sourceId": "node/13653965640",
+      "classificationTags": {
+        "access": "no",
+        "barrier": "gate"
+      }
+    },
+    {
+      "sourceId": "way/790161680",
+      "classificationTags": {
+        "access": "permit",
+        "barrier": "gate"
+      }
+    },
+    {
+      "sourceId": "way/790161682",
+      "classificationTags": {
+        "access": "permit",
+        "barrier": "gate"
+      }
+    },
+    {
+      "sourceId": "way/790161686",
+      "classificationTags": {
+        "access": "permit",
+        "barrier": "gate"
+      }
+    }
+  ]
+}

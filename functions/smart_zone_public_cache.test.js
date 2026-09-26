@@ -7,7 +7,7 @@ const clock=Date.parse('2026-09-26T23:00:00Z'),boundary=fixture.selectedBoundary
 function bundle(age=1){
   const b=cache.boundsOf(boundary),coverage=[[[[b[0]-.01,b[1]-.01],[b[2]+.01,b[1]-.01],[b[2]+.01,b[3]+.01],[b[0]-.01,b[3]+.01],[b[0]-.01,b[1]-.01]]]];
   return importer.build({payload:{sourceDataTimestamp:new Date(clock-age*cache.DAY).toISOString(),retrievedAt:new Date(clock).toISOString(),
-    sourceSha256:'a'.repeat(64),referenceIncomplete:false,bounds:b,elements:fixture.elements},sourceCoverage:coverage,now:clock});
+    sourceSha256:'a'.repeat(64),referenceIncomplete:false,bounds:[b[0]-.01,b[1]-.01,b[2]+.01,b[3]+.01],elements:fixture.elements},sourceCoverage:coverage,now:clock});
 }
 function storeFor(b){const counts={reads:0,reserves:0,finishes:0};let saved=null;
   return {counts,readManifest:async()=>b?.manifest||null,readBlob:async name=>{counts.reads++;return b.objects.get(name);},
@@ -77,10 +77,10 @@ test('oversized territory fails before reading cache or provider',async()=>{
  const b=[{latitude:39,longitude:-77},{latitude:40,longitude:-77},{latitude:40,longitude:-76},{latitude:39,longitude:-76}];
  assert.equal(await cache.createAcquirer({store})({selectedBoundary:b}),null);
 });
-test('source .poly preserves holes; incomplete source import fails instead of publishing',()=>{
+test('source .poly preserves holes; dropped invalid ways fail instead of publishing',()=>{
  const poly=importer.parsePoly('region\n1\n-77 39\n-76 39\n-76 40\n-77 40\n-77 39\nEND\n!2\n-76.8 39.2\n-76.6 39.2\n-76.6 39.4\n-76.8 39.4\n-76.8 39.2\nEND\nEND');
  assert.equal(poly[0].length,2);
- assert.throws(()=>importer.build({payload:{bounds:cache.boundsOf(boundary),sourceDataTimestamp:new Date(clock).toISOString(),retrievedAt:new Date(clock).toISOString(),sourceSha256:'a'.repeat(64),referenceIncomplete:true,elements:[]},sourceCoverage:poly}),/incomplete_source_geometry/);
+ assert.throws(()=>importer.build({payload:{bounds:cache.boundsOf(boundary),sourceDataTimestamp:new Date(clock).toISOString(),retrievedAt:new Date(clock).toISOString(),sourceSha256:'a'.repeat(64),referenceIncomplete:true,invalidSourceWays:1,elements:[]},sourceCoverage:poly}),/incomplete_source_geometry|untraceable_incomplete_geometry/);
 });
 test('refresh diagnostics exclude URLs, raw messages and caller context',()=>{
  const safe=require('./smart_zone_public_cache_runtime').safeDiagnostic({reasonCode:'timeout',httpStatus:504,raw:'token',message:'secret',workspace:'private',stage:'https://example.test/?key=secret'});
@@ -106,6 +106,8 @@ test('cached Corkran geometry retains schools and honest workload; stale provena
  const plan=engine.generate(args,evidence);assert.equal(plan.totalEstimatedProperties,19);assert.equal(plan.totalEstimatedMinutes,44);
  assert.equal(plan.recommendationContext.mapValidation,'partial');assert.equal(plan.recommendationContext.hasAlternative,false);
  assert.match(plan.recommendationContext.limitations.join(' '),/Stale mapped evidence/);
+ assert.match(plan.recommendationContext.limitations.join(' '),/Limited\/Beta/);
+ assert.equal(plan.recommendationContext.planningConfidence,'Limited');
  assert.match(plan.recommendationContext.limitations.join(' '),/refresh was unavailable/);
  const school=geo.snapshotFromElements(boundary,fixture.elements).landFeatures.filter(f=>f.kind==='school');
  for(const zone of plan.zones)for(const f of school)assert.equal(service.polygonsOverlap(zone.geometry,f.polygon,planning),false);
@@ -142,4 +144,30 @@ test('spatial reads retain enclosing/crossing footprints but reject bbox-only ov
  assert.equal(cache.intersectsBounds({type:'way',tags:{highway:'motorway'},geometry:[p(-2,.5),p(2,.5)]},b),true);
  assert.equal(cache.intersectsBounds({type:'relation',tags:{amenity:'school'},members:[{type:'way',role:'outer',geometry:[p(-2,-2),p(2,2)]},{type:'way',role:'outer'}]},b),true);
  assert.equal(ring.length,5);
+ const missing={type:'relation',tags:{amenity:'school'},members:[{type:'way',role:'outer',geometry:ring},{type:'way',role:'outer',ref:123}]};
+ assert.equal(cache.elementBounds(missing),null);
+ assert.equal(cache.intersectsBounds(missing,[20,20,21,21]),true);
+});
+
+test('retained missing relation members remain auditable in cache; lost evidence is rejected',()=>{
+ const payload={bounds:cache.boundsOf(boundary),sourceDataTimestamp:new Date(clock).toISOString(),retrievedAt:new Date(clock).toISOString(),
+  sourceSha256:'a'.repeat(64),referenceIncomplete:true,missingMemberWays:[123],elements:[{type:'relation',id:456,tags:{amenity:'school',type:'multipolygon'},members:[{type:'way',ref:123,role:'outer'}]}]};
+ const coverage=[[[boundary.map(p=>[p.longitude,p.latitude])].flat()]];
+ const b=importer.build({payload,sourceCoverage:coverage});assert.equal(b.manifest.complete,true);
+ assert.equal(b.manifest.unresolvedReferenceCount,1);
+ assert.throws(()=>importer.build({payload:{...payload,elements:[]},sourceCoverage:coverage}),/untraceable_incomplete_geometry/);
+});
+
+test('cache halo retains neighboring point uncertainty without changing the selected Business geometry',async()=>{
+ const b=bundle(),bounds=cache.boundsOf(boundary),halo=cache.evidenceBounds(bounds),node={type:'node',id:991234,
+  lat:(bounds[1]+bounds[3])/2,lon:(bounds[2]+halo[2])/2,tags:{amenity:'school'}};
+ const wide=[bounds[0]-.01,bounds[1]-.01,bounds[2]+.01,bounds[3]+.01];
+ const rebuilt=importer.build({payload:{sourceDataTimestamp:b.manifest.snapshotAt,retrievedAt:b.manifest.retrievedAt,
+  sourceSha256:b.manifest.sourceHash,referenceIncomplete:false,bounds:wide,elements:[...fixture.elements,node]},sourceCoverage:b.manifest.coverage});
+ const copy=JSON.stringify(boundary),reader=cache.createReader({store:storeFor(rebuilt),now:()=>clock});
+ const hit=await reader(boundary);assert.ok(hit.snapshot.unresolvedLandFeatures.some(f=>f.sourceId==='node/991234'));
+ assert.deepEqual(hit.snapshot.cacheEvidence.queryBounds,bounds);assert.deepEqual(hit.snapshot.cacheEvidence.evidenceBounds,halo);
+ assert.equal(JSON.stringify(boundary),copy);
+ rebuilt.manifest.coverage=[[[[bounds[0],bounds[1]],[bounds[2],bounds[1]],[bounds[2],bounds[3]],[bounds[0],bounds[3]],[bounds[0],bounds[1]]]]];
+ assert.equal(await cache.createReader({store:storeFor(rebuilt),now:()=>clock})(boundary),null);
 });

@@ -1,6 +1,6 @@
 'use strict';
 const {createHash} = require('node:crypto');
-const VERSION = 'SmartZoneIntelligenceCacheV3';
+const VERSION = 'SmartZoneIntelligenceCacheV4';
 const TTL_MS = 15 * 60 * 1000, LEASE_MS = 180000, COOLDOWN_MS = 60000, MAX_BYTES = 500 * 1024;
 const hash = value => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const fail = (code, message) => {throw Object.assign(Error(message), {code});};

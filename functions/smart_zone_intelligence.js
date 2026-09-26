@@ -8,7 +8,7 @@ const areas=require('./property_service_area_geometry');
 const property=require('./property_service_area_analysis');
 const planning=require('./smart_zone_planning');
 const serviceability=require('./smart_zone_serviceability');
-const VERSION='ScaleMarketingAreaSearchV3';
+const VERSION='ScaleMarketingAreaSearchV4';
 const MAX_WINDOWS=12,MAX_SEARCH_MS=150000,MAX_CANDIDATES=32,MAX_ALTERNATIVES=3;
 const FAIL_SAFE="We couldn't find enough reliable data to recommend an area here yet. You can still draw your own area.";
 const hash=value=>createHash('sha256').update(JSON.stringify(value)).digest('hex');
@@ -119,7 +119,7 @@ async function search(args,{fetchSnapshot,endpoint,loadPropertyAnalysis=async()=
     for(const id of shaped.eligibleMappedSourceIds||[])observed.add(id);
     for(const id of shaped.roadSupportedSourceIds||[])roadSupported.add(id);
     result.roadSupportedTargetCount=roadSupported.size;
-    Object.assign(row,{planningReasons:shaped.reasons,eligibleMappedFeatureCount:shaped.eligibleMappedFeatureCount,
+    Object.assign(row,{planningReasons:shaped.reasons,geometryDiagnostics:shaped.geometryDiagnostics||null,eligibleMappedFeatureCount:shaped.eligibleMappedFeatureCount,
       roadSupportedTargetCount:shaped.roadSupportedTargetCount||0,candidateCount:shaped.candidates.length});
     const source={name:'OpenStreetMap',dataTimestamp:snapshot.dataTimestamp||null,fetchedAt:snapshot.fetchedAt||null,
       freshness:snapshot.cacheEvidence?.freshness||'live',transport:snapshot.cacheEvidence?.transport||'overpass',
@@ -128,6 +128,7 @@ async function search(args,{fetchSnapshot,endpoint,loadPropertyAnalysis=async()=
       sourceHash:snapshot.cacheEvidence?.sourceHash||null,datasetVersion:snapshot.cacheEvidence?.datasetVersion||null,
       parserVersion:snapshot.cacheEvidence?.parserVersion||null,bounds:snapshot.cacheEvidence?.bounds||null,
       queryBounds:snapshot.cacheEvidence?.queryBounds||null,geometryVersion:snapshot.cacheEvidence?.geometryVersion||null,
+      uncertaintyGuards:shaped.geometryDiagnostics?.localizedUncertainties||0,
       refreshFailed:snapshot.cacheEvidence?.refreshFailed===true};
     area.mapValidation=shaped.candidates.length?(source.freshness==='stale'?'partial':'available'):'needs_review';
     area.mapSource=source;
@@ -166,13 +167,13 @@ async function search(args,{fetchSnapshot,endpoint,loadPropertyAnalysis=async()=
 function propertyOptions(evidence,requestedMinutes){
   const areas=[...(evidence.propertyCandidates||[])].sort((a,b)=>b.ranking.fit-a.ranking.fit||a.id.localeCompare(b.id)),used=new Set(),options=[];
   for(const area of areas){
-    if(used.has(area.id)||options.length>=MAX_ALTERNATIVES)continue;
+    if(options.length>=MAX_ALTERNATIVES)break;
     const selected=[],sections=[area];let minutes=0;
-    const same=evidence.candidates.filter(c=>c.propertyAreaId===area.id);
+    const same=evidence.candidates.filter(c=>c.propertyAreaId===area.id&&!used.has(c.id));
     if(!same.length)continue;
     const available=same.length?[
       ...same,
-      ...evidence.candidates.filter(c=>c.propertyAreaId!==area.id&&!used.has(c.propertyAreaId)&&
+      ...evidence.candidates.filter(c=>c.propertyAreaId!==area.id&&!used.has(c.id)&&
         distance(center(area.geometry),center(c.geometry))<=3000)
         .sort((a,b)=>b.ranking.fit-a.ranking.fit||a.id.localeCompare(b.id)),
     ]:[];
@@ -184,7 +185,7 @@ function propertyOptions(evidence,requestedMinutes){
       const section=areas.find(a=>a.id===candidate.propertyAreaId);
       if(section&&!sections.some(a=>a.id===section.id))sections.push(section);
     }
-    sections.forEach(a=>used.add(a.id));
+    selected.forEach(c=>used.add(c.id));
     options.push({primary:area,sections,selected});
   }
   return options;
@@ -221,7 +222,7 @@ function generate(args,evidence){
     mappedRouteMeters:c.mappedRouteMeters,targetEvidence:targetEvidence(c.features,[c]),intelligence:c.ranking}));
   const features=selected.flatMap(c=>c.features),minutes=zones.reduce((s,z)=>s+z.workload.estimatedMinutes,0);
   const freshnessLabels={fresh:'Fresh cached mapped evidence',usable_cached:'Usable cached mapped evidence',stale:'Stale mapped evidence - refresh recommended',live:'Live mapped evidence'};
-  const limitations=distinct([...sections.flatMap(c=>c.ranking.limitations||[]),
+  const limitations=distinct(['Area recommendations are Limited/Beta. Review each boundary and local access before use.',selected.some(c=>c.source.uncertaintyGuards>0)?'Areas near incomplete mapped features have been conservatively avoided. Those avoidance bounds are not verified campus or access boundaries; inspect each area before use.':null,...sections.flatMap(c=>c.ranking.limitations||[]),
     ...selected.map(c=>`${c.source.transport==='live_refresh'?(freshnessLabels[c.source.freshness]||'Mapped evidence').replace('cached ','')+' (live refresh)':freshnessLabels[c.source.freshness]||'Mapped evidence'}; source snapshot ${c.source.dataTimestamp||'not supplied'}; retrieved ${c.source.fetchedAt||'not recorded'}.`),
     selected.some(c=>c.source.refreshFailed)?'Recommended using cached mapped/property data because a street-data refresh was unavailable. Street-level data may have changed; review the boundary before launching.':null,
     !evidence.fullSearchCoverage?'Only successfully analyzed sections support this recommendation. Some of the search region remains unexamined or unavailable.':null,
@@ -267,8 +268,7 @@ function generate(args,evidence){
       propertyRecommendation:ranked?{sectionId:primary.id,fit:primary.ranking.fit,
         sections:sections.map(c=>({sectionId:c.id,fit:c.ranking.fit,evidence:c.ranking.evidence})),
         geometry:primary.geometry}:null,
-      mapValidation,planningConfidence:usable&&mapValidation==='available'&&
-        sections.every(c=>['HIGH','MODERATE'].includes(c.ranking.evidence.confidence))?'Moderate':'Limited',
+      mapValidation,planningConfidence:'Limited',
       alternativeIndex,hasAlternative:alternativeIndex+1<options.length},
     compensation:usable?planning.compensationRecommendation({estimatedMinutes:minutes,
       workerBasePayCents:args.workerBasePayCents,completionBonusCents:args.completionBonusCents,

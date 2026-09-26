@@ -167,10 +167,11 @@ test('large commercial building footprints cannot be swallowed by residential hu
   assert.ok(result.zones.length > 0);
   noOverlap(result, building);
 });
-test('unresolved school footprint fails closed even when its point is outside the proposed target hull', () => {
+test('remote point-only school no longer discards an unrelated territory outside its conservative guard', () => {
   const result = plan([...f.grid(), {type: 'node', id: 9200, ...f.osm(800, 800), tags: {amenity: 'school'}}]);
-  assert.equal(result.recommendationStatus, 'manual_review_required');
-  assert.match(result.explanation, /no reliable footprint/);
+  assert.equal(result.recommendationStatus, 'review_required');
+  assert.equal(result.totalEstimatedProperties,48);
+  assert.ok(result.zones.every(z=>!smart.pointInsidePolygon(f.p(800,800),z.geometry)));
 });
 test('mapped pace affects advisory duration but cannot change observed feature provenance', () => {
   const fast = plan(f.grid(), {propertiesPerHour: 90}), slow = plan(f.grid(), {propertiesPerHour: 30});

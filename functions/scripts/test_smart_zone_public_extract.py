@@ -44,6 +44,10 @@ class ExtractionTests(unittest.TestCase):
         self.assertTrue(env['selected']({'access': 'private'}, 'way'))
         self.assertFalse(env['selected']({'name': 'not a feature'}, 'node'))
 
+    def test_access_geometry_classification_is_retained(self):
+        result = env['tags'](relation([], access='private', barrier='gate', entrance='yes', area='no'))
+        self.assertEqual(result, {'access':'private', 'barrier':'gate', 'entrance':'yes', 'area':'no'})
+
     def test_nested_outer_geometry_preserves_hole_roles(self):
         members = [{'type': 'relation', 'ref': 10, 'role': 'outer'}]
         child = [{'type': 'way', 'ref': 1, 'role': 'outer'}, {'type': 'way', 'ref': 2, 'role': 'inner'}]
