@@ -673,7 +673,9 @@ class _Pricing extends StatelessWidget {
         ),
         const SizedBox(height: 16),
         const Text(
-          'Paid Scaler execution is held pending legitimate LIVE cash-out certification. Planning does not activate paid field work. Campaign costs are separate. Paid advertising needs separate approval. Printing is Coming Soon. Postcards are Private Beta for selected Businesses while real-world fulfillment testing is completed.',
+          kIsWeb
+              ? 'Maryland Flyer Distribution, Door Hanger Distribution and Door-to-Door Outreach require campaign-specific payment, assignment, consent and worker-funding checks. Membership or payment alone does not mean work is ready. Campaign costs are separate. Paid advertising needs separate approval. Printing and general postcard fulfillment remain Coming Soon.'
+              : 'Paid Scaler execution is held pending legitimate LIVE cash-out certification. Planning does not activate paid field work. Campaign costs are separate. Paid advertising needs separate approval. Printing is Coming Soon. Postcards are Private Beta for selected Businesses while real-world fulfillment testing is completed.',
           style: TextStyle(color: _muted),
           textAlign: TextAlign.center,
         ),

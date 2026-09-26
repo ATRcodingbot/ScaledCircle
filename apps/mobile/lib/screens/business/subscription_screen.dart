@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_app/navigation/authenticated_app_bar.dart';
 import '../../config/native_membership_policy.dart';
 import 'business_membership_screen.dart';
@@ -436,7 +437,9 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                           'Customers & Leads, internal Schedule, Jobs and Tasks',
                           'Campaign planning and zone mapping',
                           '1 total workspace seat, including the owner',
-                          'Paid Scaler execution is held pending live cash-out certification',
+                          kIsWeb
+                              ? 'Supported Maryland field campaigns require separate funding and server-confirmed work eligibility'
+                              : 'Paid Scaler execution is held pending live cash-out certification',
                         ],
                       ),
 

@@ -1,3 +1,4 @@
+import '../../navigation/public_page_navigation.dart';
 import '../../config/native_release_policy.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
@@ -24,10 +25,14 @@ class BusinessFunnelScreen extends StatelessWidget {
         body:
             'Customers, schedule, jobs and your team in one place. Choose growth tools when you need them.',
         primaryLabel: 'Start Your Business',
-        secondaryLabel: 'Join Business Waitlist',
+        secondaryLabel: kIsWeb
+            ? 'Compare Core Plans'
+            : 'Join Business Waitlist',
         accent: businessGreen,
         onPrimary: () => openPublicAccountRegistration(context, 'business'),
-        onSecondary: () => openPublicWaitlist(context, 'business'),
+        onSecondary: () => kIsWeb
+            ? openPublicPage(context, '/pricing')
+            : openPublicWaitlist(context, 'business'),
         visual: const _BusinessHeroVisual(),
       ),
       const FunnelSection(
@@ -123,11 +128,14 @@ class BusinessFunnelScreen extends StatelessWidget {
         title: 'READY TO GROW LOCALLY?',
         primary: 'Start Your Business',
         accent: businessGreen,
-        supportingCopy:
-            'Create your ScaledCircle account now. Marketplace access is being rolled out in stages.',
-        waitlistLabel: 'Join Business Waitlist',
+        supportingCopy: kIsWeb
+            ? 'Starter, Growth and Scale are available now. Campaign funding and work eligibility are checked separately.'
+            : 'Create your ScaledCircle account now. Marketplace access is being rolled out in stages.',
+        waitlistLabel: kIsWeb ? 'Compare Core Plans' : 'Join Business Waitlist',
         onPrimary: () => openPublicAccountRegistration(context, 'business'),
-        onWaitlist: () => openPublicWaitlist(context, 'business'),
+        onWaitlist: () => kIsWeb
+            ? openPublicPage(context, '/pricing')
+            : openPublicWaitlist(context, 'business'),
       ),
     ],
   );
