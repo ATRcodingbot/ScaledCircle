@@ -8,7 +8,7 @@ const areas=require('./property_service_area_geometry');
 const property=require('./property_service_area_analysis');
 const planning=require('./smart_zone_planning');
 const serviceability=require('./smart_zone_serviceability');
-const VERSION='ScaleMarketingAreaSearchV2';
+const VERSION='ScaleMarketingAreaSearchV3';
 const MAX_WINDOWS=12,MAX_SEARCH_MS=150000,MAX_CANDIDATES=32,MAX_ALTERNATIVES=3;
 const FAIL_SAFE="We couldn't find enough reliable data to recommend an area here yet. You can still draw your own area.";
 const hash=value=>createHash('sha256').update(JSON.stringify(value)).digest('hex');
@@ -123,7 +123,12 @@ async function search(args,{fetchSnapshot,endpoint,loadPropertyAnalysis=async()=
       roadSupportedTargetCount:shaped.roadSupportedTargetCount||0,candidateCount:shaped.candidates.length});
     const source={name:'OpenStreetMap',dataTimestamp:snapshot.dataTimestamp||null,fetchedAt:snapshot.fetchedAt||null,
       freshness:snapshot.cacheEvidence?.freshness||'live',transport:snapshot.cacheEvidence?.transport||'overpass',
-      evidenceHash:snapshot.cacheEvidence?.evidenceHash||null};
+      evidenceHash:snapshot.cacheEvidence?.evidenceHash||null,
+      provider:snapshot.cacheEvidence?.provider||'overpass',importedAt:snapshot.cacheEvidence?.importedAt||null,
+      sourceHash:snapshot.cacheEvidence?.sourceHash||null,datasetVersion:snapshot.cacheEvidence?.datasetVersion||null,
+      parserVersion:snapshot.cacheEvidence?.parserVersion||null,bounds:snapshot.cacheEvidence?.bounds||null,
+      queryBounds:snapshot.cacheEvidence?.queryBounds||null,geometryVersion:snapshot.cacheEvidence?.geometryVersion||null,
+      refreshFailed:snapshot.cacheEvidence?.refreshFailed===true};
     area.mapValidation=shaped.candidates.length?(source.freshness==='stale'?'partial':'available'):'needs_review';
     area.mapSource=source;
     for(const candidate of shaped.candidates){
@@ -156,14 +161,15 @@ async function search(args,{fetchSnapshot,endpoint,loadPropertyAnalysis=async()=
   return result;
 }
 
-// Alternatives are distinct PI sections. Missing map data keeps the section
-// visible for review; it never grants Apply authority or invents workload.
+// Only map-validated PI sections can be returned as recommendations/alternatives.
+// Unmapped PI facts remain in diagnostics; they never grant Apply authority.
 function propertyOptions(evidence,requestedMinutes){
-  const areas=[...(evidence.propertyCandidates||[])],used=new Set(),options=[];
+  const areas=[...(evidence.propertyCandidates||[])].sort((a,b)=>b.ranking.fit-a.ranking.fit||a.id.localeCompare(b.id)),used=new Set(),options=[];
   for(const area of areas){
     if(used.has(area.id)||options.length>=MAX_ALTERNATIVES)continue;
     const selected=[],sections=[area];let minutes=0;
     const same=evidence.candidates.filter(c=>c.propertyAreaId===area.id);
+    if(!same.length)continue;
     const available=same.length?[
       ...same,
       ...evidence.candidates.filter(c=>c.propertyAreaId!==area.id&&!used.has(c.propertyAreaId)&&
@@ -214,7 +220,10 @@ function generate(args,evidence){
       limitations:['Supporting street evidence only. Separate areas are not joined by an invented route.']},
     mappedRouteMeters:c.mappedRouteMeters,targetEvidence:targetEvidence(c.features,[c]),intelligence:c.ranking}));
   const features=selected.flatMap(c=>c.features),minutes=zones.reduce((s,z)=>s+z.workload.estimatedMinutes,0);
+  const freshnessLabels={fresh:'Fresh cached mapped evidence',usable_cached:'Usable cached mapped evidence',stale:'Stale mapped evidence - refresh recommended',live:'Live mapped evidence'};
   const limitations=distinct([...sections.flatMap(c=>c.ranking.limitations||[]),
+    ...selected.map(c=>`${c.source.transport==='live_refresh'?(freshnessLabels[c.source.freshness]||'Mapped evidence').replace('cached ','')+' (live refresh)':freshnessLabels[c.source.freshness]||'Mapped evidence'}; source snapshot ${c.source.dataTimestamp||'not supplied'}; retrieved ${c.source.fetchedAt||'not recorded'}.`),
+    selected.some(c=>c.source.refreshFailed)?'Recommended using cached mapped/property data because a street-data refresh was unavailable. Street-level data may have changed; review the boundary before launching.':null,
     !evidence.fullSearchCoverage?'Only successfully analyzed sections support this recommendation. Some of the search region remains unexamined or unavailable.':null,
     evidence.eligibleRegionDiffers?'Only the parts of the requested location inside your saved Business service areas were eligible for this search.':null,
     evidence.reasonCode==='bounded_candidate_limit'?'The review retains the strongest candidates within the bounded evidence limit; additional mapped candidates are not included.':null,
@@ -224,12 +233,7 @@ function generate(args,evidence){
   if(alternativeIndex>0&&ranked)why.unshift(primary.ranking.fit===options[0].primary.ranking.fit?
     'This is a different eligible section with the same supported Property Intelligence fit; the available signals do not distinguish a stronger fit.':
     'This different eligible section has a lower Property Intelligence fit on the disclosed signals.');
-  const explanation=usable?'Property Intelligence identified this section; review its supported planning territory before use. No execution route or customer demand is established.':
-    ranked?'Recommended based on Property Intelligence. Street-level planning data is limited here, so review or adjust the boundary before launching.':
-    evidence.reasonCode==='property_evidence_unavailable'?(evidence.targetIntent==='business'?
-      'The maintained Property Intelligence evidence cannot yet rank commercial prospects here. You can draw your own area; residential housing data has not been substituted.':
-      'Property Intelligence could not establish a comparable service fit for these sections. Census neighborhood context alone cannot establish a practical outreach area. Choose another location or draw your own area.'):
-    FAIL_SAFE;
+  const explanation=usable?'Property Intelligence identified this section; review its supported planning territory before use. No execution route or customer demand is established.':FAIL_SAFE;
   const identity={version:VERSION,sourceAreaDigest:args.sourceAreaDigest,contextVersion:args.contextVersion,
     goal:evidence.goal,workType:args.workType,desiredHours:args.desiredHours,alternativeIndex,
     selected:selected.map(c=>({id:c.id,geometry:c.geometry,features:c.features,network:c.networkSegments,ranking:c.ranking})),

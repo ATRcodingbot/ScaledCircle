@@ -1,3 +1,4 @@
+const {getStorage} = require("firebase-admin/storage");
 const stagingPhysicalQa = require("./staging_physical_qa");
 
 
@@ -4798,7 +4799,8 @@ async function generateSmartZonePlan(input, desiredHours) {
       FieldValue, apiKey: CENSUS_API_KEY.value(), budgetMs: 45000});
   const record = input.cachedRecommendation || await require('./smart_zone_intelligence_runtime').createRuntime({db}).obtain(
     {...input.cacheAuthority, selectedArea: input.selectedArea, sourceAreaDigest: input.sourceAreaDigest},
-    () => intelligence.search(args, {fetchSnapshot: smartZoneGeography.fetchSnapshot,
+    () => intelligence.search(args, {fetchSnapshot: require('./smart_zone_public_cache_runtime').createAcquirer({
+      db, bucket: getStorage().bucket(), liveFetch: smartZoneGeography.fetchSnapshot}),
       endpoint: OVERPASS_URL, loadPropertyAnalysis}));
   const plan = intelligence.generate(args, record.searchEvidence);
   logger.info("Smart Zone intelligence evidence", {sourceAreaDigest: input.sourceAreaDigest,

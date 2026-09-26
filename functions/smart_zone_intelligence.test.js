@@ -79,7 +79,7 @@ test('provider timeout or partial response never becomes zero targets or fake ge
   const input=args();const evidence=await search.search(input,{loadPropertyAnalysis:async g=>propertyFacts(g),fetchSnapshot:async({onDiagnostic})=>{
     onDiagnostic({status:'unavailable',reasonCode:'provider_partial_response',httpStatus:200});return null;
   }});const plan=search.generate(input,evidence);
-  assert.match(plan.explanation,/Recommended based on Property Intelligence/);assert.equal(plan.totalEstimatedProperties,null);
+  assert.equal(plan.explanation,search.FAIL_SAFE);assert.equal(plan.totalEstimatedProperties,null);
   assert.equal(plan.targetEvidence.observedEligibleFeatureCount,null);assert.deepEqual(plan.zones,[]);
   assert.equal(plan.compensation,null);assert.equal(plan.plannedTerritory,null);
 });
@@ -139,20 +139,20 @@ test('same public snapshot repeated across bounded windows cannot double count s
   assert.deepEqual(plan.compensation,planning.compensationRecommendation({estimatedMinutes:44}));
 });
 
-test('all PI sections are ranked before mapping and survive total map failure with safe distinct alternatives',async()=>{
+test('all PI sections rank before mapping; map failures never become alternatives',async()=>{
  const input=args(),events=[];
  const evidence=await search.search(input,{loadPropertyAnalysis:async g=>{events.push('property');return propertyFacts(g);},
    fetchSnapshot:async()=>{events.push('map');return null;}});
  assert.equal(events.slice(0,11).every(x=>x==='property'),true);
  assert.equal(evidence.propertyCandidates.length,11);
  const plan=search.generate(input,evidence),next=search.generate({...input,alternativeIndex:1},evidence);
- assert.match(plan.explanation,/Recommended based on Property Intelligence/);
- assert.equal(plan.recommendationContext.mapValidation,'needs_review');assert.equal(plan.recommendationContext.hasAlternative,true);
+ assert.equal(plan.explanation,search.FAIL_SAFE);
+ assert.equal(plan.recommendationContext.mapValidation,'needs_review');assert.equal(plan.recommendationContext.hasAlternative,false);
  assert.equal(plan.totalEstimatedProperties,null);assert.equal(plan.totalEstimatedMinutes,null);
  assert.equal(plan.recommendationStatus,'manual_review_required');assert.deepEqual(plan.zones,[]);
- assert.notDeepEqual(plan.reviewTerritory,next.reviewTerritory);assert.notEqual(plan.planId,next.planId);
- assert.equal(plan.recommendationContext.propertyRecommendation.fit,80);
- assert.match(next.recommendationContext.why.join(' '),/same supported Property Intelligence fit/);
+ assert.equal(plan.reviewTerritory,null);assert.equal(next.reviewTerritory,null);
+ assert.equal(plan.recommendationContext.propertyRecommendation,null);
+ assert.equal(next.recommendationContext.hasAlternative,false);
  require('./smart_zone_intelligence_runtime').assertFirestoreValue(evidence);
 });
 

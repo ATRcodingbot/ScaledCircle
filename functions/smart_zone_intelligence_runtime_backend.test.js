@@ -124,3 +124,13 @@ test('frozen native Apply can recover only its completed exact-input run and can
   assert.equal(applied.success,true);assert.equal(s.api.calls.provider,calls);assert.equal(s.api.calls.resolver,0);
   assert.equal((await db.doc('campaigns/'+s.campaignId).get()).data().smartZoneRecommendationRunId,plan.recommendationRunId);
 });
+
+
+test('Starter and Growth fail before any PI, recommendation cache or live provider access',async()=>{
+ for(const planId of ['starter','growth']){
+  const s=await setup();await db.doc('businessSubscriptions/'+s.businessId).update({planId});
+  await assert.rejects(s.api.getSmartZonePlan({data:s.data}),{code:'permission-denied'});
+  assert.equal(s.api.calls.property,0);assert.equal(s.api.calls.cache,0);assert.equal(s.api.calls.provider,0);
+  assert.equal((await db.collection(`propertyRecommendationWorkspaces/${s.businessId}/mappingRuns`).get()).size,0);
+ }
+});

@@ -1,0 +1,628 @@
+{
+  "proof": "Local maintained cache replay; not live production acceptance",
+  "createdAt": "2026-09-26T22:58:02.562Z",
+  "snapshotAt": "2026-09-25T20:24:36Z",
+  "retrievedAt": "2026-09-26T21:55:03.501020+00:00",
+  "importedAt": "2026-09-26T22:58:02.092Z",
+  "sourceHash": "fca54b6b3d2cf6632e79a6a93413d77c0019743ff1bbef52e93188a28d79fc20",
+  "sourceProvider": "geofabrik_maryland",
+  "cacheVersion": "SmartZonePublicCacheV1",
+  "parserVersion": "SmartZoneOsmGeometryV1",
+  "regionAreaKm2": 31.31240466796875,
+  "selectedWindows": 9,
+  "propertyRankedSections": [
+    {
+      "id": "e786b3231a2a007097a23d1162ca6220c835699e79ac0043426391ea6fee938b",
+      "fit": 97,
+      "source": "Maryland Open Data",
+      "confidence": "HIGH",
+      "mapValidation": "available",
+      "mappedCandidates": 1,
+      "supportedMinutes": 24
+    },
+    {
+      "id": "957fb5ab29577ed00a56e96e44a67b37e130f343b86665567a5665344a091f9e",
+      "fit": 92,
+      "source": "Maryland Open Data",
+      "confidence": "LOW",
+      "mapValidation": "needs_review",
+      "mappedCandidates": 0,
+      "supportedMinutes": null
+    },
+    {
+      "id": "0ca799bf6ced812681413d864274d86d4d4f050c1caed53b331235d3b51a8a25",
+      "fit": 90,
+      "source": "Maryland Open Data",
+      "confidence": "HIGH",
+      "mapValidation": "needs_review",
+      "mappedCandidates": 0,
+      "supportedMinutes": null
+    },
+    {
+      "id": "1fef6a2bccfb97c43adc71c5e4c94c2c815138ce174deeb0588c7d4924304ca6",
+      "fit": 87,
+      "source": "Maryland Open Data",
+      "confidence": "HIGH",
+      "mapValidation": "needs_review",
+      "mappedCandidates": 0,
+      "supportedMinutes": null
+    },
+    {
+      "id": "a113f3725c305ef71f4f6a16b9a33d4e12ec1aaeaa99af925ef81e40a37c4576",
+      "fit": 87,
+      "source": "Maryland Open Data",
+      "confidence": "HIGH",
+      "mapValidation": "needs_review",
+      "mappedCandidates": 0,
+      "supportedMinutes": null
+    },
+    {
+      "id": "abcefede9b88c53bb70faba52062d838f39449220bd5da8a1009603d2a364886",
+      "fit": 82,
+      "source": "Maryland Open Data",
+      "confidence": "HIGH",
+      "mapValidation": "needs_review",
+      "mappedCandidates": 0,
+      "supportedMinutes": null
+    }
+  ],
+  "cacheReadWindows": 6,
+  "blobReads": 10,
+  "liveCalls": 0,
+  "modelCalls": 0,
+  "productionWrites": 0,
+  "mapValidatedSections": 1,
+  "totalUsableAreas": 1,
+  "totalMappedTargets": 10,
+  "totalAdvisoryMinutes": 24,
+  "totalSupportingStreetMeters": 403,
+  "totalStreetSegments": 23,
+  "corkranSchoolFootprintsFound": 3,
+  "schoolOverlap": false,
+  "requestedMinutes": 300,
+  "plans": [],
+  "diagnostics": [
+    {
+      "windowId": "ad6e183c89cf81d7a0f5abc26ca93998eef75c8abad72b97948575cf2eaddf0d",
+      "areaSquareMeters": 10468,
+      "propertyStatus": "unavailable",
+      "propertyLimitations": [
+        "Neighborhood estimate based on intersecting Census block groups.",
+        "Counts include all housing units in every intersecting block group; they do not imply that every represented unit lies inside the selected polygon.",
+        "Rolling age percentages are estimates that assume uniform distribution within each published ACS year-built bucket.",
+        "Planning heuristic only; this does not establish property condition, homeowner intent, or demand.",
+        "Generic residential classifications do not establish single-family homes or the presence or condition of decks, roofs, or other components.",
+        "Census housing context covers whole intersecting block groups. Its housing-only universe cannot establish the selected section's residential share or an individual property fit.",
+        "Completed-marketing history is unavailable or incomplete; no absence of prior marketing is assumed."
+      ],
+      "propertyEvidence": {
+        "analysisId": null,
+        "geometryDigest": "6d83158990c5ea8000521889cdc023c12a7ead24a810e0dd40779b06f6177ab8",
+        "source": "U.S. Census Bureau ACS 5-Year",
+        "sourceVersion": "ACS_2024_5YR_B25034",
+        "dataUpdatedAt": "2024",
+        "generatedAt": "2026-09-26T22:02:44.917Z",
+        "inputGranularity": "aggregate_census",
+        "geographicCoverageMethod": "all_housing_unit_counts_from_intersecting_block_groups_no_area_weighting",
+        "confidence": "MODERATE"
+      },
+      "status": "not_requested",
+      "diagnostic": null
+    },
+    {
+      "windowId": "957fb5ab29577ed00a56e96e44a67b37e130f343b86665567a5665344a091f9e",
+      "areaSquareMeters": 7572882,
+      "propertyStatus": "ranked",
+      "propertyLimitations": [
+        "The provider query reached the 5000-record safety limit; coverage is partial.",
+        "Planning heuristic only; this does not establish property condition, homeowner intent, or demand.",
+        "Generic residential classifications do not establish single-family homes or the presence or condition of decks, roofs, or other components.",
+        "The provider reported partial coverage.",
+        "Completed-marketing history is unavailable or incomplete; no absence of prior marketing is assumed."
+      ],
+      "propertyEvidence": {
+        "analysisId": null,
+        "geometryDigest": "418a94138fc4d09b0a13aa72ba6363eda8e03522ab79db18bc778cc0a325f6e3",
+        "source": "Maryland Open Data",
+        "sourceVersion": "MD_OPEN_DATA_ed4q-f8tm",
+        "dataUpdatedAt": null,
+        "generatedAt": "2026-09-26T22:12:16.625Z",
+        "inputGranularity": "parcel_level",
+        "geographicCoverageMethod": "server_point_in_polygon",
+        "confidence": "LOW"
+      },
+      "status": "success",
+      "diagnostic": {
+        "status": "success",
+        "stage": "public_cache",
+        "reasonCode": "cache_ready",
+        "elapsedMs": 50,
+        "cacheReason": "regional_cache_found",
+        "rawElementCount": 2626,
+        "classifiedTargetCounts": {
+          "business": 115,
+          "event": 33,
+          "unclassified_address": 639,
+          "residential": 291
+        },
+        "targetFeatureCount": 1078,
+        "routeWayCount": 1453,
+        "exclusionPolygonCount": 9,
+        "landFeatureCount": 127,
+        "unresolvedLandFeatureCount": 13,
+        "barrierWayCount": 32,
+        "cacheEvidence": {
+          "provider": "geofabrik_maryland",
+          "snapshotAt": "2026-09-25T20:24:36Z",
+          "retrievedAt": "2026-09-26T21:55:03.501020+00:00",
+          "importedAt": "2026-09-26T22:58:02.092Z",
+          "sourceHash": "fca54b6b3d2cf6632e79a6a93413d77c0019743ff1bbef52e93188a28d79fc20",
+          "bounds": [
+            -76.6945750000126,
+            39.108224999811924,
+            -76.58875599983642,
+            39.21576000007699
+          ],
+          "geometryVersion": "WGS84_OSM_complete_geometry_v1",
+          "datasetVersion": "SmartZonePublicCacheV1",
+          "parserVersion": "SmartZoneOsmGeometryV1",
+          "freshness": "fresh",
+          "transport": "regional_cache",
+          "evidenceHash": "249f8a6abfc08caeeeb723d9df9ed62bd083f67391b78661d3846bb68773a65f",
+          "queryBounds": [
+            -76.64,
+            39.12,
+            -76.61868456320674,
+            39.160000000000004
+          ],
+          "geometryDigest": "418a94138fc4d09b0a13aa72ba6363eda8e03522ab79db18bc778cc0a325f6e3"
+        },
+        "refresh": null
+      },
+      "dataTimestamp": "2026-09-25T20:24:36Z",
+      "fetchedAt": "2026-09-26T21:55:03.501020+00:00",
+      "planningReasons": [
+        "A mapped non-target feature has no reliable footprint. Review the surrounding area manually."
+      ],
+      "eligibleMappedFeatureCount": 289,
+      "roadSupportedTargetCount": 0,
+      "candidateCount": 0
+    },
+    {
+      "windowId": "1fef6a2bccfb97c43adc71c5e4c94c2c815138ce174deeb0588c7d4924304ca6",
+      "areaSquareMeters": 4262739,
+      "propertyStatus": "ranked",
+      "propertyLimitations": [
+        "Planning heuristic only; this does not establish property condition, homeowner intent, or demand.",
+        "Generic residential classifications do not establish single-family homes or the presence or condition of decks, roofs, or other components.",
+        "Completed-marketing history is unavailable or incomplete; no absence of prior marketing is assumed."
+      ],
+      "propertyEvidence": {
+        "analysisId": null,
+        "geometryDigest": "56ca5c33e0b2321051ed7c86309711f224527aa83579b8f92d1ccd71864e527f",
+        "source": "Maryland Open Data",
+        "sourceVersion": "MD_OPEN_DATA_ed4q-f8tm",
+        "dataUpdatedAt": null,
+        "generatedAt": "2026-09-26T22:12:17.765Z",
+        "inputGranularity": "parcel_level",
+        "geographicCoverageMethod": "server_point_in_polygon",
+        "confidence": "HIGH"
+      },
+      "status": "success",
+      "diagnostic": {
+        "status": "success",
+        "stage": "public_cache",
+        "reasonCode": "cache_ready",
+        "elapsedMs": 33,
+        "cacheReason": "regional_cache_found",
+        "rawElementCount": 1665,
+        "classifiedTargetCounts": {
+          "unclassified_address": 384,
+          "event": 36,
+          "residential": 161,
+          "business": 32
+        },
+        "targetFeatureCount": 613,
+        "routeWayCount": 875,
+        "exclusionPolygonCount": 37,
+        "landFeatureCount": 135,
+        "unresolvedLandFeatureCount": 10,
+        "barrierWayCount": 94,
+        "cacheEvidence": {
+          "provider": "geofabrik_maryland",
+          "snapshotAt": "2026-09-25T20:24:36Z",
+          "retrievedAt": "2026-09-26T21:55:03.501020+00:00",
+          "importedAt": "2026-09-26T22:58:02.092Z",
+          "sourceHash": "fca54b6b3d2cf6632e79a6a93413d77c0019743ff1bbef52e93188a28d79fc20",
+          "bounds": [
+            -76.6945750000126,
+            39.108224999811924,
+            -76.58875599983642,
+            39.21576000007699
+          ],
+          "geometryVersion": "WGS84_OSM_complete_geometry_v1",
+          "datasetVersion": "SmartZonePublicCacheV1",
+          "parserVersion": "SmartZoneOsmGeometryV1",
+          "freshness": "fresh",
+          "transport": "regional_cache",
+          "evidenceHash": "33691424eb9c0b3890df13bba4b411813d4b5af93b767b0768de29884c57af62",
+          "queryBounds": [
+            -76.68,
+            39.1257422405891,
+            -76.64,
+            39.160000000000004
+          ],
+          "geometryDigest": "56ca5c33e0b2321051ed7c86309711f224527aa83579b8f92d1ccd71864e527f"
+        },
+        "refresh": null
+      },
+      "dataTimestamp": "2026-09-25T20:24:36Z",
+      "fetchedAt": "2026-09-26T21:55:03.501020+00:00",
+      "planningReasons": [
+        "A mapped non-target feature has no reliable footprint. Review the surrounding area manually."
+      ],
+      "eligibleMappedFeatureCount": 95,
+      "roadSupportedTargetCount": 0,
+      "candidateCount": 0
+    },
+    {
+      "windowId": "0d1d9169d5de85f9e4d8930ebc6f8fc236a91b1f8746803b3082d53df3ceb98d",
+      "areaSquareMeters": 93711,
+      "propertyStatus": "unavailable",
+      "propertyLimitations": [
+        "No residential property-age records were available for this area.",
+        "Planning heuristic only; this does not establish property condition, homeowner intent, or demand.",
+        "Generic residential classifications do not establish single-family homes or the presence or condition of decks, roofs, or other components.",
+        "Insufficient supported housing data to rank this section.",
+        "Completed-marketing history is unavailable or incomplete; no absence of prior marketing is assumed."
+      ],
+      "propertyEvidence": {
+        "analysisId": null,
+        "geometryDigest": "1027ed4d2e75033860ef5822b127a89032e706bdf23668135db4d7a60d5273b5",
+        "source": "Maryland Open Data",
+        "sourceVersion": "MD_OPEN_DATA_ed4q-f8tm",
+        "dataUpdatedAt": null,
+        "generatedAt": "2026-09-26T22:12:17.997Z",
+        "inputGranularity": "parcel_level",
+        "geographicCoverageMethod": "server_point_in_polygon",
+        "confidence": "INSUFFICIENT"
+      },
+      "status": "not_requested",
+      "diagnostic": null
+    },
+    {
+      "windowId": "f710202e3c5ab7f4cea6849b6595dda6d67d2c962d212ac4d2a343372decbd97",
+      "areaSquareMeters": 4026,
+      "propertyStatus": "unavailable",
+      "propertyLimitations": [
+        "Neighborhood estimate based on intersecting Census block groups.",
+        "Counts include all housing units in every intersecting block group; they do not imply that every represented unit lies inside the selected polygon.",
+        "Rolling age percentages are estimates that assume uniform distribution within each published ACS year-built bucket.",
+        "Planning heuristic only; this does not establish property condition, homeowner intent, or demand.",
+        "Generic residential classifications do not establish single-family homes or the presence or condition of decks, roofs, or other components.",
+        "Census housing context covers whole intersecting block groups. Its housing-only universe cannot establish the selected section's residential share or an individual property fit.",
+        "Completed-marketing history is unavailable or incomplete; no absence of prior marketing is assumed."
+      ],
+      "propertyEvidence": {
+        "analysisId": null,
+        "geometryDigest": "eaac18948207e338ddb45af85c3a796fd70eebf1f60cea52110973df2a5688ed",
+        "source": "U.S. Census Bureau ACS 5-Year",
+        "sourceVersion": "ACS_2024_5YR_B25034",
+        "dataUpdatedAt": "2024",
+        "generatedAt": "2026-09-26T22:02:52.531Z",
+        "inputGranularity": "aggregate_census",
+        "geographicCoverageMethod": "all_housing_unit_counts_from_intersecting_block_groups_no_area_weighting",
+        "confidence": "MODERATE"
+      },
+      "status": "not_requested",
+      "diagnostic": null
+    },
+    {
+      "windowId": "a113f3725c305ef71f4f6a16b9a33d4e12ec1aaeaa99af925ef81e40a37c4576",
+      "areaSquareMeters": 7504350,
+      "propertyStatus": "ranked",
+      "propertyLimitations": [
+        "Planning heuristic only; this does not establish property condition, homeowner intent, or demand.",
+        "Generic residential classifications do not establish single-family homes or the presence or condition of decks, roofs, or other components.",
+        "Completed-marketing history is unavailable or incomplete; no absence of prior marketing is assumed."
+      ],
+      "propertyEvidence": {
+        "analysisId": null,
+        "geometryDigest": "a94d021e44b2125005190ce30f011f9d4b024368b96b3d31fe2e28ced6e0a6c5",
+        "source": "Maryland Open Data",
+        "sourceVersion": "MD_OPEN_DATA_ed4q-f8tm",
+        "dataUpdatedAt": null,
+        "generatedAt": "2026-09-26T22:12:19.272Z",
+        "inputGranularity": "parcel_level",
+        "geographicCoverageMethod": "server_point_in_polygon",
+        "confidence": "HIGH"
+      },
+      "status": "success",
+      "diagnostic": {
+        "status": "success",
+        "stage": "public_cache",
+        "reasonCode": "cache_ready",
+        "elapsedMs": 12,
+        "cacheReason": "regional_cache_found",
+        "rawElementCount": 2076,
+        "classifiedTargetCounts": {
+          "event": 38,
+          "unclassified_address": 106,
+          "business": 165,
+          "residential": 265
+        },
+        "targetFeatureCount": 574,
+        "routeWayCount": 1333,
+        "exclusionPolygonCount": 14,
+        "landFeatureCount": 171,
+        "unresolvedLandFeatureCount": 24,
+        "barrierWayCount": 88,
+        "cacheEvidence": {
+          "provider": "geofabrik_maryland",
+          "snapshotAt": "2026-09-25T20:24:36Z",
+          "retrievedAt": "2026-09-26T21:55:03.501020+00:00",
+          "importedAt": "2026-09-26T22:58:02.092Z",
+          "sourceHash": "fca54b6b3d2cf6632e79a6a93413d77c0019743ff1bbef52e93188a28d79fc20",
+          "bounds": [
+            -76.6945750000126,
+            39.108224999811924,
+            -76.58875599983642,
+            39.21576000007699
+          ],
+          "geometryVersion": "WGS84_OSM_complete_geometry_v1",
+          "datasetVersion": "SmartZonePublicCacheV1",
+          "parserVersion": "SmartZoneOsmGeometryV1",
+          "freshness": "fresh",
+          "transport": "regional_cache",
+          "evidenceHash": "4e917ed35451128bfd2f956a05db3d7c4540979afa5e4971f155de4c8e39ff66",
+          "queryBounds": [
+            -76.64,
+            39.160000000000004,
+            -76.61960151515059,
+            39.2
+          ],
+          "geometryDigest": "a94d021e44b2125005190ce30f011f9d4b024368b96b3d31fe2e28ced6e0a6c5"
+        },
+        "refresh": null
+      },
+      "dataTimestamp": "2026-09-25T20:24:36Z",
+      "fetchedAt": "2026-09-26T21:55:03.501020+00:00",
+      "planningReasons": [
+        "A mapped non-target feature has no reliable footprint. Review the surrounding area manually."
+      ],
+      "eligibleMappedFeatureCount": 251,
+      "roadSupportedTargetCount": 0,
+      "candidateCount": 0
+    },
+    {
+      "windowId": "abcefede9b88c53bb70faba52062d838f39449220bd5da8a1009603d2a364886",
+      "areaSquareMeters": 4610282,
+      "propertyStatus": "ranked",
+      "propertyLimitations": [
+        "Planning heuristic only; this does not establish property condition, homeowner intent, or demand.",
+        "Generic residential classifications do not establish single-family homes or the presence or condition of decks, roofs, or other components.",
+        "Completed-marketing history is unavailable or incomplete; no absence of prior marketing is assumed."
+      ],
+      "propertyEvidence": {
+        "analysisId": null,
+        "geometryDigest": "786c3dfd9f3b00326be16f3d62cf05733ec0223e31912e90b35392aba0dffc72",
+        "source": "Maryland Open Data",
+        "sourceVersion": "MD_OPEN_DATA_ed4q-f8tm",
+        "dataUpdatedAt": null,
+        "generatedAt": "2026-09-26T22:12:20.143Z",
+        "inputGranularity": "parcel_level",
+        "geographicCoverageMethod": "server_point_in_polygon",
+        "confidence": "HIGH"
+      },
+      "status": "success",
+      "diagnostic": {
+        "status": "success",
+        "stage": "public_cache",
+        "reasonCode": "cache_ready",
+        "elapsedMs": 20,
+        "cacheReason": "regional_cache_found",
+        "rawElementCount": 2239,
+        "classifiedTargetCounts": {
+          "unclassified_address": 196,
+          "event": 41,
+          "business": 61,
+          "residential": 38
+        },
+        "targetFeatureCount": 336,
+        "routeWayCount": 1661,
+        "exclusionPolygonCount": 52,
+        "landFeatureCount": 161,
+        "unresolvedLandFeatureCount": 37,
+        "barrierWayCount": 102,
+        "cacheEvidence": {
+          "provider": "geofabrik_maryland",
+          "snapshotAt": "2026-09-25T20:24:36Z",
+          "retrievedAt": "2026-09-26T21:55:03.501020+00:00",
+          "importedAt": "2026-09-26T22:58:02.092Z",
+          "sourceHash": "fca54b6b3d2cf6632e79a6a93413d77c0019743ff1bbef52e93188a28d79fc20",
+          "bounds": [
+            -76.6945750000126,
+            39.108224999811924,
+            -76.58875599983642,
+            39.21576000007699
+          ],
+          "geometryVersion": "WGS84_OSM_complete_geometry_v1",
+          "datasetVersion": "SmartZonePublicCacheV1",
+          "parserVersion": "SmartZoneOsmGeometryV1",
+          "freshness": "fresh",
+          "transport": "regional_cache",
+          "evidenceHash": "6dd444c3a7941dfdc49109aac0695b2dd6f6bda6606212486864388c9db64bef",
+          "queryBounds": [
+            -76.68,
+            39.160000000000004,
+            -76.64,
+            39.2
+          ],
+          "geometryDigest": "786c3dfd9f3b00326be16f3d62cf05733ec0223e31912e90b35392aba0dffc72"
+        },
+        "refresh": null
+      },
+      "dataTimestamp": "2026-09-25T20:24:36Z",
+      "fetchedAt": "2026-09-26T21:55:03.501020+00:00",
+      "planningReasons": [
+        "A mapped non-target feature has no reliable footprint. Review the surrounding area manually."
+      ],
+      "eligibleMappedFeatureCount": 5,
+      "roadSupportedTargetCount": 0,
+      "candidateCount": 0
+    },
+    {
+      "windowId": "0ca799bf6ced812681413d864274d86d4d4f050c1caed53b331235d3b51a8a25",
+      "areaSquareMeters": 86630,
+      "propertyStatus": "ranked",
+      "propertyLimitations": [
+        "Planning heuristic only; this does not establish property condition, homeowner intent, or demand.",
+        "Generic residential classifications do not establish single-family homes or the presence or condition of decks, roofs, or other components.",
+        "Completed-marketing history is unavailable or incomplete; no absence of prior marketing is assumed."
+      ],
+      "propertyEvidence": {
+        "analysisId": null,
+        "geometryDigest": "6e07e1b095ffa2f332f46fe9f3106943140d7ba68cbba64b1cbc325f83e30619",
+        "source": "Maryland Open Data",
+        "sourceVersion": "MD_OPEN_DATA_ed4q-f8tm",
+        "dataUpdatedAt": null,
+        "generatedAt": "2026-09-26T22:12:20.325Z",
+        "inputGranularity": "parcel_level",
+        "geographicCoverageMethod": "server_point_in_polygon",
+        "confidence": "HIGH"
+      },
+      "status": "success",
+      "diagnostic": {
+        "status": "success",
+        "stage": "public_cache",
+        "reasonCode": "cache_ready",
+        "elapsedMs": 5,
+        "cacheReason": "regional_cache_found",
+        "rawElementCount": 47,
+        "classifiedTargetCounts": {
+          "unclassified_address": 3
+        },
+        "targetFeatureCount": 3,
+        "routeWayCount": 33,
+        "exclusionPolygonCount": 0,
+        "landFeatureCount": 2,
+        "unresolvedLandFeatureCount": 0,
+        "barrierWayCount": 9,
+        "cacheEvidence": {
+          "provider": "geofabrik_maryland",
+          "snapshotAt": "2026-09-25T20:24:36Z",
+          "retrievedAt": "2026-09-26T21:55:03.501020+00:00",
+          "importedAt": "2026-09-26T22:58:02.092Z",
+          "sourceHash": "fca54b6b3d2cf6632e79a6a93413d77c0019743ff1bbef52e93188a28d79fc20",
+          "bounds": [
+            -76.6945750000126,
+            39.108224999811924,
+            -76.58875599983642,
+            39.21576000007699
+          ],
+          "geometryVersion": "WGS84_OSM_complete_geometry_v1",
+          "datasetVersion": "SmartZonePublicCacheV1",
+          "parserVersion": "SmartZoneOsmGeometryV1",
+          "freshness": "fresh",
+          "transport": "regional_cache",
+          "evidenceHash": "05822513eb958efcd09b2a409af378544ecbdc0f712ea055b5ed1ee709951edf",
+          "queryBounds": [
+            -76.64210136985103,
+            39.2,
+            -76.64,
+            39.205445000332894
+          ],
+          "geometryDigest": "6e07e1b095ffa2f332f46fe9f3106943140d7ba68cbba64b1cbc325f83e30619"
+        },
+        "refresh": null
+      },
+      "dataTimestamp": "2026-09-25T20:24:36Z",
+      "fetchedAt": "2026-09-26T21:55:03.501020+00:00",
+      "planningReasons": [
+        "We found insufficient connected target and road evidence to automatically create a practical Zone. Review or draw it manually."
+      ],
+      "eligibleMappedFeatureCount": 0,
+      "roadSupportedTargetCount": 0,
+      "candidateCount": 0
+    },
+    {
+      "windowId": "e786b3231a2a007097a23d1162ca6220c835699e79ac0043426391ea6fee938b",
+      "areaSquareMeters": 724332,
+      "propertyStatus": "ranked",
+      "propertyLimitations": [
+        "Planning heuristic only; this does not establish property condition, homeowner intent, or demand.",
+        "Generic residential classifications do not establish single-family homes or the presence or condition of decks, roofs, or other components.",
+        "Completed-marketing history is unavailable or incomplete; no absence of prior marketing is assumed."
+      ],
+      "propertyEvidence": {
+        "analysisId": null,
+        "geometryDigest": "60741421c1724d7afd4dcbeaad5f5f91914cd1436970e7cba4491b54bd4f8816",
+        "source": "Maryland Open Data",
+        "sourceVersion": "MD_OPEN_DATA_ed4q-f8tm",
+        "dataUpdatedAt": null,
+        "generatedAt": "2026-09-26T22:12:20.494Z",
+        "inputGranularity": "parcel_level",
+        "geographicCoverageMethod": "server_point_in_polygon",
+        "confidence": "HIGH"
+      },
+      "status": "success",
+      "diagnostic": {
+        "status": "success",
+        "stage": "public_cache",
+        "reasonCode": "cache_ready",
+        "elapsedMs": 9,
+        "cacheReason": "regional_cache_found",
+        "rawElementCount": 259,
+        "classifiedTargetCounts": {
+          "unclassified_address": 2,
+          "business": 2,
+          "event": 1,
+          "residential": 38
+        },
+        "targetFeatureCount": 43,
+        "routeWayCount": 165,
+        "exclusionPolygonCount": 3,
+        "landFeatureCount": 4,
+        "unresolvedLandFeatureCount": 0,
+        "barrierWayCount": 48,
+        "cacheEvidence": {
+          "provider": "geofabrik_maryland",
+          "snapshotAt": "2026-09-25T20:24:36Z",
+          "retrievedAt": "2026-09-26T21:55:03.501020+00:00",
+          "importedAt": "2026-09-26T22:58:02.092Z",
+          "sourceHash": "fca54b6b3d2cf6632e79a6a93413d77c0019743ff1bbef52e93188a28d79fc20",
+          "bounds": [
+            -76.6945750000126,
+            39.108224999811924,
+            -76.58875599983642,
+            39.21576000007699
+          ],
+          "geometryVersion": "WGS84_OSM_complete_geometry_v1",
+          "datasetVersion": "SmartZonePublicCacheV1",
+          "parserVersion": "SmartZoneOsmGeometryV1",
+          "freshness": "fresh",
+          "transport": "regional_cache",
+          "evidenceHash": "5a44f8b1bbeffe44c5a5c8f8cd25b4eeca694fe61c0144928ce0b4eb32e69921",
+          "queryBounds": [
+            -76.64,
+            39.2,
+            -76.6205213494102,
+            39.20550632199956
+          ],
+          "geometryDigest": "60741421c1724d7afd4dcbeaad5f5f91914cd1436970e7cba4491b54bd4f8816"
+        },
+        "refresh": null
+      },
+      "dataTimestamp": "2026-09-25T20:24:36Z",
+      "fetchedAt": "2026-09-26T21:55:03.501020+00:00",
+      "planningReasons": [
+        "Mapped target features are near connected permitted local-road linework.",
+        "Known campaign-ineligible land and mapped highway/rail barriers are excluded from each proposed polygon.",
+        "OSM coverage and real-world pedestrian access are incomplete; inspect each proposed Zone before use."
+      ],
+      "eligibleMappedFeatureCount": 35,
+      "roadSupportedTargetCount": 35,
+      "candidateCount": 1
+    }
+  ]
+}
