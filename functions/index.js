@@ -4668,10 +4668,8 @@ function smartZonePlanArguments(input, desiredHours, geographicSnapshot) {
 
 async function generateSmartZonePlan(input, desiredHours) {
   desiredHours = smartZoneEntryContract.workloadHours(desiredHours);
-  const planningBoundary = smartZonePlanning.workloadBoundary({anchor: input.anchor,
-    selectedBoundary: input.selectedBoundary, desiredHours: desiredHours ?? 5});
   const geographicSnapshot = await smartZoneGeography.fetchSnapshot({
-    selectedBoundary: planningBoundary, endpoint: OVERPASS_URL});
+    selectedBoundary: input.selectedBoundary, endpoint: OVERPASS_URL});
   return {plan: smartZonePlanning.generatePlan(
     smartZonePlanArguments(input, desiredHours, geographicSnapshot)), geographicSnapshot};
 }
@@ -4708,6 +4706,7 @@ exports.applySmartZonePlan = onCall(
     let geographicSnapshot;
     try {
       ({plan, geographicSnapshot} = await generateSmartZonePlan(input, request.data?.desiredHours));
+      smartZonePlanning.assertApplicablePlan(plan);
     } catch (error) {
       logger.warn("Smart Zone preparation failed", {campaignId: input.campaignId,
         reason: String(error?.message || 'unknown').slice(0, 160)});
@@ -4743,6 +4742,7 @@ exports.applySmartZonePlan = onCall(
       const currentInput = {...input, campaign: currentCampaign};
       const currentPlan = smartZonePlanning.generatePlan(
         smartZonePlanArguments(currentInput, request.data?.desiredHours, geographicSnapshot));
+      smartZonePlanning.assertApplicablePlan(currentPlan);
       if (currentPlan.planId !== plan.planId) {
         throw new HttpsError("failed-precondition", "The recommendation changed. Review it again.");
       }
@@ -4789,7 +4789,11 @@ exports.applySmartZonePlan = onCall(
         serviceAreaPointCount: zone.geometry.length,
         estimatedHomes: zone.workload.estimatedProperties,
         homeCountStatus: "estimated",
-        homeCountMethod: "smart_zone_conservative_density_v1",
+        homeCountMethod: "osm_classified_mapped_features_v2",
+        smartZoneTargetEvidence: {...zone.targetEvidence, geometryDigest: operations.zoneGeometryDigest(zone.geometry)},
+        smartZoneQuality: zone.quality,
+        smartZonePlanningTargets: zone.planningTargets,
+        smartZonePlanningNetwork: zone.planningNetwork,
         homeCountConfidence: zone.workload.confidence,
         analysisStatus: "complete",
         estimatedWorkMinutes: zone.workload.estimatedMinutes,

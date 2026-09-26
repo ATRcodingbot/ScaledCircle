@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import '../../models/campaign_planner.dart';
+import '../../models/campaign_map_context.dart';
 import '../../models/material_logistics.dart';
 import '../../navigation/app_router.dart';
 import '../../navigation/app_routes.dart';
@@ -62,6 +63,7 @@ class _CampaignPlannerScreenState extends State<CampaignPlannerScreen> {
       _returnLocation = TextEditingController();
   final _printNotes = TextEditingController();
   final _service = BusinessOperationsService();
+  final _mapContext = CampaignMapContext();
   late final String _createRequestId;
   String? _campaignId, _error, _historyError;
   String _executionMode = 'marketplace', _materialSource = 'business_provided';
@@ -234,8 +236,11 @@ class _CampaignPlannerScreenState extends State<CampaignPlannerScreen> {
       if (!mounted) return;
       await Navigator.of(context).push(
         MaterialPageRoute(
-          builder: (_) =>
-              CampaignZonesScreen(campaign: snapshot, planningFlow: true),
+          builder: (_) => CampaignZonesScreen(
+            campaign: snapshot,
+            planningFlow: true,
+            mapContext: _mapContext,
+          ),
         ),
       );
     }
@@ -274,6 +279,7 @@ class _CampaignPlannerScreenState extends State<CampaignPlannerScreen> {
           .map((p) => {'latitude': p.latitude, 'longitude': p.longitude})
           .toList(),
     });
+    _mapContext.selectedArea = null;
     await _reload();
   });
 

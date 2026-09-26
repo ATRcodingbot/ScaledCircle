@@ -396,7 +396,7 @@ function copyPackage(destination, mode) {
         !["discovery_preferences.js", "service_area_geometry_codec.js",
           "marketplace_work_types.js", "scaler_profile_notifications.js",
           "signup_notifications.js", "operational_layer.js",
-          "group_assignment.js", "smart_zone_planning.js", "smart_zone_geography.js",
+          "group_assignment.js", "smart_zone_planning.js", "smart_zone_geography.js", "smart_zone_serviceability.js",
           "smart_zone_entry_contract.js", "service_area_resolution.js",
           "subscription_entitlements.js"].includes(name)) continue;
     if (mode === "job-room" && name.endsWith(".js") &&

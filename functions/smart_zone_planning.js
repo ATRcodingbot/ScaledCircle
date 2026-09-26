@@ -1,14 +1,15 @@
 "use strict";
 
 const crypto = require("node:crypto");
-const POLICY_VERSION = "SmartZonePlanningV4";
-const GEOMETRY_VERSION = "serviceable_territory_v1";
-const FALLBACK_GEOMETRY_VERSION = "basic_area_estimate_v1";
+const POLICY_VERSION = "SmartZonePlanningV5";
+const GEOMETRY_VERSION = "evidence_bounded_territory_v2";
+const FALLBACK_GEOMETRY_VERSION = "manual_review_no_geometry_v2";
 const IDEAL_MINUTES = 240;
 const IDEAL_TARGET_MINUTES = 300;
 const SINGLE_SCALER_MAX_MINUTES = 360;
 const MAX_ZONES_PER_CAMPAIGN = 32;
 const MAX_CAMPAIGN_MINUTES = MAX_ZONES_PER_CAMPAIGN * SINGLE_SCALER_MAX_MINUTES;
+const MAX_GEOGRAPHIC_QUERY_SQUARE_METERS = 25000000;
 const DEFAULT_PROPERTIES_PER_HOUR = 45;
 const METERS_PER_DEGREE_LATITUDE = 111320;
 const MINIMUM_EFFECTIVE_COMPENSATION_CENTS_PER_HOUR = 2000;
@@ -267,60 +268,80 @@ function generatePlan({anchor, selectedBoundary = null, geographicSnapshot = nul
   completionBonusCents = 0, qualityBonusCents = 0, sourceAreaDigest = null} = {}) {
   const normalizedAnchor = normalizeAnchor(anchor);
   const hours = clamp(finite(desiredHours, "desired_hours"), 0.5, MAX_CAMPAIGN_MINUTES / 60);
-  const totalProperties = Math.max(1, Math.round(hours * propertiesPerHour));
-  const total = estimateWorkload({estimatedProperties: totalProperties, propertiesPerHour, workType});
-  const count = recommendedScalerCount(total.estimatedMinutes);
   const sourceBoundary = Array.isArray(selectedBoundary) && validateGeometry(selectedBoundary).valid ?
     selectedBoundary.map(normalizeAnchor) : null;
-  const boundary = workloadBoundary({anchor: normalizedAnchor, selectedBoundary: sourceBoundary,
-    desiredHours: hours, propertiesPerHour});
-  const usable = filteredServiceablePoints(geographicSnapshot, boundary);
-  const geographic = usable.length >= Math.max(6, count * 3);
-  const groups = geographic ? splitServiceablePoints(usable, count) : [];
-  const geometries = geographic ? groups.map((items) => bufferedHull(items, normalizedAnchor)) :
-    splitRectangle(boundary, count);
-  const compensation = compensationRecommendation({estimatedMinutes: total.estimatedMinutes,
-    workerBasePayCents: workerBasePayCents ?? totalWorkerPayCents,
-    completionBonusCents, qualityBonusCents});
-  const base = Math.floor(totalProperties / count); let remainder = totalProperties % count;
-  const zones = geometries.map((geometry, index) => { const estimatedProperties = base +
-    (remainder-- > 0 ? 1 : 0); const workload = estimateWorkload({estimatedProperties,
-      propertiesPerHour, workType}); return Object.freeze({zoneNumber: index + 1,
-      name: `Zone ${index + 1}`, geometry, geometryValidation: validateGeometry(geometry), workload,
-      recommendedScalers: 1, workability: workabilityForMinutes(workload.estimatedMinutes),
-      serviceability: geographic ? "serviceable_geography" : "basic_area_estimate",
-      sourceComponentIds: geographic ? [...new Set(groups[index].map((p) => p.componentId))] : []}); });
-  const snapshotDigest = geographic ? crypto.createHash("sha256").update(JSON.stringify({
-    points: usable, exclusions: geographicSnapshot?.exclusionPolygons || [],
-    source: geographicSnapshot?.source || null})).digest("hex") : "basic_area_estimate";
-  // Compensation is a review projection, not part of the geographic plan identity. Keeping it
-  // outside the digest lets an explicit "Use Recommended Pay" acceptance replay the same plan.
+  const serviceability = require('./smart_zone_serviceability');
+  const exceedsAnalysisLimit = sourceBoundary && polygonAreaSquareMeters(sourceBoundary) > MAX_GEOGRAPHIC_QUERY_SQUARE_METERS;
+  const shaped = exceedsAnalysisLimit ? {candidates: [], targetIntent: serviceability.intent(workType), eligibleMappedFeatureCount: 0,
+    reasons: ['The selected territory exceeds the 25 km² geographic analysis limit. Your selected area is unchanged. Choose a smaller area with Adjust Area or Draw My Area for review.']} :
+    serviceability.shape({anchor: normalizedAnchor, boundary: sourceBoundary || [],
+    snapshot: sourceBoundary ? geographicSnapshot : null, workType, propertiesPerHour,
+    desiredTargetLimit: Math.max(1, Math.floor(hours * propertiesPerHour)), maximumZones: MAX_ZONES_PER_CAMPAIGN},
+  {pointInsidePolygon, validateGeometry, polygonAreaSquareMeters, convexHull,
+    estimateWorkload, SINGLE_SCALER_MAX_MINUTES});
+  const evidence = features => ({measure: 'mapped_target_features',
+    eligibleMappedFeatureCount: features.length, source: 'OpenStreetMap',
+    dataTimestamp: geographicSnapshot?.dataTimestamp || null, fetchedAt: geographicSnapshot?.fetchedAt || null,
+    verifiedDeliveryPoints: false, targetIntent: shaped.targetIntent,
+    limitations: ['Mapped features are not verified property parcels, residential units or delivery points.',
+      'Addresses and buildings can be missing; entrances, access permission and occupancy are not established.',
+      'Workload is an advisory pace estimate using mapped features and local-road distance, not a promised duration.']});
+  const quality = {label: 'Review Recommended Area', reasons: shaped.reasons};
+  const zones = shaped.candidates.map((candidate, index) => ({zoneNumber: index + 1, name: `Zone ${index + 1}`,
+    geometry: candidate.geometry, geometryValidation: validateGeometry(candidate.geometry),
+    workload: {...candidate.workload, confidence: 'low', reason: 'Mapped target features and road linework need access review.'},
+    recommendedScalers: 1, workability: 'review_recommended_area', quality,
+    serviceability: 'serviceable_geography', sourceComponentIds: candidate.sourceComponentIds,
+    planningTargets: {kind: 'mapped_target_candidates', verifiedDeliveryPoints: false,
+      features: candidate.features.map(feature => ({sourceId: feature.id, kind: feature.kind,
+        latitude: feature.latitude, longitude: feature.longitude}))},
+    planningNetwork: {kind: 'connected_mapped_road_network', isExecutionRoute: false,
+      accessVerified: false, suggestedRoute: null, segments: candidate.networkSegments,
+      limitations: ['This is supporting road linework, not a calculated practical itinerary or approved work obligation.']},
+    mappedRouteMeters: candidate.mappedRouteMeters, targetEvidence: evidence(candidate.features)}));
+  const features = shaped.candidates.flatMap(candidate => candidate.features);
+  const totalMinutes = zones.reduce((sum, zone) => sum + zone.workload.estimatedMinutes, 0);
+  const snapshotDigest = crypto.createHash('sha256').update(JSON.stringify({
+    targets: features, routeWays: geographicSnapshot?.routeWays || [],
+    landFeatures: geographicSnapshot?.landFeatures || [], barrierWays: geographicSnapshot?.barrierWays || [],
+    unresolvedLandFeatures: geographicSnapshot?.unresolvedLandFeatures || []})).digest('hex');
   const identity = {anchor: normalizedAnchor, desiredHours: hours, propertiesPerHour, workType,
-    sourceAreaDigest: String(sourceAreaDigest || "anchor_only"), snapshotDigest,
-    policyVersion: POLICY_VERSION};
+    sourceAreaDigest: String(sourceAreaDigest || 'anchor_only'), sourceBoundary, snapshotDigest, policyVersion: POLICY_VERSION};
+  const usable = zones.length > 0;
   return Object.freeze({planId: planId(identity), label, anchor: normalizedAnchor,
-    selectedTerritory: sourceBoundary || boundary, plannedTerritory: boundary,
-    desiredHours: hours, totalEstimatedProperties: totalProperties,
-    totalEstimatedMinutes: total.estimatedMinutes, totalEstimatedHours: total.estimatedHours,
-    recommendedScalerCount: count, requiresSplit: count > 1,
-    serviceabilityMode: geographic ? "serviceable_geography" : "basic_area_estimate",
-    explanation: geographic ?
-      "Shaped from bounded mapped properties and connected local-road geography, then balanced by workload." :
-      "Geographic detail was insufficient, so this is a Basic Area Estimate. Review it with Advanced Edit.",
-    confidence: geographic ? "medium" : "low",
-    geographicSource: geographic ? String(geographicSnapshot?.source || "maintained_geography") : null,
-    mappedBoundaryUsed: geographic && Array.isArray(geographicSnapshot?.serviceableBoundary),
-    mappedBoundaryType: geographic ? geographicSnapshot?.serviceableBoundaryType || null : null,
-    excludedWaterFeatureCount: geographic ? Number(geographicSnapshot?.waterFeatureCount || 0) : 0,
-    excludedParkFeatureCount: geographic ? Number(geographicSnapshot?.parkFeatureCount || 0) : 0,
-    barrierFeatureCount: geographic ? Number(geographicSnapshot?.barrierFeatureCount || 0) : 0,
-    unsupportedData: ["pedestrian_route", "live_worker_availability",
-      "historical_conversion_performance", "real_time_weather"],
-    fulfillment: {recommendedZones: count, availableScalerCount: null,
-      availabilityStatus: "not_evaluated", campaignDesignLimitedBySupply: false},
-    compensation, zones, policyVersion: POLICY_VERSION,
-    geometryVersion: geographic ? GEOMETRY_VERSION : FALLBACK_GEOMETRY_VERSION,
+    selectedTerritory: sourceBoundary, plannedTerritory: zones.length === 1 ? zones[0].geometry : null,
+    desiredHours: hours, totalEstimatedProperties: usable ? features.length : null,
+    totalEstimatedMinutes: usable ? totalMinutes : null,
+    totalEstimatedHours: usable ? Number((totalMinutes / 60).toFixed(1)) : null,
+    recommendedScalerCount: zones.length, requiresSplit: zones.length > 1,
+    recommendationStatus: usable ? 'review_required' : 'manual_review_required',
+    reasonCode: exceedsAnalysisLimit ? 'selected_area_exceeds_analysis_limit' : usable ? null : 'insufficient_mapped_evidence',
+    serviceabilityMode: usable ? 'serviceable_geography' : 'manual_review_required',
+    explanation: usable ? 'Proposed from classified mapped targets near connected local roads. Review access and the displayed evidence before use.' : shaped.reasons[0],
+    quality, targetEvidence: {...evidence(features),
+      observedEligibleFeatureCount: shaped.eligibleMappedFeatureCount,
+      roadSupportedTargetCount: shaped.roadSupportedTargetCount || 0},
+    confidence: 'low', geographicSource: geographicSnapshot?.source || null,
+    mappedBoundaryUsed: false, mappedBoundaryType: null,
+    excludedWaterFeatureCount: Number(geographicSnapshot?.waterFeatureCount || 0),
+    excludedParkFeatureCount: Number(geographicSnapshot?.parkFeatureCount || 0),
+    barrierFeatureCount: Number(geographicSnapshot?.barrierFeatureCount || 0),
+    unsupportedData: ['verified_delivery_points', 'pedestrian_access', 'complete_property_inventory',
+      'live_worker_availability', 'historical_conversion_performance', 'real_time_weather'],
+    fulfillment: {recommendedZones: zones.length, availableScalerCount: null,
+      availabilityStatus: 'not_evaluated', campaignDesignLimitedBySupply: false},
+    compensation: usable ? compensationRecommendation({estimatedMinutes: totalMinutes,
+      workerBasePayCents: workerBasePayCents ?? totalWorkerPayCents, completionBonusCents, qualityBonusCents}) : null,
+    zones, policyVersion: POLICY_VERSION,
+    geometryVersion: usable ? GEOMETRY_VERSION : FALLBACK_GEOMETRY_VERSION,
     practicalMaximumZones: MAX_ZONES_PER_CAMPAIGN});
+}
+function assertApplicablePlan(plan) {
+  if (!plan || plan.recommendationStatus !== 'review_required' || !plan.zones?.length || !plan.compensation) {
+    const error = Error('manual_zone_review_required');
+    error.code = 'failed-precondition';
+    throw error;
+  }
 }
 function paymentReadiness(zone) {
   const geometry = validateGeometry(zone?.serviceArea || zone?.geometry || []);
@@ -338,9 +359,9 @@ function paymentReadiness(zone) {
 
 module.exports = {POLICY_VERSION, GEOMETRY_VERSION, FALLBACK_GEOMETRY_VERSION,
   IDEAL_MINUTES, IDEAL_TARGET_MINUTES, SINGLE_SCALER_MAX_MINUTES,
-  MAX_ZONES_PER_CAMPAIGN, MAX_CAMPAIGN_MINUTES,
+  MAX_ZONES_PER_CAMPAIGN, MAX_CAMPAIGN_MINUTES, MAX_GEOGRAPHIC_QUERY_SQUARE_METERS,
   MINIMUM_EFFECTIVE_COMPENSATION_CENTS_PER_HOUR, compensationRecommendation, rectangleAround,
   polygonAreaSquareMeters, validateGeometry, pointInsidePolygon, convexHull,
   estimateWorkload, recommendedScalerCount, workabilityForMinutes, splitRectangle,
   workloadBoundary,
-  splitServiceablePoints, generatePlan, paymentReadiness};
+  splitServiceablePoints, generatePlan, assertApplicablePlan, paymentReadiness};

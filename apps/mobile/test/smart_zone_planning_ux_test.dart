@@ -8,16 +8,16 @@ import 'package:latlong2/latlong.dart';
 
 void main() {
   test(
-    'Smart Zone planning is the preferred flow and manual mapping is advanced',
+    'recommendation and manual drawing retain explicit review and authority',
     () {
       final source = File(
         'lib/screens/business/campaign_zones_screen.dart',
       ).readAsStringSync();
 
-      expect(source, contains('Recommend Workable Zones'));
-      expect(source, contains('Use Recommended Zones'));
-      expect(source, contains('Advanced Edit'));
-      expect(source, contains('estimated total hours'));
+      expect(source, contains('Recommend an Area'));
+      expect(source, contains('Use Recommended Area'));
+      expect(source, contains('Adjust Area'));
+      expect(source, contains('SmartZoneRecommendationEvidence(plan: plan)'));
       expect(source, contains('Scaler compensation recommendation'));
       expect(source, contains('Recommended base payout'));
       expect(source, contains('Estimated effective compensation'));
@@ -55,7 +55,7 @@ void main() {
       'lib/screens/business/campaign_zones_screen.dart',
     ).readAsStringSync();
     expect(source, contains("We couldn't analyze this area yet."));
-    expect(source, contains('Try a smaller area or Draw My Own Area'));
+    expect(source, contains('Try a smaller area or Draw My Area'));
   });
 
   test(
@@ -426,7 +426,10 @@ void main() {
     expect(source, contains('selectedZoneIndex'));
     expect(source, contains('Dashed outline: selected campaign territory'));
     expect(mapSource, contains('CameraFit.bounds'));
-    expect(mapSource, matches(RegExp(r'LatLngBounds\.fromPoints\(\s*operationalPoints,?\s*\)')));
+    expect(
+      mapSource,
+      matches(RegExp(r'LatLngBounds\.fromPoints\(\s*operationalPoints,?\s*\)')),
+    );
     expect(mapSource, isNot(contains('LatLngBounds.fromPoints(allPoints)')));
     expect(mapSource, contains('cameraPadding'));
     expect(mapSource, contains('smartZoneMarkerOffsets'));
@@ -453,7 +456,12 @@ void main() {
     ]) {
       final source = File(path).readAsStringSync();
       if (path.contains('campaign_details_screen')) {
-        expect(source, contains('Your campaign could not be published. Check funding, work-area setup and account eligibility before trying again.'));
+        expect(
+          source,
+          contains(
+            'Your campaign could not be published. Check funding, work-area setup and account eligibility before trying again.',
+          ),
+        );
       } else {
         expect(source, contains("replaceFirst('Exception: ', '')"));
       }

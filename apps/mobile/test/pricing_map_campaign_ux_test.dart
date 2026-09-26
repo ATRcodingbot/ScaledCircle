@@ -38,26 +38,23 @@ void main() {
     );
   });
 
-  test(
-    'focused zone flow recommends valid Zones and retains Advanced Edit',
-    () {
-      expect(zonesSource, contains('Choose where this campaign will run'));
-      expect(zonesSource, contains('Recommend Workable Zones'));
-      expect(zonesSource, contains('Advanced Edit'));
-      expect(zonesSource, contains('getSmartZonePlan'));
-      expect(zonesSource, contains('applySmartZonePlan'));
-      expect(zonesSource, contains('pendingZoneData: pendingZoneData'));
-      expect(zonesSource, isNot(contains("'workerPoolCents':")));
-      expect(areaSource, contains("if (latestSnapshot?.exists == true)"));
-      expect(areaSource, contains("widget.pendingZoneData == null"));
-      expect(
-        areaSource,
-        contains("await widget.campaignReference.set(createData)"),
-      );
-      expect(areaSource, contains('widget.campaignReference.set'));
-      expect(areaSource, contains('Route not yet verified'));
-    },
-  );
+  test('focused zone flow recommends valid Zones and retains Adjust Area', () {
+    expect(zonesSource, contains('Choose where this campaign will run'));
+    expect(zonesSource, contains('Recommend an Area'));
+    expect(zonesSource, contains('Adjust Area'));
+    expect(zonesSource, contains('getSmartZonePlan'));
+    expect(zonesSource, contains('applySmartZonePlan'));
+    expect(zonesSource, contains('pendingZoneData: pendingZoneData'));
+    expect(zonesSource, isNot(contains("'workerPoolCents':")));
+    expect(areaSource, contains("if (latestSnapshot?.exists == true)"));
+    expect(areaSource, contains("widget.pendingZoneData == null"));
+    expect(
+      areaSource,
+      contains("await widget.campaignReference.set(createData)"),
+    );
+    expect(areaSource, contains('widget.campaignReference.set'));
+    expect(areaSource, contains('Route not yet verified'));
+  });
 
   test('authoritative plan configuration contains all four real plans', () {
     final plans = SubscriptionPlanService.plans;
@@ -137,6 +134,7 @@ void main() {
     expect(areaSource, contains("Key('campaign-zone-map-workspace')"));
     expect(areaSource, contains('clamp(520.0, 760.0)'));
     expect(areaSource, contains('clamp(360.0, 560.0)'));
-    expect(areaSource, contains('Step 3 of 4'));
+    expect(areaSource, contains('Draw Your Area'));
+    expect(areaSource, contains('Use This Area'));
   });
 }

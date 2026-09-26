@@ -5,16 +5,19 @@ import '../../config/app_environment.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
+import 'package:latlong2/latlong.dart';
 import '../../widgets/production_route_review.dart';
 import '../../navigation/app_routes.dart';
 import '../../navigation/app_router.dart';
 import '../../models/campaign/zone_display_identity.dart';
+import '../../models/campaign_map_context.dart';
 
 import '../../services/completion_payout_service.dart';
 import '../../services/address_search_service.dart';
 import '../../widgets/mapped_address_field.dart';
 import '../../widgets/smart_zone_geometry_map.dart';
 import '../../widgets/zone_intelligence_card.dart';
+import '../../widgets/smart_zone_recommendation_evidence.dart';
 import 'campaign_area_screen.dart';
 
 bool campaignZonesCanContinue(Iterable<Map<String, dynamic>> zones) {
@@ -38,14 +41,18 @@ String _compensationRate(Object? cents) {
   return '\$${(value / 100).toStringAsFixed(2)}/hour equivalent';
 }
 
-class _SmartZoneEntry extends StatefulWidget {
-  const _SmartZoneEntry({
+class CampaignZoneAreaEntry extends StatefulWidget {
+  const CampaignZoneAreaEntry({
+    super.key,
     required this.locked,
     required this.hasSavedArea,
     required this.savedAreaName,
     required this.onPlan,
     required this.onAdvancedEdit,
     this.onUseAnalyzedArea,
+    this.initialSelection,
+    this.onSelectionChanged,
+    this.searchAddresses,
   });
 
   final bool locked;
@@ -53,18 +60,28 @@ class _SmartZoneEntry extends StatefulWidget {
   final String savedAreaName;
   final Future<void> Function(AddressSuggestion? area, double desiredHours)
   onPlan;
-  final VoidCallback onAdvancedEdit;
+  final ValueChanged<AddressSuggestion?> onAdvancedEdit;
   final VoidCallback? onUseAnalyzedArea;
+  final AddressSuggestion? initialSelection;
+  final ValueChanged<AddressSuggestion?>? onSelectionChanged;
+  final Future<List<AddressSuggestion>> Function(String query)? searchAddresses;
 
   @override
-  State<_SmartZoneEntry> createState() => _SmartZoneEntryState();
+  State<CampaignZoneAreaEntry> createState() => _SmartZoneEntryState();
 }
 
-class _SmartZoneEntryState extends State<_SmartZoneEntry> {
+class _SmartZoneEntryState extends State<CampaignZoneAreaEntry> {
   final _areaController = TextEditingController();
   final _hoursController = TextEditingController(text: '5');
   AddressSuggestion? _selectedArea;
   bool _planning = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedArea = widget.initialSelection;
+    _areaController.text = _selectedArea?.fullAddress ?? '';
+  }
 
   @override
   void dispose() {
@@ -127,8 +144,15 @@ class _SmartZoneEntryState extends State<_SmartZoneEntry> {
             enabled: !widget.locked && !_planning,
             labelText: 'Search neighborhood, address or ZIP',
             hintText: 'Example: Federal Hill, Baltimore',
-            onChanged: (_) => setState(() => _selectedArea = null),
-            onSelected: (area) => setState(() => _selectedArea = area),
+            searchAddresses: widget.searchAddresses,
+            onChanged: (_) {
+              setState(() => _selectedArea = null);
+              widget.onSelectionChanged?.call(null);
+            },
+            onSelected: (area) {
+              setState(() => _selectedArea = area);
+              widget.onSelectionChanged?.call(area);
+            },
           ),
           const SizedBox(height: 12),
           TextFormField(
@@ -163,14 +187,14 @@ class _SmartZoneEntryState extends State<_SmartZoneEntry> {
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
                 : const Icon(Icons.auto_awesome),
-            label: const Text('Recommend Workable Zones'),
+            label: const Text('Recommend an Area'),
           ),
           if (widget.hasSavedArea) ...[
             const SizedBox(height: 8),
             OutlinedButton.icon(
               onPressed: widget.locked || _planning
                   ? null
-                  : widget.onAdvancedEdit,
+                  : () => widget.onAdvancedEdit(null),
               icon: const Icon(Icons.business_outlined),
               label: const Text('Use My Service Area'),
             ),
@@ -182,9 +206,9 @@ class _SmartZoneEntryState extends State<_SmartZoneEntry> {
           TextButton.icon(
             onPressed: widget.locked || _planning
                 ? null
-                : widget.onAdvancedEdit,
+                : () => widget.onAdvancedEdit(_selectedArea),
             icon: const Icon(Icons.gesture),
-            label: const Text('Draw My Own Area'),
+            label: const Text('Draw My Area'),
           ),
           const Text(
             'Finding future opportunities is separate from mapping an area you already know.',
@@ -201,17 +225,30 @@ bool campaignCanAddZone(
   int maximumZones = productionMaximumZonesPerCampaign,
 }) => persistedZoneCount < maximumZones;
 
-class CampaignZonesScreen extends StatelessWidget {
+class CampaignZonesScreen extends StatefulWidget {
   final DocumentSnapshot campaign;
   final bool startWithAreaBuilder;
   final bool planningFlow;
+  final CampaignMapContext? mapContext;
 
   const CampaignZonesScreen({
     super.key,
     required this.campaign,
     this.startWithAreaBuilder = false,
     this.planningFlow = false,
+    this.mapContext,
   });
+
+  @override
+  State<CampaignZonesScreen> createState() => _CampaignZonesScreenState();
+}
+
+class _CampaignZonesScreenState extends State<CampaignZonesScreen> {
+  DocumentSnapshot get campaign => widget.campaign;
+  bool get startWithAreaBuilder => widget.startWithAreaBuilder;
+  bool get planningFlow => widget.planningFlow;
+  late final CampaignMapContext _mapContext =
+      widget.mapContext ?? CampaignMapContext();
 
   CollectionReference<Map<String, dynamic>> get _zonesCollection {
     return FirebaseFirestore.instance.collection('campaignZones');
@@ -321,6 +358,7 @@ class CampaignZonesScreen extends StatelessWidget {
       final compensation = Map<String, dynamic>.from(
         plan['compensation'] as Map? ?? const {},
       );
+      final canApply = smartZonePlanCanApply(plan);
       if (!context.mounted) return;
       var selectedZoneIndex = 0;
       var useRecommendedPay = false;
@@ -339,14 +377,15 @@ class CampaignZonesScreen extends StatelessWidget {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    SmartZoneGeometryMap(
-                      zones: zones,
-                      selectedTerritory: selectedTerritory,
-                      selectedZoneIndex: selectedZoneIndex,
-                      onZoneSelected: (index) =>
-                          setDialogState(() => selectedZoneIndex = index),
-                      mapKey: const Key('recommended-smart-zone-map'),
-                    ),
+                    if (zones.isNotEmpty)
+                      SmartZoneGeometryMap(
+                        zones: zones,
+                        selectedTerritory: selectedTerritory,
+                        selectedZoneIndex: selectedZoneIndex,
+                        onZoneSelected: (index) =>
+                            setDialogState(() => selectedZoneIndex = index),
+                        mapKey: const Key('recommended-smart-zone-map'),
+                      ),
                     const SizedBox(height: 16),
                     if (requiresRouteReview)
                       CheckboxListTile(
@@ -365,25 +404,15 @@ class CampaignZonesScreen extends StatelessWidget {
                         ),
                         controlAffinity: ListTileControlAffinity.leading,
                       ),
-                    Text(
-                      '${plan['totalEstimatedProperties']} estimated properties • '
-                      '~${plan['totalEstimatedHours']} estimated total hours',
-                      style: Theme.of(context).textTheme.titleMedium,
-                    ),
+                    SmartZoneRecommendationEvidence(plan: plan),
                     const SizedBox(height: 8),
-                    if (!_ownTeam)
+                    if (!_ownTeam &&
+                        canApply &&
+                        (plan['recommendedScalerCount'] as num? ?? 0) > 0)
                       Text(
                         '${plan['recommendedScalerCount']} Scaler${plan['recommendedScalerCount'] == 1 ? '' : 's'} recommended',
                       ),
                     const SizedBox(height: 8),
-                    Text(
-                      plan['serviceabilityMode'] == 'serviceable_geography'
-                          ? 'Serviceable geography • mapped roads and property context'
-                          : 'Basic Area Estimate • review with Advanced Edit',
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
                     const SizedBox(height: 8),
                     Text(
                       _ownTeam
@@ -393,7 +422,7 @@ class CampaignZonesScreen extends StatelessWidget {
                                 'limit and validated again before funding.',
                     ),
                     const SizedBox(height: 12),
-                    if (!_ownTeam)
+                    if (!_ownTeam && canApply && compensation.isNotEmpty)
                       Card(
                         child: Padding(
                           padding: const EdgeInsets.all(16),
@@ -531,14 +560,14 @@ class CampaignZonesScreen extends StatelessWidget {
                           ),
                           title: Text(identity.label),
                           subtitle: Text(
-                            '${workload['estimatedProperties']} properties • '
-                            '~${workload['estimatedHours']} hours',
+                            zone['targetEvidence'] is Map &&
+                                    zone['targetEvidence']['eligibleMappedFeatureCount']
+                                        is num
+                                ? '${zone['targetEvidence']['eligibleMappedFeatureCount']} mapped target features'
+                                      '${workload['estimatedHours'] is num ? ' · ~${workload['estimatedHours']} hours' : ''}'
+                                : 'Target inventory unavailable · manual review needed',
                           ),
-                          trailing: Text(switch (zone['workability']) {
-                            'excellent' => 'Excellent',
-                            'good' => 'Good',
-                            _ => 'Too large',
-                          }),
+                          trailing: Text(smartZoneEvidenceQuality(zone)),
                         ),
                       );
                     }),
@@ -549,19 +578,41 @@ class CampaignZonesScreen extends StatelessWidget {
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(dialogContext, false),
-                child: const Text('Advanced Edit'),
+                child: const Text('Adjust Area'),
               ),
               ElevatedButton(
-                onPressed: requiresRouteReview && !routeReviewed
+                onPressed: !canApply || (requiresRouteReview && !routeReviewed)
                     ? null
                     : () => Navigator.pop(dialogContext, true),
-                child: const Text('Use Recommended Zones'),
+                child: const Text('Use Recommended Area'),
               ),
             ],
           ),
         ),
       );
-      if (accepted != true || !context.mounted) return;
+      if (!context.mounted) return;
+      if (accepted == false) {
+        final proposed = zones.isEmpty
+            ? plan['selectedTerritory']
+            : zones[selectedZoneIndex]['geometry'] ??
+                  zones[selectedZoneIndex]['serviceArea'];
+        final points = smartZonePoints(proposed)
+            .map(
+              (p) => <String, dynamic>{
+                'latitude': p.latitude,
+                'longitude': p.longitude,
+              },
+            )
+            .toList();
+        await _createZone(
+          context,
+          skipNamePrompt: true,
+          searchArea: selectedArea ?? _mapContext.selectedArea,
+          initialArea: points,
+        );
+        return;
+      }
+      if (accepted != true || !canApply) return;
       await functions.httpsCallable('applySmartZonePlan').call({
         ...request,
         'planId': plan['planId'],
@@ -584,7 +635,7 @@ class CampaignZonesScreen extends StatelessWidget {
         SnackBar(
           content: Text(
             (error.message ??
-                    "We couldn't analyze this area yet. Try a smaller area or Draw My Own Area.")
+                    "We couldn't analyze this area yet. Try a smaller area or Draw My Area.")
                 .replaceAll(RegExp(r'\s*\[\d{3}\]'), ''),
           ),
         ),
@@ -655,6 +706,8 @@ class CampaignZonesScreen extends StatelessWidget {
     BuildContext context, {
     bool skipNamePrompt = false,
     bool useAnalyzedArea = false,
+    AddressSuggestion? searchArea,
+    List<Map<String, dynamic>> initialArea = const [],
   }) async {
     final campaignData = campaign.data() as Map<String, dynamic>;
 
@@ -711,8 +764,21 @@ class CampaignZonesScreen extends StatelessWidget {
           builder: (_) => CampaignAreaScreen(
             campaignReference: zoneReference!,
             pendingZoneData: pendingZoneData,
-            searchBoundary: _serviceAreaBoundary,
-            initialArea: useAnalyzedArea ? _serviceAreaBoundary : const [],
+            searchBoundary:
+                searchArea?.geometry
+                    .map((p) => Map<String, dynamic>.from(p))
+                    .toList() ??
+                _serviceAreaBoundary,
+            initialCenter: searchArea == null
+                ? null
+                : LatLng(searchArea.latitude, searchArea.longitude),
+            initialBounds: searchArea?.bounds,
+            searchContextLabel: searchArea?.fullAddress,
+            initialArea: initialArea.isNotEmpty
+                ? initialArea
+                : useAnalyzedArea
+                ? _serviceAreaBoundary
+                : const [],
             materialQuantity: _materialQuantity,
           ),
         ),
@@ -1784,12 +1850,24 @@ class CampaignZonesScreen extends StatelessWidget {
             int assignedZones = 0;
             int mappedZones = 0;
             var anyHomeEstimatePending = false;
+            var anyAssumedHomeCounts = false;
+            var anyMappedFeatureCounts = false;
 
             for (final zone in zones) {
               final data = zone.data();
 
-              totalEstimatedHomes +=
-                  (data['estimatedHomes'] as num?)?.toInt() ?? 0;
+              final assumedCount =
+                  data['homeCountMethod'] ==
+                  'smart_zone_conservative_density_v1';
+              anyAssumedHomeCounts = anyAssumedHomeCounts || assumedCount;
+              anyMappedFeatureCounts =
+                  anyMappedFeatureCounts ||
+                  data['homeCountMethod'] ==
+                      'osm_classified_mapped_features_v2';
+              if (!assumedCount) {
+                totalEstimatedHomes +=
+                    (data['estimatedHomes'] as num?)?.toInt() ?? 0;
+              }
               final homeStatus =
                   data['homeCountStatus']?.toString() ?? 'pending';
               anyHomeEstimatePending =
@@ -1901,8 +1979,14 @@ class CampaignZonesScreen extends StatelessWidget {
                         children: [
                           _campaignMetricRow(
                             icon: Icons.home_work_outlined,
-                            label: 'Target-specific home estimate',
-                            value: totalEstimatedHomes > 0
+                            label: anyMappedFeatureCounts
+                                ? 'Mapped target inventory'
+                                : 'Target-specific home estimate',
+                            value: anyMappedFeatureCounts
+                                ? 'See per-zone evidence'
+                                : anyAssumedHomeCounts
+                                ? 'Unavailable — review zone sources'
+                                : totalEstimatedHomes > 0
                                 ? '$totalEstimatedHomes'
                                 : anyHomeEstimatePending
                                 ? 'Analysis needed'
@@ -1969,17 +2053,23 @@ class CampaignZonesScreen extends StatelessWidget {
                   ),
 
                 if (zones.isEmpty)
-                  _SmartZoneEntry(
+                  CampaignZoneAreaEntry(
                     locked: _campaignLocked,
                     hasSavedArea: _serviceAreaBoundary.length >= 3,
                     savedAreaName: _serviceAreaName,
+                    initialSelection: _mapContext.selectedArea,
+                    onSelectionChanged: (area) =>
+                        _mapContext.selectedArea = area,
                     onPlan: (area, hours) => _reviewSmartZonePlan(
                       context,
                       selectedArea: area,
                       desiredHours: hours,
                     ),
-                    onAdvancedEdit: () =>
-                        _createZone(context, skipNamePrompt: true),
+                    onAdvancedEdit: (area) => _createZone(
+                      context,
+                      skipNamePrompt: true,
+                      searchArea: area,
+                    ),
                     onUseAnalyzedArea: _hasTransferredAnalysisArea
                         ? () => _createZone(
                             context,

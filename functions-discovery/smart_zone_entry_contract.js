@@ -40,6 +40,8 @@ function workloadHours(value = 5) {
   return hours;
 }
 function planningFailure(error) {
+  if (error?.message === 'manual_zone_review_required') return {code: 'failed-precondition',
+    message: 'There is not enough reliable geographic evidence to apply practical Zones. Choose Adjust Area or Draw My Area to review it.'};
   if (error?.message === 'campaign_workload_invalid') return {code: 'invalid-argument',
     message: 'Choose estimated work from 30 minutes to 192 hours.'};
   if (error?.message === 'selected_area_cannot_fit_workload_boundary') return {code: 'failed-precondition',

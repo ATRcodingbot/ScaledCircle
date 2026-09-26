@@ -361,7 +361,7 @@ void main() {
       await _checkpoint('continue-enabled:${continueButton.onPressed != null}');
       expect(continueButton.onPressed, isNull);
 
-      final chooseTarget = find.text('Draw My Own Area');
+      final chooseTarget = find.text('Draw My Area');
       await _checkpoint(
         'choose-target-count:${chooseTarget.evaluate().length}',
       );
@@ -370,6 +370,10 @@ void main() {
       await _pumpUntil(tester, find.byType(CampaignAreaScreen));
       await _checkpoint('map-route-visible');
       expect(find.byType(CampaignAreaScreen), findsOneWidget);
+      await tester.tap(find.text('Advanced Drawing Tools'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Polygon'));
+      await tester.pumpAndSettle();
       final map = find.byKey(const Key('campaign-zone-map-workspace'));
       expect(map, findsOneWidget);
       final mapRect = tester.getRect(map);
@@ -453,14 +457,18 @@ void main() {
       await tester.scrollUntilVisible(
         find.text('Manage Campaign Zones'),
         300,
-        scrollable: find.descendant(
-          of: find.byType(CampaignDetailsScreen),
-          matching: find.byType(Scrollable),
-        ).first,
+        scrollable: find
+            .descendant(
+              of: find.byType(CampaignDetailsScreen),
+              matching: find.byType(Scrollable),
+            )
+            .first,
       );
       await _pumpUi(tester);
       expect(
-        find.text('We could not load the assigned work areas. Please try again.'),
+        find.text(
+          'We could not load the assigned work areas. Please try again.',
+        ),
         findsNothing,
       );
       final reviewRouteException = tester.takeException();

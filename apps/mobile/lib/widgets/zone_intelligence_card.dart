@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../models/campaign_area_geometry.dart';
 
 class ZoneIntelligenceCard extends StatelessWidget {
   final String zoneName;
@@ -19,6 +20,22 @@ class ZoneIntelligenceCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final estimatedHomes = (data['estimatedHomes'] as num?)?.toInt();
+    final assumedCount =
+        data['homeCountMethod'] == 'smart_zone_conservative_density_v1';
+    final mappedMethod =
+        data['homeCountMethod'] == 'osm_classified_mapped_features_v2';
+    final mappedEvidence = data['smartZoneTargetEvidence'] is Map
+        ? data['smartZoneTargetEvidence'] as Map
+        : const {};
+    final geometryDigest = CampaignAreaGeometry.savedDigest(
+      data['serviceArea'],
+    );
+    final currentMappedTargets =
+        mappedMethod &&
+        geometryDigest != null &&
+        mappedEvidence['measure'] == 'mapped_target_features' &&
+        mappedEvidence['geometryDigest'] == geometryDigest &&
+        data['serverZoneGeometryDigest'] == geometryDigest;
     final homeStatus = data['homeCountStatus']?.toString() ?? 'pending';
     final analysisStatus = data['analysisStatus']?.toString() ?? 'waiting';
     final assignedScaler = data['assignedScalerEmail']?.toString();
@@ -34,6 +51,7 @@ class ZoneIntelligenceCard extends StatelessWidget {
         planning != null &&
         (updatedMs == null || (checkedAt != null && checkedAt >= updatedMs));
     final regional =
+        !currentMappedTargets &&
         currentPlanning &&
         (planning['geographicCoverageMethod'] ==
                 'all_housing_unit_counts_from_intersecting_block_groups_no_area_weighting' ||
@@ -93,24 +111,40 @@ class ZoneIntelligenceCard extends StatelessWidget {
               const SizedBox(height: 20),
               _MetricRow(
                 icon: Icons.home_work_outlined,
-                label: currentPlanning
+                label: mappedMethod
+                    ? 'Mapped ${mappedEvidence['targetIntent'] == 'business' ? 'business' : 'residential'} target features'
+                    : currentPlanning
                     ? regional
                           ? 'Regional housing estimate'
                           : planning['metric']?.toString() ?? 'Property records'
                     : 'Target-specific home estimate',
-                value: currentPlanning
+                value: mappedMethod
+                    ? currentMappedTargets
+                          ? mappedEvidence['eligibleMappedFeatureCount']
+                                    ?.toString() ??
+                                'Unavailable'
+                          : 'Unavailable'
+                    : currentPlanning
                     ? (regional && regionalCount != null
                               ? '${regionalCount.toInt().toString().replaceAllMapped(RegExp(r'(\d)(?=(\d{3})+(?!\d))'), (m) => '${m[1]},')} units'
                               : planning['residentialProperties']
                                     ?.toString()) ??
                           'Unavailable'
+                    : assumedCount
+                    ? 'Unavailable'
                     : _homeLabel(estimatedHomes, homeStatus),
-                supportingText: currentPlanning
+                supportingText: mappedMethod
+                    ? currentMappedTargets
+                          ? '${mappedEvidence['source'] ?? 'Source unavailable'} · Source date: ${mappedEvidence['dataTimestamp'] ?? 'Not recorded'} · Retrieved: ${mappedEvidence['fetchedAt'] ?? 'Not recorded'}\nMapped features are not distinct households or verified accessible delivery points.\n${(mappedEvidence['limitations'] as List? ?? []).join(' ')}'
+                          : 'The mapped feature evidence does not match this saved geometry. Analyze the current target again.'
+                    : currentPlanning
                     ? regional
                           ? 'Total for ${geographies.isEmpty ? "the returned" : geographies.length} Census block groups overlapping your boundary; includes locations outside the selected area. '
                                 'This is not a count of houses or accessible doors inside your target, or a guaranteed upper bound. '
                                 '${planning['status'] == "partial" ? "Partial source coverage. " : ""}'
                           : '${planning['source'] ?? "Source unavailable"} · ${planning['dataDate'] ?? "Date unknown"}\n${planning['status'] == "partial" ? "Partial coverage" : planning['status']}\n${planning['reason'] ?? "Not an exact household or accessible-door count."}'
+                    : assumedCount
+                    ? 'The older recommendation used assumed distribution productivity, not observed properties. Analyze the current target for source-backed information.'
                     : _homeSupport(homeStatus, analysisStatus),
               ),
               if (regional)
