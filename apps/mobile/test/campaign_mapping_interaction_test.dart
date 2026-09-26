@@ -78,6 +78,11 @@ CampaignAreaScreen draft(
   analyze,
   CampaignMapContext? location,
   List<Map<String, dynamic>> initialArea = const [],
+  Future<CampaignAreaRecommendationResult?> Function(
+    BuildContext,
+    List<Map<String, double>>,
+  )?
+  recommend,
 }) => CampaignAreaScreen(
   campaignReference: reference,
   pendingZoneData: const {'zoneName': 'Draft Zone'},
@@ -89,6 +94,7 @@ CampaignAreaScreen draft(
   tileProvider: MapTiles(),
   mapController: controller,
   analyzeGeometry: analyze,
+  recommendWithinArea: recommend,
 );
 
 Future<void> choose(WidgetTester t, String text) async {
@@ -138,6 +144,193 @@ Future<void> trace(
 }
 
 void main() {
+  const originalAnalysisArea = <Map<String, dynamic>>[
+    {'latitude': 39.15, 'longitude': -76.62},
+    {'latitude': 39.151, 'longitude': -76.62},
+    {'latitude': 39.151, 'longitude': -76.619},
+    {'latitude': 39.15, 'longitude': -76.619},
+  ];
+
+  test(
+    'explicit analysis boundary replaces ZIP lookup without shrinking it',
+    () {
+      final largeBoundary = <Map<String, double>>[
+        {'lat': 39.10, 'lng': -76.7},
+        {'lat': 39.20, 'lng': -76.7},
+        {'lat': 39.20, 'lng': -76.5},
+        {'lat': 39.10, 'lng': -76.5},
+      ];
+      final request = smartZoneRecommendationRequest(
+        campaignId: 'existing-draft',
+        selectedArea: glenBurnie,
+        analysisBoundary: largeBoundary,
+      );
+      expect(request['analysisBoundary'], largeBoundary);
+      expect(request.containsKey('areaSelection'), false);
+      largeBoundary.first['lat'] = 0;
+      expect((request['analysisBoundary'] as List).first['lat'], 39.10);
+      expect(
+        request.keys,
+        unorderedEquals(['campaignId', 'desiredHours', 'analysisBoundary']),
+      );
+    },
+  );
+
+  testWidgets('unsaved recommendation sends exact boundary and never saves', (
+    t,
+  ) async {
+    final reference = DraftReference();
+    List<Map<String, double>>? requested;
+    await surface(
+      t,
+      draft(
+        reference,
+        initialArea: originalAnalysisArea,
+        recommend: (_, geometry) async {
+          requested = geometry;
+          return null;
+        },
+      ),
+    );
+    await choose(t, 'Recommend within this area');
+    expect(
+      requested,
+      originalAnalysisArea
+          .map((p) => {'lat': p['latitude'], 'lng': p['longitude']})
+          .toList(),
+    );
+    expect(reference.calls, 0);
+    expect(boundary(t).length, 4);
+    await t.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('recommendation Adjust stays in same editor and supports Undo', (
+    t,
+  ) async {
+    final reference = DraftReference();
+    final adjusted = <Map<String, dynamic>>[
+      {'latitude': 39.1501, 'longitude': -76.6199},
+      {'latitude': 39.1508, 'longitude': -76.6199},
+      {'latitude': 39.1508, 'longitude': -76.6192},
+      {'latitude': 39.1501, 'longitude': -76.6192},
+    ];
+    await surface(
+      t,
+      draft(
+        reference,
+        initialArea: originalAnalysisArea,
+        recommend: (_, _) async =>
+            CampaignAreaRecommendationResult.adjust(adjusted),
+      ),
+    );
+    final editor = t.state(find.byType(CampaignAreaScreen));
+    await choose(t, 'Recommend within this area');
+    expect(t.state(find.byType(CampaignAreaScreen)), same(editor));
+    expect(boundary(t).first.latitude, 39.1501);
+    await choose(t, 'Undo');
+    expect(boundary(t).first.latitude, 39.15);
+    expect(reference.calls, 0);
+    await t.pumpWidget(const SizedBox());
+  });
+
+  testWidgets(
+    'applied recommendation exits with false and does not save pending Zone',
+    (t) async {
+      final reference = DraftReference();
+      bool? saveResult;
+      await surface(
+        t,
+        Builder(
+          builder: (context) => Scaffold(
+            body: TextButton(
+              onPressed: () async {
+                saveResult = await Navigator.push<bool>(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => draft(
+                      reference,
+                      initialArea: originalAnalysisArea,
+                      recommend: (_, _) async =>
+                          const CampaignAreaRecommendationResult.applied(),
+                    ),
+                  ),
+                );
+              },
+              child: const Text('Open editor'),
+            ),
+          ),
+        ),
+      );
+      await choose(t, 'Open editor');
+      await t.pump(const Duration(milliseconds: 400));
+      await choose(t, 'Recommend within this area');
+      await t.pump(const Duration(milliseconds: 400));
+      await t.pump(const Duration(milliseconds: 400));
+      expect(saveResult, false);
+      expect(find.byType(CampaignAreaScreen), findsNothing);
+      expect(reference.calls, 0);
+      await t.pumpWidget(const SizedBox());
+    },
+  );
+
+  testWidgets(
+    'invalid and stale adjusted boundaries never replace the current drawing',
+    (t) async {
+      final reference = DraftReference();
+      final response = Completer<CampaignAreaRecommendationResult?>();
+      await surface(
+        t,
+        draft(
+          reference,
+          initialArea: originalAnalysisArea,
+          recommend: (_, _) => response.future,
+        ),
+      );
+      await choose(t, 'Recommend within this area');
+      await choose(t, 'Clear');
+      response.complete(
+        const CampaignAreaRecommendationResult.adjust(originalAnalysisArea),
+      );
+      await t.pump();
+      expect(t.widget<PolygonLayer>(find.byType(PolygonLayer)).polygons, isEmpty);
+      expect(reference.calls, 0);
+      final button = t.widget<OutlinedButton>(
+        find.widgetWithText(OutlinedButton, 'Recommend within this area'),
+      );
+      expect(button.onPressed, isNull);
+      await t.pumpWidget(const SizedBox());
+    },
+  );
+
+  testWidgets(
+    'self-crossing adjusted boundary is rejected without changing saved or draft data',
+    (t) async {
+      final reference = DraftReference();
+      await surface(
+        t,
+        draft(
+          reference,
+          initialArea: originalAnalysisArea,
+          recommend: (_, _) async => CampaignAreaRecommendationResult.adjust([
+            originalAnalysisArea[0],
+            originalAnalysisArea[2],
+            originalAnalysisArea[1],
+            originalAnalysisArea[3],
+          ]),
+        ),
+      );
+      await choose(t, 'Recommend within this area');
+      expect(
+        boundary(t)
+            .map((p) => {'latitude': p.latitude, 'longitude': p.longitude})
+            .toList(),
+        originalAnalysisArea,
+      );
+      expect(reference.calls, 0);
+      await t.pumpWidget(const SizedBox());
+    },
+  );
+
   testWidgets(
     'narrow screen with large text keeps primary and advanced controls reachable',
     (t) async {
@@ -151,7 +344,7 @@ void main() {
             ).copyWith(textScaler: const TextScaler.linear(1.6)),
             child: child!,
           ),
-          home: draft(DraftReference()),
+          home: draft(DraftReference(), recommend: (_, _) async => null),
         ),
       );
       await t.pump();
@@ -170,6 +363,7 @@ void main() {
       ], kind: PointerDeviceKind.touch);
       for (final label in [
         'Use This Area',
+        'Recommend within this area',
         'Clear',
         'Undo',
         'Edit Boundary',

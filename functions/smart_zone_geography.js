@@ -1,15 +1,46 @@
 "use strict";
 
 const smartZonePlanning = require("./smart_zone_planning");
+const crypto = require('node:crypto');
 
 const MAX_QUERY_AREA_SQUARE_METERS = smartZonePlanning.MAX_GEOGRAPHIC_QUERY_SQUARE_METERS;
 const QUERY_TIMEOUT_MILLISECONDS = 12000;
 
-async function fetchSnapshot({selectedBoundary, endpoint, fetchImpl = fetch}) {
-  if (!Array.isArray(selectedBoundary) ||
-      !smartZonePlanning.validateGeometry(selectedBoundary).valid ||
-      smartZonePlanning.polygonAreaSquareMeters(selectedBoundary) >
-        MAX_QUERY_AREA_SQUARE_METERS) return null;
+// Optional observation only: no raw URL, query, provider payload, feature IDs or
+// exception text escapes through this callback. An observer cannot change the
+// snapshot|null result or turn a provider failure into trusted geography.
+async function fetchSnapshot({selectedBoundary, endpoint, fetchImpl = fetch, onDiagnostic}) {
+  const started = Date.now();
+  const diagnostic = {schemaVersion: 1, startedAt: new Date(started).toISOString(),
+    vertexCount: Array.isArray(selectedBoundary) ? selectedBoundary.length : 0,
+    areaSquareMeters: null, bounds: null, queryDigest: null, httpStatus: null, contentType: null,
+    rawElementCount: null, rawElementTypes: null, classifiedTargetCounts: null,
+    targetFeatureCount: null, routeWayCount: null, roadCountsByClass: null,
+    landFeatureCount: null, landCountsByKind: null,
+    exclusionPolygonCount: null, barrierWayCount: null, unresolvedLandFeatureCount: null,
+    sourceDataTimestamp: null, fetchedAt: null};
+  const finish = (status, stage, reasonCode, snapshot = null) => {
+    const record = {...diagnostic, status, stage, reasonCode,
+      elapsedMs: Math.max(0, Date.now() - started), finishedAt: new Date().toISOString()};
+    try {
+      if (typeof onDiagnostic === 'function') {
+        const observed = onDiagnostic(Object.freeze(record));
+        // Logging is best effort, including an accidentally async observer.
+        if (observed && typeof observed.catch === 'function') observed.catch(() => {});
+      }
+    } catch (_) { /* Diagnostics must never alter planning authority. */ }
+    return snapshot;
+  };
+  const validation = smartZonePlanning.validateGeometry(selectedBoundary);
+  if (!validation.valid) return finish('rejected', 'input', 'invalid_geometry');
+  diagnostic.areaSquareMeters = Math.round(validation.areaSquareMeters * 100) / 100;
+  const latitudes = selectedBoundary.map(p => Number(p.latitude ?? p.lat));
+  const longitudes = selectedBoundary.map(p => Number(p.longitude ?? p.lon));
+  diagnostic.bounds = {south: Math.min(...latitudes), north: Math.max(...latitudes),
+    west: Math.min(...longitudes), east: Math.max(...longitudes)};
+  if (validation.areaSquareMeters > MAX_QUERY_AREA_SQUARE_METERS) {
+    return finish('rejected', 'input', 'area_limit_exceeded');
+  }
   const polygon = selectedBoundary.map((item) =>
     `${Number(item.latitude).toFixed(7)} ${Number(item.longitude).toFixed(7)}`).join(" ");
   const query = `[out:json][timeout:15];(
@@ -29,22 +60,62 @@ async function fetchSnapshot({selectedBoundary, endpoint, fetchImpl = fetch}) {
     nwr["leisure"~"^(park|nature_reserve|stadium|sports_centre)$"](poly:"${polygon}");
     relation["boundary"="place"]["place"~"^(neighbourhood|neighborhood|quarter|suburb)$"](poly:"${polygon}");
   );out meta center geom;`;
+  diagnostic.queryDigest = crypto.createHash('sha256').update(query).digest('hex');
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), QUERY_TIMEOUT_MILLISECONDS);
+  let stage = 'request';
   try {
     const response = await fetchImpl(endpoint, {method: "POST",
       headers: {"Content-Type": "application/x-www-form-urlencoded",
         "User-Agent": "ScaledCircle-SmartZone/1.0 (support@scaledcircle.com)"},
       body: new URLSearchParams({data: query}).toString(), signal: controller.signal});
-    if (!response.ok) return null;
+    stage = 'response';
+    diagnostic.httpStatus = Number.isInteger(response.status) && response.status >= 100 && response.status <= 599 ? response.status : null;
+    const mediaType = String(response.headers?.get?.('content-type') || '').split(';')[0].trim().toLowerCase();
+    diagnostic.contentType = !mediaType ? null : /^[a-z0-9.+-]{1,40}\/[a-z0-9.+-]{1,40}$/.test(mediaType) ? mediaType : 'other';
+    if (!response.ok) return finish('unavailable', stage, 'http_error');
+    stage = 'parse';
     const payload = await response.json();
+    if (Array.isArray(payload?.elements)) diagnostic.rawElementCount = payload.elements.length;
+    const sourceTimestamp = payload?.osm3s?.timestamp_osm_base;
+    if (typeof sourceTimestamp === 'string' && /^\d{4}-\d{2}-\d{2}T/.test(sourceTimestamp) && Number.isFinite(Date.parse(sourceTimestamp))) {
+      diagnostic.sourceDataTimestamp = new Date(sourceTimestamp).toISOString();
+    }
     // Overpass can return HTTP 200 with partial elements and a timeout/error.
     // Partial target data without all exclusion branches cannot support a plan.
-    if (payload.remark || !Array.isArray(payload.elements) || payload.elements.length > 20000) return null;
-    return snapshotFromElements(selectedBoundary, payload.elements, {
+    if (payload?.remark) return finish('unavailable', stage, 'provider_partial_response');
+    if (!Array.isArray(payload?.elements)) return finish('unavailable', stage, 'invalid_payload');
+    if (payload.elements.length > 20000) return finish('unavailable', stage, 'element_limit_exceeded');
+    diagnostic.rawElementTypes = {node: 0, way: 0, relation: 0, other: 0};
+    for (const element of payload.elements) {
+      const kind = ['node', 'way', 'relation'].includes(element?.type) ? element.type : 'other';
+      diagnostic.rawElementTypes[kind]++;
+    }
+    stage = 'classify';
+    const snapshot = snapshotFromElements(selectedBoundary, payload.elements, {
       dataTimestamp: payload.osm3s?.timestamp_osm_base || null,
       fetchedAt: new Date().toISOString()});
-  } catch (_) { return null; } finally { clearTimeout(timeout); }
+    diagnostic.classifiedTargetCounts = {residential: 0, business: 0, event: 0, unclassified_address: 0};
+    for (const feature of snapshot.targetFeatures) diagnostic.classifiedTargetCounts[feature.kind]++;
+    Object.assign(diagnostic, {targetFeatureCount: snapshot.targetFeatures.length,
+      routeWayCount: snapshot.routeWays.length, landFeatureCount: snapshot.landFeatures.length,
+      exclusionPolygonCount: snapshot.exclusionPolygons.length, barrierWayCount: snapshot.barrierWays.length,
+      unresolvedLandFeatureCount: snapshot.unresolvedLandFeatures.length, fetchedAt: snapshot.fetchedAt});
+    diagnostic.roadCountsByClass = {};
+    for (const way of snapshot.routeWays) {
+      const kind = way.highway || 'unclassified';
+      diagnostic.roadCountsByClass[kind] = (diagnostic.roadCountsByClass[kind] || 0) + 1;
+    }
+    diagnostic.landCountsByKind = {};
+    for (const feature of snapshot.landFeatures) {
+      diagnostic.landCountsByKind[feature.kind] = (diagnostic.landCountsByKind[feature.kind] || 0) + 1;
+    }
+    return finish('success', 'complete', payload.elements.length ? 'snapshot_ready' : 'empty_response', snapshot);
+  } catch (error) {
+    const reason = controller.signal.aborted || error?.name === 'AbortError' ? 'timeout' :
+      stage === 'parse' ? 'invalid_json' : stage === 'classify' ? 'classification_error' : 'network_error';
+    return finish('unavailable', stage, reason);
+  } finally { clearTimeout(timeout); }
 }
 
 function simpleRing(polygon) {
@@ -230,4 +301,4 @@ function snapshotFromElements(selectedBoundary, rawElements, provenance = {}) {
 }
 
 module.exports = {MAX_QUERY_AREA_SQUARE_METERS, QUERY_TIMEOUT_MILLISECONDS,
-  fetchSnapshot, snapshotFromElements, targetKind, landKind, elementPolygons, representativePoint};
+  fetchSnapshot, snapshotFromElements, targetKind, landKind, elementPolygons, representativePoint, simpleRing};

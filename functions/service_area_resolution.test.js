@@ -208,6 +208,56 @@ test("Census fallback supports city and ZCTA identities with honest source metad
   }
 });
 
+test("ZCTA fallback avoids absent STATE/COUNTY fields and retains Census boundary provenance", async () => {
+  // Official TIGER layer 1 metadata and same-point live query, 2026-09-26:
+  // STATE/COUNTY are absent; requesting them gives HTTP 200 with error 400.
+  const zip = {display_name: "21061, Anne Arundel County, Maryland, United States",
+    lat: "39.1550682", lon: "-76.6314933", type: "postcode", addresstype: "postcode",
+    address: {postcode: "21061", county: "Anne Arundel County", state: "Maryland"}};
+  const layerFields = new Set(["OID", "ZCTA5", "GEOID", "BASENAME", "LSADC", "NAME",
+    "ZCTA5CC", "MTFCC", "FUNCSTAT", "AREALAND", "AREAWATER", "STGEOMETRY", "CENTLAT",
+    "CENTLON", "INTPTLAT", "INTPTLON", "HU100", "POP100", "OBJECTID"]);
+  const requests = [], db = fakeDb();
+  const response = await resolvePlace({query: "21061", db, now: 1000,
+    baseUrl: "https://nominatim.test", tigerBase: "https://tiger.test", fetchImpl: async url => {
+      if (url.hostname === "nominatim.test") return {ok: true, json: async () => [zip]};
+      requests.push(url);
+      const unsupported = url.searchParams.get("outFields").split(",").some(field => !layerFields.has(field));
+      return {ok: true, json: async () => unsupported ? {error: {code: 400, message: "Failed to execute query."}} :
+        {type: "FeatureCollection", features: [{properties: {GEOID: "21061"}, geometry: county.geojson}]}};
+    }});
+  assert.equal(requests.length, 1);
+  assert.match(requests[0].pathname, /PUMA_TAD_TAZ_UGA_ZCTA\/MapServer\/1\/query$/);
+  assert.equal(requests[0].searchParams.get("geometry"), "-76.6314933,39.1550682");
+  assert.equal(requests[0].searchParams.get("inSR"), "4326");
+  assert.equal(requests[0].searchParams.get("outSR"), "4326");
+  assert.equal(requests[0].searchParams.get("spatialRel"), "esriSpatialRelIntersects");
+  assert.equal(response.results[0].geographicId, "21061");
+  assert.equal(response.results[0].resolutionSource, "us_census_tigerweb");
+  assert.equal(response.results[0].sourceVintage, "2020 Census ZCTA");
+  assert.deepEqual(response.results[0].geometry, normalizeGeoJson(county.geojson).geometry);
+  const cached = [...db.values.values()].find(value => value.cacheVersion === CACHE_VERSION);
+  assert.equal(decodeCacheDocument(cached)[0].sourceVintage, "2020 Census ZCTA");
+  assert.equal(cached.expiresAtMs, 1000 + CACHE_TTL_MS);
+});
+
+test("ZCTA provider query errors remain unresolved without fabricated or negative-cached boundaries", async () => {
+  const db = fakeDb(); let calls = 0;
+  const response = await resolvePlace({query: "21061", db, now: 1000,
+    baseUrl: "https://nominatim.test", tigerBase: "https://tiger.test", fetchImpl: async url => {
+      calls += 1;
+      return {ok: true, json: async () => url.hostname === "nominatim.test" ? [{
+        display_name: "21061, Anne Arundel County, Maryland, United States",
+        lat: "39.1550682", lon: "-76.6314933", type: "postcode", addresstype: "postcode",
+      }] : {error: {code: 400, message: "Failed to execute query."}}};
+    }});
+  assert.equal(calls, 2);
+  assert.equal(response.results[0].geometry.length, 0);
+  assert.equal(response.results[0].resolutionSource, "openstreetmap_nominatim");
+  assert.equal(response.results[0].sourceVintage, "");
+  assert.equal([...db.values.values()].some(value => value.cacheVersion === CACHE_VERSION), false);
+});
+
 test('normal complete street input gets one same-address formatting fallback without invented results', async()=>{
  const {addressQueryVariants}=require('./service_area_resolution');
  const input='466 long towne ct glen burnie maryland 21061';

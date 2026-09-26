@@ -4576,6 +4576,14 @@ function smartZoneAnchor(campaign = {}) {
 }
 
 async function smartZoneSelectedArea(request, campaign) {
+  let analysisBoundary;
+  try { analysisBoundary = smartZoneEntryContract.normalizeAnalysisBoundary(request.data?.analysisBoundary); }
+  catch (_) { throw new HttpsError("invalid-argument", "Draw a simple area without crossing or retracing its boundary."); }
+  if (analysisBoundary) {
+    return {geometry: analysisBoundary, name: "Drawn analysis area",
+      source: "explicit_drawn_analysis", boundaryKind: "drawn_analysis_boundary",
+      resultId: "", resolutionVersion: ""};
+  }
   let selection;
   try { selection = smartZoneEntryContract.normalizeAreaSelection(request.data?.areaSelection); }
   catch (_) { throw new HttpsError("invalid-argument", "Choose a valid campaign area."); }
@@ -4601,6 +4609,10 @@ async function smartZoneSelectedArea(request, campaign) {
     if (selected.geometry.length >= 3) {
       return {...selected, source: "explicit_server_resolved_area",
         boundaryKind: "mapped_place_boundary"};
+    }
+    if (!selected.canUseAddressRadius) {
+      return {...selected, geometry: [], source: "explicit_server_resolved_location",
+        boundaryKind: "unresolved_place_boundary"};
     }
     const desiredHours = Math.max(1, Math.min(192, Number(request.data?.desiredHours || 5)));
     const spanMeters = Math.max(450, Math.min(5000, 600 * Math.sqrt(desiredHours / 5)));
@@ -4644,10 +4656,12 @@ async function smartZoneCampaign(request) {
     throw new HttpsError("failed-precondition", "Smart Zone planning is available before funding.");
   }
   const selectedArea = await smartZoneSelectedArea(request, campaign);
-  const anchor = smartZoneAnchor({serviceArea: selectedArea.geometry});
+  const anchor = smartZoneAnchor({serviceArea: selectedArea.geometry}) || selectedArea.center;
   return {context, campaignId, reference, campaign, anchor, selectedArea,
     selectedBoundary: selectedArea.geometry,
-    sourceAreaDigest: operations.zoneGeometryDigest(selectedArea.geometry)};
+    sourceAreaDigest: selectedArea.geometry.length >= 3 ? operations.zoneGeometryDigest(selectedArea.geometry) :
+      crypto.createHash("sha256").update(JSON.stringify({unresolvedResultId: selectedArea.resultId,
+        center: selectedArea.center})).digest("hex")};
 }
 
 function smartZonePlanArguments(input, desiredHours, geographicSnapshot) {
@@ -4668,10 +4682,52 @@ function smartZonePlanArguments(input, desiredHours, geographicSnapshot) {
 
 async function generateSmartZonePlan(input, desiredHours) {
   desiredHours = smartZoneEntryContract.workloadHours(desiredHours);
+  let geographicAcquisition = null;
   const geographicSnapshot = await smartZoneGeography.fetchSnapshot({
-    selectedBoundary: input.selectedBoundary, endpoint: OVERPASS_URL});
-  return {plan: smartZonePlanning.generatePlan(
-    smartZonePlanArguments(input, desiredHours, geographicSnapshot)), geographicSnapshot};
+    selectedBoundary: input.selectedBoundary, endpoint: OVERPASS_URL,
+    onDiagnostic: diagnostic => { geographicAcquisition = diagnostic; }});
+  let plan = smartZonePlanning.generatePlan(
+    smartZonePlanArguments(input, desiredHours, geographicSnapshot));
+  if (input.selectedArea?.boundaryKind === "unresolved_place_boundary") {
+    const explanation = "This location was found, but its full mapped boundary is unavailable. Your saved territory is unchanged. Choose Adjust Area to draw a smaller analysis area, or select a specific street address or mapped neighborhood.";
+    plan = {...plan, reasonCode: "selected_area_boundary_unavailable", explanation,
+      quality: {...plan.quality, reasons: [explanation]}};
+  } else if (geographicAcquisition?.status === "unavailable") {
+    const explanation = geographicAcquisition.reasonCode === "provider_partial_response" ?
+      "The map source returned incomplete data. A recommendation is unavailable until targets, streets and exclusion areas can all be checked. Your selected area is unchanged." :
+      "The map source could not be retrieved for this selection. This does not mean the area has no mapped targets. Your selected area is unchanged; you can adjust it or try again later.";
+    plan = {...plan, reasonCode: "geographic_source_unavailable", explanation,
+      quality: {...plan.quality, reasons: [explanation]}};
+  }
+  if (!geographicSnapshot) plan = {...plan, targetEvidence: {...plan.targetEvidence,
+    eligibleMappedFeatureCount: null, observedEligibleFeatureCount: null, roadSupportedTargetCount: null}};
+  const planningExclusions = geographicSnapshot ? {} : null;
+  if (geographicSnapshot) {
+    const serviceability = require('./smart_zone_serviceability');
+    for (const feature of geographicSnapshot.landFeatures || []) {
+      if (serviceability.excluded(feature.kind, plan.targetEvidence.targetIntent)) {
+        planningExclusions[feature.kind] = (planningExclusions[feature.kind] || 0) + 1;
+      }
+    }
+  }
+  // Record bounded acquisition facts, not credentials, full provider payloads,
+  // customer identifiers or raw provider error pages. A zero selected count is
+  // not proof that the provider successfully returned an empty inventory.
+  logger.info("Smart Zone planning evidence", {
+    acquisition: geographicAcquisition,
+    selectionSource: input.selectedArea?.source || null,
+    boundaryKind: input.selectedArea?.boundaryKind || null,
+    sourceAreaDigest: input.sourceAreaDigest,
+    targetIntent: plan.targetEvidence?.targetIntent || null,
+    planningExclusionCountsByKind: planningExclusions,
+    recommendationStatus: plan.recommendationStatus,
+    reasonCode: plan.reasonCode,
+    observedEligibleFeatureCount: plan.targetEvidence?.observedEligibleFeatureCount ?? null,
+    roadSupportedTargetCount: plan.targetEvidence?.roadSupportedTargetCount ?? null,
+    selectedCandidateFeatureCount: plan.totalEstimatedProperties,
+    candidateCount: plan.zones.length,
+  });
+  return {plan: {...plan, geographicAcquisition}, geographicSnapshot};
 }
 
 exports.getSmartZonePlan = onCall(

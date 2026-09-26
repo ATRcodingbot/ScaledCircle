@@ -7,8 +7,10 @@ bool smartZonePlanCanApply(Map<String, dynamic> plan) =>
     plan['targetEvidence']['measure'] == 'mapped_target_features';
 
 String smartZoneEvidenceQuality(Map<String, dynamic> item) =>
-    item['targetEvidence'] is Map &&
-        item['targetEvidence']['measure'] == 'mapped_target_features'
+    item['recommendationStatus'] == 'manual_review_required'
+    ? 'Manual review required'
+    : item['targetEvidence'] is Map &&
+          item['targetEvidence']['measure'] == 'mapped_target_features'
     ? 'Review Recommended Area'
     : 'Basic Area Estimate';
 
@@ -21,6 +23,26 @@ class SmartZoneRecommendationEvidence extends StatelessWidget {
         ? plan['targetEvidence'] as Map
         : const {};
     final supported = evidence['measure'] == 'mapped_target_features';
+    final acquisition = plan['geographicAcquisition'] is Map
+        ? plan['geographicAcquisition'] as Map
+        : const {};
+    // Old successful plans may omit acquisition metadata. An explicit missing
+    // source or failed acquisition cannot establish a measured target count.
+    final providerAvailable =
+        (!plan.containsKey('geographicSource') ||
+            plan['geographicSource'] != null) &&
+        (acquisition['status'] == null || acquisition['status'] == 'success');
+    final sourceDate =
+        evidence['dataTimestamp'] ?? acquisition['sourceDataTimestamp'];
+    final retrievedAt = evidence['fetchedAt'] ?? acquisition['fetchedAt'];
+    final recommendedZones = plan['zones'] is List
+        ? plan['zones'] as List
+        : const [];
+    final hasRecommendedInventory =
+        supported &&
+        providerAvailable &&
+        plan['recommendationStatus'] != 'manual_review_required' &&
+        recommendedZones.isNotEmpty;
     final quality = plan['quality'] is Map ? plan['quality'] as Map : const {};
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -29,17 +51,30 @@ class SmartZoneRecommendationEvidence extends StatelessWidget {
           smartZoneEvidenceQuality(plan),
           style: Theme.of(context).textTheme.titleMedium,
         ),
-        if (supported && evidence['eligibleMappedFeatureCount'] is num)
+        if (hasRecommendedInventory &&
+            evidence['eligibleMappedFeatureCount'] is num)
           Text(
             '${evidence['eligibleMappedFeatureCount']} mapped target features',
+          )
+        else if (supported)
+          Text(
+            providerAvailable
+                ? 'Target count for a recommended Zone is unavailable.'
+                : 'Target count unavailable.',
           ),
-        if (supported && plan['totalEstimatedHours'] is num)
+        if (hasRecommendedInventory && plan['totalEstimatedHours'] is num)
           Text('Estimated workload: ${plan['totalEstimatedHours']} hours'),
         if (supported) ...[
-          Text('Source: ${evidence['source'] ?? 'Not recorded'}'),
-          Text('Source date: ${evidence['dataTimestamp'] ?? 'Not recorded'}'),
-          if (evidence['fetchedAt'] != null)
-            Text('Retrieved: ${evidence['fetchedAt']}'),
+          if (providerAvailable)
+            Text('Source: ${evidence['source'] ?? 'Not recorded'}'),
+          if (providerAvailable || sourceDate != null)
+            Text(
+              '${providerAvailable ? 'Source date' : 'Incomplete source date'}: ${sourceDate ?? 'Not recorded'}',
+            ),
+          if (retrievedAt != null)
+            Text(
+              '${providerAvailable ? 'Retrieved' : 'Retrieval attempt'}: $retrievedAt',
+            ),
           const Text(
             'Mapped features are not verified accessible delivery points or a material quantity.',
           ),

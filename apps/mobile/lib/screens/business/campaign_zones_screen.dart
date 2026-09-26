@@ -26,6 +26,25 @@ bool campaignZonesCanContinue(Iterable<Map<String, dynamic>> zones) {
   );
 }
 
+Map<String, dynamic> smartZoneRecommendationRequest({
+  required String campaignId,
+  double desiredHours = 5,
+  AddressSuggestion? selectedArea,
+  List<Map<String, double>>? analysisBoundary,
+}) => {
+  'campaignId': campaignId,
+  'desiredHours': desiredHours,
+  if (analysisBoundary != null)
+    'analysisBoundary': analysisBoundary
+        .map((point) => Map<String, double>.from(point))
+        .toList()
+  else if (selectedArea != null)
+    'areaSelection': {
+      'query': selectedArea.fullAddress,
+      'resultId': selectedArea.id,
+    },
+};
+
 // One campaign may legitimately span many worker-sized territories. The
 // server remains authoritative for the 6-hour per-Zone and 32-Zone practical
 // launch ceilings; worker supply never shrinks the Business-selected area.
@@ -329,23 +348,21 @@ class _CampaignZonesScreenState extends State<CampaignZonesScreen> {
     }
   }
 
-  Future<void> _reviewSmartZonePlan(
+  Future<CampaignAreaRecommendationResult?> _reviewSmartZonePlan(
     BuildContext context, {
     AddressSuggestion? selectedArea,
     double desiredHours = 5,
+    List<Map<String, double>>? analysisBoundary,
   }) async {
     final messenger = ScaffoldMessenger.of(context);
     try {
       final functions = FirebaseFunctions.instanceFor(region: 'us-east1');
-      final request = <String, dynamic>{
-        'campaignId': campaign.id,
-        'desiredHours': desiredHours,
-        if (selectedArea != null)
-          'areaSelection': {
-            'query': selectedArea.fullAddress,
-            'resultId': selectedArea.id,
-          },
-      };
+      final request = smartZoneRecommendationRequest(
+        campaignId: campaign.id,
+        desiredHours: desiredHours,
+        selectedArea: selectedArea,
+        analysisBoundary: analysisBoundary,
+      );
       final response = await functions
           .httpsCallable('getSmartZonePlan')
           .call(request);
@@ -359,7 +376,7 @@ class _CampaignZonesScreenState extends State<CampaignZonesScreen> {
         plan['compensation'] as Map? ?? const {},
       );
       final canApply = smartZonePlanCanApply(plan);
-      if (!context.mounted) return;
+      if (!context.mounted) return null;
       var selectedZoneIndex = 0;
       var useRecommendedPay = false;
       var routeReviewed = false;
@@ -590,7 +607,7 @@ class _CampaignZonesScreenState extends State<CampaignZonesScreen> {
           ),
         ),
       );
-      if (!context.mounted) return;
+      if (!context.mounted) return null;
       if (accepted == false) {
         final proposed = zones.isEmpty
             ? plan['selectedTerritory']
@@ -604,15 +621,18 @@ class _CampaignZonesScreenState extends State<CampaignZonesScreen> {
               },
             )
             .toList();
+        if (analysisBoundary != null) {
+          return CampaignAreaRecommendationResult.adjust(points);
+        }
         await _createZone(
           context,
           skipNamePrompt: true,
           searchArea: selectedArea ?? _mapContext.selectedArea,
           initialArea: points,
         );
-        return;
+        return null;
       }
-      if (accepted != true || !canApply) return;
+      if (accepted != true || !canApply) return null;
       await functions.httpsCallable('applySmartZonePlan').call({
         ...request,
         'planId': plan['planId'],
@@ -629,8 +649,9 @@ class _CampaignZonesScreenState extends State<CampaignZonesScreen> {
           ),
         ),
       );
+      return const CampaignAreaRecommendationResult.applied();
     } on FirebaseFunctionsException catch (error) {
-      if (!context.mounted) return;
+      if (!context.mounted) return null;
       messenger.showSnackBar(
         SnackBar(
           content: Text(
@@ -641,6 +662,7 @@ class _CampaignZonesScreenState extends State<CampaignZonesScreen> {
         ),
       );
     }
+    return null;
   }
 
   Future<String?> _askForZoneName(
@@ -780,6 +802,8 @@ class _CampaignZonesScreenState extends State<CampaignZonesScreen> {
                 ? _serviceAreaBoundary
                 : const [],
             materialQuantity: _materialQuantity,
+            recommendWithinArea: (areaContext, boundary) =>
+                _reviewSmartZonePlan(areaContext, analysisBoundary: boundary),
           ),
         ),
       );

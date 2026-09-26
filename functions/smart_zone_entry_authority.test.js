@@ -16,13 +16,14 @@ test("Smart Zone entry keeps role, ownership, entitlement, and draft gates", () 
   assert.match(contract, /campaign\.status \|\| "draft"/);
 });
 
-test("explicit area is server resolved and client geometry is never read", () => {
+test("place selection is server resolved; explicit analysis boundary uses its separate validated contract", () => {
   const start = source.indexOf("async function smartZoneSelectedArea");
   const end = source.indexOf("function smartZonePlanArguments", start);
   const contract = source.slice(start, end);
   assert.match(contract, /serviceAreaResolution\.resolvePlace/);
   assert.match(contract, /selectResolvedArea/);
   assert.match(contract, /rectangleAround\(selected\.center/);
+  assert.match(contract, /normalizeAnalysisBoundary\(request\.data\?\.analysisBoundary\)/);
   assert.doesNotMatch(contract, /request\.data\?\.(geometry|serviceArea|selectedBoundary)/);
 });
 

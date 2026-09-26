@@ -151,9 +151,12 @@ async function censusBoundary(result, {fetchImpl, tigerBase = TIGER_BASE, deadli
   for (const layer of target.layers) {
     if (Date.now() >= deadline) break;
     const endpoint = new URL(`${tigerBase}/${target.service}/MapServer/${layer}/query`);
+    // ZCTAs are not nested within states/counties. Their TIGER layer has no
+    // STATE or COUNTY fields; requesting either returns an ArcGIS query error.
+    const outFields = result.geographyType === "zcta" ? "GEOID" : "GEOID,NAME,BASENAME,STATE,COUNTY,ZCTA5";
     const parameters = {where: "1=1", geometry: `${result.longitude},${result.latitude}`,
       geometryType: "esriGeometryPoint", inSR: "4326", spatialRel: "esriSpatialRelIntersects",
-      outFields: "GEOID,NAME,BASENAME,STATE,COUNTY,ZCTA5", returnGeometry: "true", outSR: "4326", f: "geojson"};
+      outFields, returnGeometry: "true", outSR: "4326", f: "geojson"};
     Object.entries(parameters).forEach(([key, value]) => endpoint.searchParams.set(key, value));
     let payload; try { payload = await fetchJson(endpoint, fetchImpl, {Accept: "application/geo+json, application/json"}, deadline); } catch (_) { continue; }
     const feature = Array.isArray(payload?.features) ? payload.features[0] : null;

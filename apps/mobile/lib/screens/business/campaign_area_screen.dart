@@ -19,6 +19,17 @@ import '../../services/property_intelligence_service.dart';
 import '../../services/scaled_circle_intelligence_service.dart';
 import '../../widgets/property_intelligence_panel.dart';
 
+class CampaignAreaRecommendationResult {
+  const CampaignAreaRecommendationResult.adjust(this.adjustedBoundary)
+    : applied = false;
+  const CampaignAreaRecommendationResult.applied()
+    : adjustedBoundary = null,
+      applied = true;
+
+  final List<Map<String, dynamic>>? adjustedBoundary;
+  final bool applied;
+}
+
 class CampaignAreaScreen extends StatefulWidget {
   final DocumentReference campaignReference;
   final Map<String, dynamic>? pendingZoneData;
@@ -37,6 +48,11 @@ class CampaignAreaScreen extends StatefulWidget {
     List<Map<String, double>> geometry,
   )?
   analyzeGeometry;
+  final Future<CampaignAreaRecommendationResult?> Function(
+    BuildContext context,
+    List<Map<String, double>> boundary,
+  )?
+  recommendWithinArea;
 
   const CampaignAreaScreen({
     super.key,
@@ -52,6 +68,7 @@ class CampaignAreaScreen extends StatefulWidget {
     this.mapController,
     this.analyzePersistedZone,
     this.analyzeGeometry,
+    this.recommendWithinArea,
   });
 
   @override
@@ -71,6 +88,7 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
   CampaignAreaShape _selectedShape = CampaignAreaShape.polygon;
 
   bool _saving = false;
+  bool _recommending = false;
   bool _loadingExistingArea = true;
   bool _hasLoadedExistingArea = false;
   bool _mappingLocked = false;
@@ -575,6 +593,47 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
       ..addAll(previous.input);
     _generatedArea = List.of(previous.area);
     _hasLoadedExistingArea = previous.loaded;
+  }
+
+  Future<void> _recommendWithinArea() async {
+    final recommend = widget.recommendWithinArea;
+    if (recommend == null || _recommending || !_isAreaValid()) return;
+    final revision = _geometryRevision;
+    final geometry = _generatedArea
+        .map((p) => <String, double>{'lat': p.latitude, 'lng': p.longitude})
+        .toList();
+    setState(() => _recommending = true);
+    try {
+      final result = await recommend(context, geometry);
+      if (!mounted) return;
+      if (result?.applied == true) {
+        // Apply owns persistence. This pending Zone must never enter the
+        // caller's separate Save Zone path.
+        Navigator.pop(context, false);
+        return;
+      }
+      if (revision != _geometryRevision) return;
+      final adjusted = _parsePoints(result?.adjustedBoundary);
+      if (adjusted.length < 3 ||
+          !CampaignFreehandGeometry.finish(adjusted).isValid) {
+        return;
+      }
+      final previous = _captureDrawing();
+      setState(() {
+        _freehandUndo = previous;
+        _selectedShape = CampaignAreaShape.polygon;
+        _advancedDrawing = false;
+        _inputPoints
+          ..clear()
+          ..addAll(adjusted);
+        _generatedArea = List.of(adjusted);
+        _hasLoadedExistingArea = false;
+        _freehandError = null;
+        _geometryChanged();
+      });
+    } finally {
+      if (mounted) setState(() => _recommending = false);
+    }
   }
 
   Future<void> _beginFreehand() async {
@@ -1875,10 +1934,35 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
 
                       const SizedBox(height: 10),
 
+                      if (widget.recommendWithinArea != null) ...[
+                        const Text(
+                          'Preview a recommendation inside this boundary. '
+                          'Your saved territory stays unchanged until you use a recommendation or save this area.',
+                        ),
+                        const SizedBox(height: 8),
+                        OutlinedButton.icon(
+                          onPressed:
+                              _saving ||
+                                  _recommending ||
+                                  _mappingLocked ||
+                                  _drawingFreehand ||
+                                  !_isAreaValid()
+                              ? null
+                              : _recommendWithinArea,
+                          icon: const Icon(Icons.auto_awesome_outlined),
+                          label: Text(
+                            _recommending
+                                ? 'Reviewing this area...'
+                                : 'Recommend within this area',
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                      ],
+
                       SizedBox(
                         width: double.infinity,
                         child: TextButton(
-                          onPressed: _saving
+                          onPressed: _saving || _recommending
                               ? null
                               : () => Navigator.pop(context, false),
                           child: const Text('Cancel'),
@@ -1900,6 +1984,7 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
                         child: ElevatedButton.icon(
                           onPressed:
                               _saving ||
+                                  _recommending ||
                                   _mappingLocked ||
                                   _drawingFreehand ||
                                   !_isAreaValid()

@@ -35,6 +35,25 @@ test("a resolved street address may use its server point for an around-address b
   );
   assert.deepEqual(selected.center, {latitude: 39.29, longitude: -76.61});
   assert.deepEqual(selected.geometry, []);
+  assert.equal(selected.canUseAddressRadius, true);
+});
+
+test('ZIP and place results without a boundary cannot become an address square', () => {
+  for (const geographyType of ['zcta', 'postcode', 'city', 'county', 'suburb', 'neighbourhood']) {
+    const selected = contract.selectResolvedArea(
+      {query: '21061, Anne Arundel County, Maryland, United States', resultId: 'place-unknown'},
+      {results: [{id: 'place-unknown', latitude: 39.1550682, longitude: -76.6314933,
+        geometry: [], geographyType, bounds: {south: 39.11, north: 39.20, west: -76.69, east: -76.57}}]});
+    assert.equal(selected.canUseAddressRadius, false);
+    assert.deepEqual(selected.geometry, []);
+    assert.equal(selected.geographyType, geographyType);
+    assert.equal(selected.bounds.south, 39.11);
+  }
+  assert.equal(contract.isExplicitStreetAddress('21061'), false);
+  assert.equal(contract.isExplicitStreetAddress('21061, Maryland'), false);
+  assert.equal(contract.isExplicitStreetAddress('Glen Burnie'), false);
+  assert.equal(contract.isExplicitStreetAddress('100 Main Street'), true);
+  assert.equal(contract.isExplicitStreetAddress('100 Main Street', {geographyType: 'zcta'}), false);
 });
 
 test('workload request preserves the maintained half-hour to 192-hour range and useful errors',()=>{
