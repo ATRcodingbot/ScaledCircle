@@ -25,3 +25,11 @@ Map operation requires workspace/campaign viewing authority and matching ownersh
 Campaign → Area → Materials ordering, explicit own-team scheduling, type-aware material recommendations and geographic completion history/12-month overlap warning are not certified by this checkpoint. No campaign execution-mode or financial gate change is bundled here.
 
 Native frozen checkout/source, existing internal binaries, financial controls and provider sending remain unchanged. No production email send is authorized.
+
+## Production promotion and readback
+
+Application/web implementation commit: d999fee. Narrow overlays were compared against the actual deployed source before replacement; changed base files matched the retained git parent. Only businessOperationsV1 and businessEmailOperationsV1 were updated. Active revisions: businessoperationsv1-00009-xel and businessemailoperationsv1-00032-tiy. Environment variables, secret bindings, service accounts, memory, ingress and timeouts matched the prior revisions. Callback was not redeployed. Firebase Hosting promotion completed.
+
+Mike's actual authenticated Customers tab showed Import CSV, Export all contacts CSV, Export filtered CSV, source review and receipt controls. Export all downloaded C:/Users/Greg/Downloads/scaledcircle-contacts-2026-09-26.csv: 526 bytes, UTF-8 BOM, 29 expected columns, zero contact rows matching the truthful empty workspace. Python CSV reader opened it successfully. This proves production download, not production import of a real customer list; that remains held for the intended CSV. Browser's download-event waiter timed out even though the actual file was saved; local file verification and UI Downloaded 0 contacts resolved that tooling discrepancy.
+
+Final focused analyzer: clean. No native compile, release upload, email send, OAuth initiation, campaign creation or money movement performed.
