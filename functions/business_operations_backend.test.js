@@ -191,3 +191,17 @@ test('email thread links require exact Business and customer; recorded estimates
  const events=(await db.collection(`businessMailboxes/${b}/outcomes`).get()).docs.map(d=>d.data());assert.equal(events.length,2);assert.ok(events.every(e=>e.businessId===b&&e.revenueVerified===false));
  const timeline=await call(b,'timeline',{customerId:c.customerId});assert.ok(timeline.events.some(e=>e.kind==='email_sent'));assert.equal(timeline.revenue,'Not verified');
 });
+
+test('customer edits preserve restrictions and provenance; writable model rejects consent injection',async()=>{
+ const b=await owner();const saved=await customer(b);const ref=db.doc(`businessOperations/${b}/customers/${saved.customerId}`);
+ const maintained={doNotContact:true,sourceRef:{kind:'owner_recorded',reference:'fixture'},lastInboundAt:123};await ref.update(maintained);
+ await call(b,'saveCustomer',{customerId:saved.customerId,expectedVersion:1,customer:{name:'Edited name',email:'client'+b+'@example.test'}});
+ const after=(await ref.get()).data();for(const k of Object.keys(maintained))assert.deepEqual(after[k],maintained[k]);
+ await assert.rejects(call(b,'saveCustomer',{customerId:saved.customerId,expectedVersion:2,customer:{name:'Edited name',consent:true}}),{code:'invalid-argument'});
+});
+test('same email in two tenants stays separate and foreign customer edit is denied',async()=>{
+ const a=await owner(),b=await owner();const ca=await customer(a,{email:'shared@example.test'});const cb=await customer(b,{email:'shared@example.test'});
+ assert.notEqual(ca.customerId,cb.customerId);
+ await assert.rejects(call(a,'saveCustomer',{customerId:ca.customerId,expectedVersion:1,customer:{name:'Intruder'}},b),{code:'permission-denied'});
+ await assert.rejects(customer(a,{name:'Duplicate',email:'SHARED@example.test'}),{code:'already-exists'});
+});

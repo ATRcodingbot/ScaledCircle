@@ -70,3 +70,21 @@ test('unsubscribe link GET is read-only; confirmation is idempotent, tenant-boun
  assert.equal((await db.collection('businessMailboxes/owner/contactHistory').where('action','==','unsubscribed').get()).size,1);
  await assert.rejects(unsubscribe('bad'));await assert.rejects(unsubscribe('b'.repeat(43)));await assert.rejects(draft({expectedVersion:1}));assert.equal(sends,0);
 });
+
+test('reimport cannot remove maintained suppression or grant consent; changed source remains provenance',async()=>{
+ await importRows();await call('restrictCampaignContact',{candidateId:hash('one@example.test'),reason:'unsubscribed'});
+ const before=(await db.collection('businessMailboxes/owner/suppression').get()).docs.map(d=>d.data());
+ await importRows([contact('Changed display name')]);const state=await call('loadCampaigns');
+ assert.equal(state.candidates.length,1);assert.equal(state.candidates[0].name,'One');assert.equal(state.candidates[0].reviewedForSend,false);
+ assert.deepEqual((await db.collection('businessMailboxes/owner/suppression').get()).docs.map(d=>d.data()),before);
+ await assert.rejects(draft());assert.equal(sends,0);
+});
+test('malformed row batch validates before writes and rejects injected outreach authority',async()=>{
+ await assert.rejects(importRows([contact(),contact('Bad','not-an-email')]),{code:'invalid-argument'});
+ await assert.rejects(importRows([{...contact(),consent:true}]),{code:'invalid-argument'});
+ assert.equal((await call('loadCampaigns')).candidates.length,0);assert.equal(sends,0);
+});
+test('unauthorized import cannot create contacts in owner workspace',async()=>{
+ await assert.rejects(call('importCampaignWorkbook',{sourceName:'test.csv',contacts:[contact()]},'other'),{code:'permission-denied'});
+ assert.equal((await db.collection('businessMailboxes/owner/campaignCandidates').get()).size,0);
+});
