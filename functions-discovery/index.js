@@ -6,6 +6,8 @@ const { onCall, onRequest, HttpsError } = require("firebase-functions/v2/https")
 const { onDocumentCreated, onDocumentUpdated, onDocumentWritten, onDocumentWrittenWithAuthContext } = require("firebase-functions/v2/firestore");
 
 
+const { defineSecret } = require("firebase-functions/params");
+const CENSUS_API_KEY = defineSecret("CENSUS_API_KEY");
 const { initializeApp, getApp } = require("firebase-admin/app");
 const { getAuth } = require("firebase-admin/auth");
 
@@ -4789,18 +4791,11 @@ async function generateSmartZonePlan(input, desiredHours) {
   desiredHours = smartZoneEntryContract.workloadHours(desiredHours);
   const intelligence = require('./smart_zone_intelligence');
   const args = smartZonePlanArguments(input, desiredHours, null);
-  // Reuse only fresh, geometry-bound neutral PI evidence. This path neither
-  // invokes a property provider/model nor upgrades complimentary usage rights.
-  const loadPropertyAnalysis = async geometry => {
-    try {
-      const digest = propertyIntelligence.geometryDigest(propertyIntelligence.validateGeometry(geometry));
-      const id = crypto.createHash("sha256").update(
-        `${propertyIntelligence.ANALYSIS_VERSION}:${propertyIntelligence.DATA_SOURCE_BUNDLE_VERSION}:${digest}`).digest("hex");
-      const cached = (await db.collection(PROPERTY_INTELLIGENCE_CACHE_COLLECTION).doc(id).get()).data();
-      return propertyIntelligence.cacheIsReusable(cached, {digest}) ?
-        {...cached.analysis, analysisId: id, geometryDigest: digest} : null;
-    } catch (_) { return null; }
-  };
+  // The maintained PI analyzer/cache is the primary evidence source. Only Get
+  // may acquire public property evidence; Apply replays the authorized run.
+  const loadPropertyAnalysis = input.cachedRecommendation ? null :
+    require('./property_service_area_runtime').createAnalyzer({db,
+      FieldValue, apiKey: CENSUS_API_KEY.value(), budgetMs: 45000});
   const record = input.cachedRecommendation || await require('./smart_zone_intelligence_runtime').createRuntime({db}).obtain(
     {...input.cacheAuthority, selectedArea: input.selectedArea, sourceAreaDigest: input.sourceAreaDigest},
     () => intelligence.search(args, {fetchSnapshot: smartZoneGeography.fetchSnapshot,
@@ -4815,7 +4810,7 @@ async function generateSmartZonePlan(input, desiredHours) {
 }
 
 exports.getSmartZonePlan = onCall(
-  {enforceAppCheck: false, maxInstances: 10, timeoutSeconds: 180},
+  {enforceAppCheck: false, maxInstances: 10, timeoutSeconds: 180, secrets: [CENSUS_API_KEY]},
   businessOperation("getSmartZonePlan", async (request) => {
     if (stagingPhysicalQa.reserved(request.data?.campaignId)) {
       throw new HttpsError("failed-precondition", "The certification territory is server-bound.");

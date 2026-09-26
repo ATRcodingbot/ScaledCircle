@@ -115,7 +115,7 @@ void main() {
       await tester.enterText(
         find.widgetWithText(
           TextFormField,
-          'Desired customers or campaign goal',
+          'What kind of work are you looking for?',
         ),
         'Residential deck outreach',
       );
@@ -284,7 +284,10 @@ void main() {
           ),
         ),
       );
-      expect(find.text('Goal: Residential deck outreach'), findsOneWidget);
+      expect(
+        find.text('Looking for: Residential deck outreach'),
+        findsOneWidget,
+      );
       expect(find.text('Location: Glen Burnie / 21061'), findsOneWidget);
       expect(
         find.text('Estimated field workload: 44m (advisory)'),
@@ -324,6 +327,53 @@ void main() {
       expect(find.text('0 mapped target features'), findsNothing);
       expect(find.textContaining('Estimated field workload:'), findsNothing);
       expect(smartZonePlanCanApply(plan(valid: false)), false);
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
+
+  testWidgets(
+    'Property Intelligence survives map outage without Apply authority',
+    (tester) async {
+      final data = plan(valid: false);
+      data['explanation'] =
+          'Recommended based on Property Intelligence. Street-level planning data is limited here.';
+      final rec = data['recommendationContext'] as Map;
+      rec['propertyRecommendation'] = {
+        'sectionId': 'property-section',
+        'fit': 80,
+        'sections': [],
+      };
+      rec['why'] = ['Observed residential share only'];
+      rec['mapValidation'] = 'needs_review';
+      rec['planningConfidence'] = 'Limited';
+      await fixtures.surface(
+        tester,
+        Scaffold(
+          body: SingleChildScrollView(
+            child: SmartZoneRecommendationEvidence(plan: data),
+          ),
+        ),
+      );
+      expect(
+        find.textContaining('Recommended based on Property Intelligence'),
+        findsOneWidget,
+      );
+      expect(
+        find.textContaining('Observed residential share only'),
+        findsOneWidget,
+      );
+      expect(find.text('Map validation: Needs review'), findsOneWidget);
+      expect(find.text('Planning confidence: Limited'), findsOneWidget);
+      expect(
+        find.text('Estimated field workload: not established'),
+        findsOneWidget,
+      );
+      expect(find.text('0 mapped target features'), findsNothing);
+      expect(
+        find.textContaining("We couldn't find enough reliable data"),
+        findsNothing,
+      );
+      expect(smartZonePlanCanApply(data), false);
       await tester.pumpWidget(const SizedBox());
     },
   );

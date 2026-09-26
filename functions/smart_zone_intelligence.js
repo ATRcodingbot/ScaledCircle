@@ -8,7 +8,7 @@ const areas=require('./property_service_area_geometry');
 const property=require('./property_service_area_analysis');
 const planning=require('./smart_zone_planning');
 const serviceability=require('./smart_zone_serviceability');
-const VERSION='ScaleMarketingAreaSearchV1';
+const VERSION='ScaleMarketingAreaSearchV2';
 const MAX_WINDOWS=12,MAX_SEARCH_MS=150000,MAX_CANDIDATES=32,MAX_ALTERNATIVES=3;
 const FAIL_SAFE="We couldn't find enough reliable data to recommend an area here yet. You can still draw your own area.";
 const hash=value=>createHash('sha256').update(JSON.stringify(value)).digest('hex');
@@ -70,60 +70,70 @@ function groups(pool,requestedMinutes){
   return results;
 }
 async function search(args,{fetchSnapshot,endpoint,loadPropertyAnalysis=async()=>null,now=Date.now}={}){
-  const started=now(),selection=partition(args),diagnostics=[],candidates=[];
+  const started=now(),selection=partition(args),diagnostics=[],candidates=[],propertyCandidates=[];
   const workType=effectiveWorkType(args),targetIntent=serviceability.intent(workType);
   const result={version:VERSION,sourceAreaDigest:args.sourceAreaDigest,contextVersion:args.contextVersion,
     searchBoundary:args.selectedBoundary,startedAt:new Date(started).toISOString(),
     requestedHours:args.desiredHours,goal:args.intelligenceContext?.goal||'',targetIntent,
     totalWindowCount:selection.totalWindows||0,selectedWindowCount:selection.windows.length,
-    completedWindowCount:0,successfulWindowCount:0,fullSearchCoverage:false,
+    propertyExaminedCount:0,completedWindowCount:0,successfulWindowCount:0,fullSearchCoverage:false,
     eligibleRegionDiffers:selection.eligibleRegionDiffers===true,
-    candidates,diagnostics,reasonCode:selection.reason,observedFeatureCount:0,roadSupportedTargetCount:0};
+    candidates,propertyCandidates,diagnostics,reasonCode:selection.reason,observedFeatureCount:0,roadSupportedTargetCount:0};
   if(selection.reason||!['residential','business'].includes(targetIntent)){
     result.reasonCode=selection.reason||'unsupported_target_intent';return result;
   }
-  const observed=new Set(),roadSupported=new Set(),candidateFeatures=new Set();
+  // The same maintained Property Intelligence scorer runs before any map request.
+  // The provider adapter owns its time budget; cache hits remain inexpensive.
   for(const window of selection.windows){
-    // Reserve a full maintained 12-second provider deadline before each call;
-    // never race an unbounded promise whose work continues after return.
     if(now()-started>MAX_SEARCH_MS-12000){result.reasonCode='bounded_search_time_budget';break;}
+    let analysis=null;
+    try{analysis=await loadPropertyAnalysis(window.geometry);}catch(_){/* retain an explicit unavailable section */}
+    const ranking=property.rankPropertySection({analysis,geometry:window.geometry,
+      context:{...args.intelligenceContext,targetIntent}});
+    result.propertyExaminedCount++;
+    const row={windowId:window.id,areaSquareMeters:Math.round(planning.polygonAreaSquareMeters(window.geometry)),
+      propertyStatus:Number.isFinite(ranking.fit)?'ranked':'unavailable',
+      propertyLimitations:ranking.limitations,propertyEvidence:ranking.evidence||null,
+      status:'not_requested',diagnostic:null};
+    diagnostics.push(row);
+    if(!Number.isFinite(ranking.fit))continue;
+    propertyCandidates.push({id:window.id,geometry:window.geometry,ranking,mapValidation:'not_requested',
+      mappedCandidateCount:0,supportedMinutes:null});
+  }
+  propertyCandidates.sort((a,b)=>b.ranking.fit-a.ranking.fit||a.id.localeCompare(b.id));
+  const observed=new Set(),roadSupported=new Set(),candidateFeatures=new Set();
+  for(const area of propertyCandidates){
+    if(now()-started>MAX_SEARCH_MS-12000){result.reasonCode='bounded_search_time_budget';break;}
+    const row=diagnostics.find(d=>d.windowId===area.id);
     let diagnostic=null,snapshot=null;
-    try{snapshot=await fetchSnapshot({selectedBoundary:window.geometry,endpoint,
+    try{snapshot=await fetchSnapshot({selectedBoundary:area.geometry,endpoint,
       onDiagnostic:value=>{diagnostic=value;}});}catch(_){diagnostic={status:'unavailable',reasonCode:'provider_request_failed'};}
     result.completedWindowCount++;
-    diagnostics.push({windowId:window.id,areaSquareMeters:Math.round(planning.polygonAreaSquareMeters(window.geometry)),
-      status:snapshot?'success':'unavailable',diagnostic,
+    Object.assign(row,{status:snapshot?'success':'unavailable',diagnostic,
       dataTimestamp:snapshot?.dataTimestamp||null,fetchedAt:snapshot?.fetchedAt||null});
-    if(!snapshot)continue;
+    if(!snapshot){area.mapValidation='needs_review';continue;}
     result.successfulWindowCount++;
-    const shaped=serviceability.shape({anchor:args.anchor||center(window.geometry),boundary:window.geometry,
+    const shaped=serviceability.shape({anchor:args.anchor||center(area.geometry),boundary:area.geometry,
       snapshot,workType,propertiesPerHour:45,desiredTargetLimit:5000,maximumZones:MAX_CANDIDATES,
       desiredMinutes:args.desiredHours*60},planning);
     for(const id of shaped.eligibleMappedSourceIds||[])observed.add(id);
     for(const id of shaped.roadSupportedSourceIds||[])roadSupported.add(id);
     result.roadSupportedTargetCount=roadSupported.size;
-    diagnostics.at(-1).planningReasons=shaped.reasons;
-    diagnostics.at(-1).eligibleMappedFeatureCount=shaped.eligibleMappedFeatureCount;
-    diagnostics.at(-1).roadSupportedTargetCount=shaped.roadSupportedTargetCount||0;
-    diagnostics.at(-1).candidateCount=shaped.candidates.length;
+    Object.assign(row,{planningReasons:shaped.reasons,eligibleMappedFeatureCount:shaped.eligibleMappedFeatureCount,
+      roadSupportedTargetCount:shaped.roadSupportedTargetCount||0,candidateCount:shaped.candidates.length});
+    const source={name:'OpenStreetMap',dataTimestamp:snapshot.dataTimestamp||null,fetchedAt:snapshot.fetchedAt||null,
+      freshness:snapshot.cacheEvidence?.freshness||'live',transport:snapshot.cacheEvidence?.transport||'overpass',
+      evidenceHash:snapshot.cacheEvidence?.evidenceHash||null};
+    area.mapValidation=shaped.candidates.length?(source.freshness==='stale'?'partial':'available'):'needs_review';
+    area.mapSource=source;
     for(const candidate of shaped.candidates){
-      // Whole candidate dedupe preserves its connected shape and valid evidence.
-      // Never delete overlapping targets then keep stale workload/geometry.
       const keys=candidate.features.map(featureKey);
-      if(keys.some(key=>candidateFeatures.has(key)))continue;
-      if(!areas.isContained(candidate.geometry,selection.region))continue;
-      let analysis=null;
-      if(now()-started<MAX_SEARCH_MS-12000){
-        try{analysis=await loadPropertyAnalysis(candidate.geometry);}catch(_){/* optional facts remain unavailable */}
-      }
-      const ranking=property.rankMarketingArea({candidate,snapshot,analysis,context:args.intelligenceContext});
-      if(!Number.isFinite(ranking.fit))continue;
+      if(keys.some(key=>candidateFeatures.has(key))||!areas.isContained(candidate.geometry,selection.region))continue;
       keys.forEach(key=>candidateFeatures.add(key));
       candidates.push({...candidate,features:candidate.features.map(f=>({id:f.id,kind:f.kind,
         latitude:f.latitude,longitude:f.longitude,observedTags:f.observedTags||{},timestamp:f.timestamp||null})),
-        id:hash([window.id,keys.sort(),candidate.geometry]).slice(0,24),ranking,
-        source:{name:'OpenStreetMap',dataTimestamp:snapshot.dataTimestamp||null,fetchedAt:snapshot.fetchedAt||null},
-        windowId:window.id});
+        id:hash([area.id,keys.sort(),candidate.geometry]).slice(0,24),ranking:area.ranking,
+        propertyAreaId:area.id,source,windowId:area.id});
       if(candidates.length>MAX_CANDIDATES){
         candidates.sort((a,b)=>b.ranking.fit-a.ranking.fit||a.id.localeCompare(b.id));
         candidates.pop();result.reasonCode='bounded_candidate_limit';
@@ -132,13 +142,46 @@ async function search(args,{fetchSnapshot,endpoint,loadPropertyAnalysis=async()=
   }
   result.observedFeatureCount=observed.size;
   candidates.sort((a,b)=>b.ranking.fit-a.ranking.fit||a.id.localeCompare(b.id));
-  while(candidates.length&&Buffer.byteLength(JSON.stringify(candidates),'utf8')>400*1024){
+  while(candidates.length&&Buffer.byteLength(JSON.stringify(candidates),'utf8')>350*1024){
     candidates.pop();result.reasonCode='bounded_candidate_limit';
+  }
+  for(const area of propertyCandidates){
+    const mapped=candidates.filter(c=>c.propertyAreaId===area.id);
+    area.mappedCandidateCount=mapped.length;
+    area.supportedMinutes=mapped.length?mapped.reduce((sum,c)=>sum+c.workload.estimatedMinutes,0):null;
   }
   result.fullSearchCoverage=selection.complete&&result.successfulWindowCount===selection.windows.length;
   result.finishedAt=new Date(now()).toISOString();
-  result.reasonCode ||= candidates.length?null:'insufficient_reliable_evidence';
+  result.reasonCode ||= candidates.length?null:propertyCandidates.length?'map_validation_limited':'property_evidence_unavailable';
   return result;
+}
+
+// Alternatives are distinct PI sections. Missing map data keeps the section
+// visible for review; it never grants Apply authority or invents workload.
+function propertyOptions(evidence,requestedMinutes){
+  const areas=[...(evidence.propertyCandidates||[])],used=new Set(),options=[];
+  for(const area of areas){
+    if(used.has(area.id)||options.length>=MAX_ALTERNATIVES)continue;
+    const selected=[],sections=[area];let minutes=0;
+    const same=evidence.candidates.filter(c=>c.propertyAreaId===area.id);
+    const available=same.length?[
+      ...same,
+      ...evidence.candidates.filter(c=>c.propertyAreaId!==area.id&&!used.has(c.propertyAreaId)&&
+        distance(center(area.geometry),center(c.geometry))<=3000)
+        .sort((a,b)=>b.ranking.fit-a.ranking.fit||a.id.localeCompare(b.id)),
+    ]:[];
+    for(const candidate of available){
+      if(minutes>=requestedMinutes||selected.length>=planning.MAX_ZONES_PER_CAMPAIGN)break;
+      const next=minutes+candidate.workload.estimatedMinutes;
+      if(selected.length&&next>requestedMinutes&&Math.abs(next-requestedMinutes)>=Math.abs(minutes-requestedMinutes))continue;
+      selected.push(candidate);minutes=next;
+      const section=areas.find(a=>a.id===candidate.propertyAreaId);
+      if(section&&!sections.some(a=>a.id===section.id))sections.push(section);
+    }
+    sections.forEach(a=>used.add(a.id));
+    options.push({primary:area,sections,selected});
+  }
+  return options;
 }
 function generate(args,evidence){
   if(!evidence||evidence.version!==VERSION||evidence.sourceAreaDigest!==args.sourceAreaDigest||
@@ -146,7 +189,9 @@ function generate(args,evidence){
     evidence.goal!==(args.intelligenceContext?.goal||''))throw Error('recommendation_context_changed');
   const alternativeIndex=args.alternativeIndex??0;
   if(!Number.isSafeInteger(alternativeIndex)||alternativeIndex<0||alternativeIndex>=MAX_ALTERNATIVES)throw Error('invalid_alternative');
-  const options=groups(evidence.candidates,args.desiredHours*60),selected=options[alternativeIndex]||[],usable=selected.length>0;
+  const options=propertyOptions(evidence,args.desiredHours*60),option=options[alternativeIndex];
+  const selected=option?.selected||[],sections=option?.sections||[],primary=option?.primary,usable=selected.length>0;
+  const ranked=!!primary,mapValidation=usable?(selected.some(c=>c.source.freshness==='stale')?'partial':'available'):'needs_review';
   const sourceDates=distinct(selected.map(c=>c.source.dataTimestamp)),retrievals=distinct(selected.map(c=>c.source.fetchedAt));
   const targetEvidence=(features,sourceCandidates=selected)=>{
     const dates=distinct(sourceCandidates.map(c=>c.source.dataTimestamp));
@@ -169,28 +214,38 @@ function generate(args,evidence){
       limitations:['Supporting street evidence only. Separate areas are not joined by an invented route.']},
     mappedRouteMeters:c.mappedRouteMeters,targetEvidence:targetEvidence(c.features,[c]),intelligence:c.ranking}));
   const features=selected.flatMap(c=>c.features),minutes=zones.reduce((s,z)=>s+z.workload.estimatedMinutes,0);
-  const limitations=distinct([...selected.flatMap(c=>c.ranking.limitations||[]),
+  const limitations=distinct([...sections.flatMap(c=>c.ranking.limitations||[]),
     !evidence.fullSearchCoverage?'Only successfully analyzed sections support this recommendation. Some of the search region remains unexamined or unavailable.':null,
     evidence.eligibleRegionDiffers?'Only the parts of the requested location inside your saved Business service areas were eligible for this search.':null,
     evidence.reasonCode==='bounded_candidate_limit'?'The review retains the strongest candidates within the bounded evidence limit; additional mapped candidates are not included.':null,
     usable&&minutes<args.desiredHours*60?`Available nearby evidence supports about ${minutes} minutes of advisory work, below the requested ${Math.round(args.desiredHours*60)} minutes.`:null,
     'Separate planning areas and street evidence are not an approved execution route.']);
-  const why=distinct(selected.flatMap(c=>c.ranking.reasons||[]));
-  if(alternativeIndex>0&&usable)why.unshift('This is a different eligible subarea from the same reviewed search; it ranks below the first selection on the disclosed evidence.');
+  const why=distinct(sections.flatMap(c=>c.ranking.reasons||[]));
+  if(alternativeIndex>0&&ranked)why.unshift(primary.ranking.fit===options[0].primary.ranking.fit?
+    'This is a different eligible section with the same supported Property Intelligence fit; the available signals do not distinguish a stronger fit.':
+    'This different eligible section has a lower Property Intelligence fit on the disclosed signals.');
+  const explanation=usable?'Property Intelligence identified this section; review its supported planning territory before use. No execution route or customer demand is established.':
+    ranked?'Recommended based on Property Intelligence. Street-level planning data is limited here, so review or adjust the boundary before launching.':
+    evidence.reasonCode==='property_evidence_unavailable'?(evidence.targetIntent==='business'?
+      'The maintained Property Intelligence evidence cannot yet rank commercial prospects here. You can draw your own area; residential housing data has not been substituted.':
+      'Property Intelligence could not establish a comparable service fit for these sections. Census neighborhood context alone cannot establish a practical outreach area. Choose another location or draw your own area.'):
+    FAIL_SAFE;
   const identity={version:VERSION,sourceAreaDigest:args.sourceAreaDigest,contextVersion:args.contextVersion,
     goal:evidence.goal,workType:args.workType,desiredHours:args.desiredHours,alternativeIndex,
     selected:selected.map(c=>({id:c.id,geometry:c.geometry,features:c.features,network:c.networkSegments,ranking:c.ranking})),
+    propertySections:sections.map(c=>({id:c.id,geometry:c.geometry,ranking:c.ranking})),
     compensation:[args.workerBasePayCents,args.completionBonusCents,args.qualityBonusCents]};
   return {planId:`scale-area_${hash(identity).slice(0,24)}`,label:'Recommended Marketing Area',anchor:args.anchor,
     selectedTerritory:args.selectedBoundary,plannedTerritory:zones.length===1?zones[0].geometry:null,
+    reviewTerritory:primary?.geometry||null,
     desiredHours:args.desiredHours,totalEstimatedProperties:usable?features.length:null,
     totalEstimatedMinutes:usable?minutes:null,totalEstimatedHours:usable?Number((minutes/60).toFixed(1)):null,
     recommendedScalerCount:zones.length,requiresSplit:zones.length>1,
     recommendationStatus:usable?'review_required':'manual_review_required',
-    reasonCode:usable?null:alternativeIndex>0?'no_supported_alternative':evidence.reasonCode||'insufficient_reliable_evidence',
-    explanation:usable?'Review this evidence-backed planning territory before use. No execution route or customer demand is established.':FAIL_SAFE,
+    reasonCode:usable?null:ranked?'map_validation_limited':alternativeIndex>0?'no_supported_alternative':evidence.reasonCode||'insufficient_reliable_evidence',
+    explanation,
     serviceabilityMode:usable?'serviceable_geography':'manual_review_required',
-    quality:{label:'Recommended Marketing Area',reasons:usable?why:[FAIL_SAFE]},confidence:'low',
+    quality:{label:'Recommended Marketing Area',reasons:ranked?why:[FAIL_SAFE]},confidence:'low',
     targetEvidence:{...targetEvidence(features),eligibleMappedFeatureCount:usable?features.length:null,
       observedEligibleFeatureCount:evidence.successfulWindowCount?evidence.observedFeatureCount:null,
       roadSupportedTargetCount:evidence.successfulWindowCount?evidence.roadSupportedTargetCount:null},
@@ -201,9 +256,15 @@ function generate(args,evidence){
       analysisScope:'eligible_portion_of_requested_region',eligibleRegionDiffers:evidence.eligibleRegionDiffers===true,
       fullSearchCoverage:evidence.fullSearchCoverage,totalWindows:evidence.totalWindowCount,
       selectedWindows:evidence.selectedWindowCount,successfulWindows:evidence.successfulWindowCount,
+      propertyExaminedCount:evidence.propertyExaminedCount||0,propertyCandidateCount:evidence.propertyCandidates?.length||0,
       requestedHours:args.desiredHours,startedAt:evidence.startedAt,finishedAt:evidence.finishedAt||null},
     recommendationContext:{goal:evidence.goal,locationLabel:args.label,requestedHours:args.desiredHours,
-      supportedMinutes:usable?minutes:null,why,signals:selected.flatMap(c=>c.ranking.displaySignals||[]),limitations,
+      supportedMinutes:usable?minutes:null,why,signals:sections.flatMap(c=>c.ranking.displaySignals||[]),limitations,
+      propertyRecommendation:ranked?{sectionId:primary.id,fit:primary.ranking.fit,
+        sections:sections.map(c=>({sectionId:c.id,fit:c.ranking.fit,evidence:c.ranking.evidence})),
+        geometry:primary.geometry}:null,
+      mapValidation,planningConfidence:usable&&mapValidation==='available'&&
+        sections.every(c=>['HIGH','MODERATE'].includes(c.ranking.evidence.confidence))?'Moderate':'Limited',
       alternativeIndex,hasAlternative:alternativeIndex+1<options.length},
     compensation:usable?planning.compensationRecommendation({estimatedMinutes:minutes,
       workerBasePayCents:args.workerBasePayCents,completionBonusCents:args.completionBonusCents,
@@ -211,4 +272,4 @@ function generate(args,evidence){
     zones,policyVersion:VERSION,geometryVersion:usable?planning.GEOMETRY_VERSION:planning.FALLBACK_GEOMETRY_VERSION,
     practicalMaximumZones:planning.MAX_ZONES_PER_CAMPAIGN};
 }
-module.exports={VERSION,MAX_WINDOWS,MAX_SEARCH_MS,FAIL_SAFE,partition,search,generate,groups};
+module.exports={VERSION,MAX_WINDOWS,MAX_SEARCH_MS,FAIL_SAFE,partition,search,generate,groups,propertyOptions};

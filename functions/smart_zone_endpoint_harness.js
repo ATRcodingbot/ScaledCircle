@@ -11,9 +11,11 @@ const exportNames = ['getSmartZonePlan','applySmartZonePlan'];
 const assignments = ast.filter(n => n.type === 'ExpressionStatement' && n.expression.type === 'AssignmentExpression' &&
   n.expression.left.object?.name === 'exports' && exportNames.includes(n.expression.left.property?.name));
 class HttpsError extends Error {constructor(code,message){super(message);this.code=code;}}
-function endpointHarness({db,context,resolution,fetchSnapshot,FieldValue}={}) {
-  const calls={resolver:0,provider:0},events=[];
-  const env={require,exports:{},db,FieldValue,HttpsError,
+function endpointHarness({db,context,resolution,fetchSnapshot,FieldValue,analyzeProperty}={}) {
+  const calls={resolver:0,provider:0,property:0},events=[];
+  const localRequire=name=>name==='./property_service_area_runtime'?{createAnalyzer:()=>async geometry=>{calls.property++;if(!analyzeProperty)throw Error('test_property_provider_missing');return analyzeProperty(geometry);}}:require(name);
+  const env={require:localRequire,exports:{},db,FieldValue,HttpsError,admin:{firestore:{FieldValue}},
+    CENSUS_API_KEY:{value:()=>''},
     smartZoneEntryContract:require('./smart_zone_entry_contract'),smartZonePlanning:require('./smart_zone_planning'),
     smartZoneGeography:{fetchSnapshot:async options=>{calls.provider++;return fetchSnapshot(options);}},
     propertyIntelligence:require('./property_intelligence'),PROPERTY_INTELLIGENCE_CACHE_COLLECTION:'propertyIntelligenceCache',

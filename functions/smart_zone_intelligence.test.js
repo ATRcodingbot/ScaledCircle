@@ -13,9 +13,12 @@ function args(boundary=zip.geometry){return {anchor:corkran.anchor,selectedBound
     priorityServices:[],excludedServices:[],campaignType:'flyer_distribution'}};}
 const snapshot=(boundary,elements)=>geography.snapshotFromElements(boundary,elements,
   {dataTimestamp:corkran.dataTimestamp,fetchedAt:corkran.retrievedAt});
+// Synthetic PI facts exercise orchestration; OSM fixture remains public evidence only.
+const propertyFacts=g=>({source:'synthetic-property-fixture',propertyCount:100,residentialStructureCount:80,
+  confidence:'HIGH',geometryDigest:require('./property_intelligence').geometryDigest(g),limitations:[]});
 async function replay(input=args()){
   const calls=[];
-  const evidence=await search.search(input,{fetchSnapshot:async({selectedBoundary,onDiagnostic})=>{
+  const evidence=await search.search(input,{loadPropertyAnalysis:async g=>planning.pointInsidePolygon(corkran.anchor,g)?propertyFacts(g):null,fetchSnapshot:async({selectedBoundary,onDiagnostic})=>{
     calls.push(selectedBoundary);
     // The retained snapshot covers Corkran only. The rest of the ZIP is unknown,
     // not an observed empty response. No network/provider call is made in tests.
@@ -38,7 +41,7 @@ test('real 31.31 km² ZCTA is internally partitioned, with full search geometry 
 });
 test('Corkran retained public evidence survives ZIP search; partial evidence supports44 minutes, not fictional5hours',async()=>{
   const {evidence,plan,calls}=await replay();
-  assert.equal(calls.length,11);assert.equal(evidence.successfulWindowCount,1);
+  assert.equal(calls.length,1);assert.equal(evidence.successfulWindowCount,1);
   assert.equal(evidence.fullSearchCoverage,false);
   assert.equal(plan.recommendationStatus,'review_required');assert.equal(plan.totalEstimatedProperties,19);
   assert.equal(plan.totalEstimatedMinutes,44);assert.equal(plan.zones[0].mappedRouteMeters,739);
@@ -73,16 +76,16 @@ test('missing or nonintersecting eligible geography fails before provider work',
   }
 });
 test('provider timeout or partial response never becomes zero targets or fake geometry',async()=>{
-  const input=args();const evidence=await search.search(input,{fetchSnapshot:async({onDiagnostic})=>{
+  const input=args();const evidence=await search.search(input,{loadPropertyAnalysis:async g=>propertyFacts(g),fetchSnapshot:async({onDiagnostic})=>{
     onDiagnostic({status:'unavailable',reasonCode:'provider_partial_response',httpStatus:200});return null;
   }});const plan=search.generate(input,evidence);
-  assert.equal(plan.explanation,search.FAIL_SAFE);assert.equal(plan.totalEstimatedProperties,null);
+  assert.match(plan.explanation,/Recommended based on Property Intelligence/);assert.equal(plan.totalEstimatedProperties,null);
   assert.equal(plan.targetEvidence.observedEligibleFeatureCount,null);assert.deepEqual(plan.zones,[]);
   assert.equal(plan.compensation,null);assert.equal(plan.plannedTerritory,null);
 });
 test('sequential request/time budgets stop safely and do not retry failed windows',async()=>{
   let clock=0,active=0,maximumActive=0,calls=0;
-  const evidence=await search.search(args(),{now:()=>clock,fetchSnapshot:async()=>{
+  const evidence=await search.search(args(),{loadPropertyAnalysis:async g=>propertyFacts(g),now:()=>clock,fetchSnapshot:async()=>{
     active++;maximumActive=Math.max(maximumActive,active);calls++;clock+=60000;active--;return null;
   }});
   assert.equal(calls,3);assert.equal(maximumActive,1);assert.equal(evidence.reasonCode,'bounded_search_time_budget');
@@ -117,14 +120,15 @@ test('nearby supported clusters can combine while disconnected alternatives rema
   assert.notDeepEqual(options[0][0].geometry,options[0][1].geometry);
   assert.deepEqual(pool.map(c=>c.id),['a','b','c']);
 });
-test('synthetic B2B uses actual commercial features, never residential inventory',async()=>{
+test('B2B cannot turn residential Property Intelligence into commercial fit',async()=>{
   const boundary=planning.rectangleAround(fixture.p(0,1000),2500,2500),input=args(boundary);
   input.anchor=fixture.p(0,1000);input.workType='business_card_distribution';
   input.intelligenceContext={...input.intelligenceContext,services:['Office cleaning'],goal:'Office prospects',campaignType:input.workType};
   const elements=fixture.grid().map(e=>e.tags.building?{...e,tags:{office:'company'}}:e);
-  const evidence=await search.search(input,{fetchSnapshot:async({selectedBoundary})=>snapshot(selectedBoundary,elements)});
+  const evidence=await search.search(input,{loadPropertyAnalysis:async g=>propertyFacts(g),fetchSnapshot:async({selectedBoundary})=>snapshot(selectedBoundary,elements)});
   const plan=search.generate(input,evidence);
-  assert.ok(plan.totalEstimatedProperties>0);assert.equal(plan.targetEvidence.targetIntent,'business');
+  assert.equal(plan.totalEstimatedProperties,null);assert.equal(plan.targetEvidence.targetIntent,'business');
+  assert.equal(evidence.propertyCandidates.length,0);assert.equal(evidence.completedWindowCount,0);
   assert.ok(plan.zones.every(z=>z.planningTargets.features.every(f=>f.kind==='business')));
 });
 test('same public snapshot repeated across bounded windows cannot double count selected source IDs',async()=>{
@@ -133,4 +137,35 @@ test('same public snapshot repeated across bounded windows cannot double count s
   assert.equal(ids.length,new Set(ids).size);
   assert.equal(plan.compensation.policyVersion,'ScalerCompensationQualityV1');
   assert.deepEqual(plan.compensation,planning.compensationRecommendation({estimatedMinutes:44}));
+});
+
+test('all PI sections are ranked before mapping and survive total map failure with safe distinct alternatives',async()=>{
+ const input=args(),events=[];
+ const evidence=await search.search(input,{loadPropertyAnalysis:async g=>{events.push('property');return propertyFacts(g);},
+   fetchSnapshot:async()=>{events.push('map');return null;}});
+ assert.equal(events.slice(0,11).every(x=>x==='property'),true);
+ assert.equal(evidence.propertyCandidates.length,11);
+ const plan=search.generate(input,evidence),next=search.generate({...input,alternativeIndex:1},evidence);
+ assert.match(plan.explanation,/Recommended based on Property Intelligence/);
+ assert.equal(plan.recommendationContext.mapValidation,'needs_review');assert.equal(plan.recommendationContext.hasAlternative,true);
+ assert.equal(plan.totalEstimatedProperties,null);assert.equal(plan.totalEstimatedMinutes,null);
+ assert.equal(plan.recommendationStatus,'manual_review_required');assert.deepEqual(plan.zones,[]);
+ assert.notDeepEqual(plan.reviewTerritory,next.reviewTerritory);assert.notEqual(plan.planId,next.planId);
+ assert.equal(plan.recommendationContext.propertyRecommendation.fit,80);
+ assert.match(next.recommendationContext.why.join(' '),/same supported Property Intelligence fit/);
+ require('./smart_zone_intelligence_runtime').assertFirestoreValue(evidence);
+});
+
+test('mismatched property geometry cannot be rescued by OSM counts',async()=>{
+ let calls=0;const input=args();const evidence=await search.search(input,{loadPropertyAnalysis:async g=>({...propertyFacts(g),geometryDigest:'different'}),fetchSnapshot:async()=>{calls++;}});
+ assert.equal(calls,0);assert.equal(evidence.propertyCandidates.length,0);assert.equal(search.generate(input,evidence).totalEstimatedProperties,null);
+});
+
+test('requested workload selects nearby mapped sections without changing PI scores',()=>{
+ const section=(id,x,fit)=>({id,geometry:planning.rectangleAround(fixture.p(x,0),100,100),ranking:{fit}});
+ const sections=[section('a',0,95),section('b',1000,85),section('c',9000,70)];
+ const evidence={propertyCandidates:sections,candidates:sections.map(s=>({...s,propertyAreaId:s.id,workload:{estimatedMinutes:140}}))};
+ const small=search.propertyOptions(evidence,90),large=search.propertyOptions(evidence,300);
+ assert.deepEqual(small[0].selected.map(s=>s.id),['a']);assert.deepEqual(large[0].selected.map(s=>s.id),['a','b']);
+ assert.deepEqual(sections.map(s=>s.ranking.fit),[95,85,70]);assert.equal(large[1].primary.id,'c');
 });

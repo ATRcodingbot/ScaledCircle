@@ -69,6 +69,10 @@ function rankAnalysis(analysis,context){
   const limitations=[...list(analysis?.limitations),'Planning heuristic only; this does not establish property condition, homeowner intent, or demand.',
     'Generic residential classifications do not establish single-family homes or the presence or condition of decks, roofs, or other components.'];
   if(unknown)return {fit:null,reasons:[],limitations:[...limitations,'Insufficient supported housing data to rank this section.']};
+  if(context?.targetIntent==='business')return {fit:null,reasons:[],limitations:[...limitations,
+    'Housing evidence cannot rank commercial prospects. Business-category Property Intelligence is required.']};
+  if(analysis.inputGranularity==='aggregate_census')return {fit:null,reasons:[],limitations:[...limitations,
+    'Census housing context covers whole intersecting block groups. Its housing-only universe cannot establish the selected section\'s residential share or an individual property fit.']};
   const {services,error}=serviceFocus(context);
   if(error)return {fit:null,reasons:[],limitations:[...limitations,error]};
   const words=services.join(' ').toLowerCase(),share=Math.min(1,residential/count);
@@ -86,6 +90,32 @@ function rankAnalysis(analysis,context){
   }
   if(analysis.partialCoverage===true)limitations.push('The provider reported partial coverage.');
   return {fit:Math.round(fit),reasons,limitations};
+}
+
+// One shared Property Intelligence ranking entry point for saved-area analysis
+// and campaign recommendations. Map availability cannot create or erase fit.
+function rankPropertySection({analysis,context,geometry:sectionGeometry}){
+  let digest;
+  try{digest=propertyIntelligence.geometryDigest(validateGeometry(sectionGeometry));}catch(_){return {fit:null,reasons:[],limitations:['Valid section geometry is required.']};}
+  if(!analysis||analysis.geometryDigest!==digest||!analysis.source||analysis.source==='none')
+    return {fit:null,reasons:[],limitations:['Matching authoritative Property Intelligence is unavailable for this section.']};
+  const ranking=rankAnalysis(analysis,context),history=marketingHistorySignal(sectionGeometry,context?.marketingHistory);
+  const limitations=[...ranking.limitations];
+  if(history.status!=='available')limitations.push('Completed-marketing history is unavailable or incomplete; no absence of prior marketing is assumed.');
+  else limitations.push(history.limitation);
+  const signals=[{label:analysis.inputGranularity==='aggregate_census'?'Housing-unit context in intersecting Census block groups':'Analyzed property records',
+    value:analysis.propertyCount,source:analysis.source},
+  {label:'Service-area fit',value:'Inside your saved service area',source:'Saved Business service areas'}];
+  if(analysis.predominantConstructionEra)signals.push({label:'Predominant construction era',value:analysis.predominantConstructionEra,source:analysis.source});
+  if(history.recentCompletedOverlap===true)signals.push({label:'Recent completed-marketing overlap',value:history.overlapPercent===null?'Present':`${history.overlapPercent}%`,source:'Your Business marketing history'});
+  return {...ranking,version:'PropertySectionRecommendationV2',
+    fit:ranking.fit===null?null:Math.max(0,ranking.fit-history.penalty),
+    limitations:[...new Set(limitations)],displaySignals:signals,
+    evidence:{analysisId:analysis.analysisId||null,geometryDigest:digest,source:analysis.source,
+      sourceVersion:analysis.sourceVersion||null,dataUpdatedAt:analysis.dataUpdatedAt||null,
+      generatedAt:analysis.generatedAt||null,inputGranularity:analysis.inputGranularity||null,
+      geographicCoverageMethod:analysis.geographicCoverageMethod||null,confidence:analysis.confidence||'INSUFFICIENT'},
+    history};
 }
 
 const MARKETING_SCORE_VERSION='PropertyMarketingAreaFitV1';
@@ -349,7 +379,7 @@ function createService({db,FieldValue,analyze,now=Date.now}){
       const worker=async()=>{while(cursor<selected.length){const i=cursor++,candidate=selected[i];try{
         const response=await analyze(candidate.geometry),analysis=JSON.parse(JSON.stringify(response?.analysis||response||null));
         if(!analysis||typeof analysis!=='object')throw Error('missing_analysis');
-        const ranking=rankAnalysis(analysis,claim.context);
+        const ranking=rankPropertySection({analysis,context:claim.context,geometry:candidate.geometry});
         result[i]={candidate,analysis,ranking,status:ranking.fit===null?'insufficient':'recommended'};
       }catch(_){result[i]={candidate,analysis:null,ranking:null,status:'provider_failed'};}}};
       await Promise.all(Array.from({length:Math.min(3,selected.length)},worker));
@@ -399,4 +429,4 @@ function createService({db,FieldValue,analyze,now=Date.now}){
   }
   return {run,history,save:input=>change(input,'saved'),reject:input=>change(input,'rejected')};
 }
-module.exports={createService,rankAnalysis,rankMarketingArea,buildMarketingContext,marketingTargetIntent,marketingHistorySignal,selectSpread,VERSION,MARKETING_SCORE_VERSION};
+module.exports={createService,rankAnalysis,rankPropertySection,rankMarketingArea,buildMarketingContext,marketingTargetIntent,marketingHistorySignal,selectSpread,VERSION,MARKETING_SCORE_VERSION};

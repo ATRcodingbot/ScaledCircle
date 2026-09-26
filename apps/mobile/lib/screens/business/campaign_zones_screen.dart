@@ -218,7 +218,7 @@ class _SmartZoneEntryState extends State<CampaignZoneAreaEntry> {
               enabled: !widget.locked && !_planning,
               maxLength: 500,
               decoration: const InputDecoration(
-                labelText: 'Desired customers or campaign goal',
+                labelText: 'What kind of work are you looking for?',
                 hintText:
                     'Example: residential areas for deck and remodeling outreach',
                 border: OutlineInputBorder(),
@@ -261,7 +261,11 @@ class _SmartZoneEntryState extends State<CampaignZoneAreaEntry> {
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
                   : const Icon(Icons.auto_awesome),
-              label: const Text('Recommend an Area'),
+              label: Text(
+                _planning
+                    ? 'Finding the strongest areas in ${_selectedArea?.primaryText ?? 'your service area'}'
+                    : 'Recommend an Area',
+              ),
             )
           else
             const Text(
@@ -708,8 +712,7 @@ class _CampaignZonesScreenState extends State<CampaignZonesScreen> {
                 child: const Text('Adjust Area'),
               ),
               SmartZoneAlternativeAction(
-                onAvailable:
-                    canApply && recommendationContext['hasAlternative'] == true
+                onAvailable: recommendationContext['hasAlternative'] == true
                     ? () => Navigator.pop(dialogContext, 'another')
                     : null,
               ),
@@ -758,7 +761,7 @@ class _CampaignZonesScreenState extends State<CampaignZonesScreen> {
       }
       if (accepted == 'adjust') {
         final proposed = zones.isEmpty
-            ? plan['selectedTerritory']
+            ? plan['reviewTerritory'] ?? plan['selectedTerritory']
             : zones[selectedZoneIndex]['geometry'] ??
                   zones[selectedZoneIndex]['serviceArea'];
         final points = smartZonePoints(proposed)

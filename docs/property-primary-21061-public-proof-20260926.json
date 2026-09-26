@@ -1,0 +1,274 @@
+{
+  "schema": "PropertyPrimaryMappingPublicProofV1",
+  "status": "LOCAL_PUBLIC_DATA_PROOF_NOT_PRODUCTION_ACCEPTANCE",
+  "evaluatedAt": "2026-09-26T22:23:40.201Z",
+  "modelCalls": 0,
+  "productionWrites": 0,
+  "source": {
+    "sourceProvider": "OpenStreetMap via Geofabrik",
+    "url": "https://download.geofabrik.de/north-america/us/maryland-260925.osm.pbf",
+    "retrievedAt": "2026-09-26T21:55:03.501020+00:00",
+    "lastModified": "Fri, 25 Sep 2026 23:02:05 GMT",
+    "bytes": 214445802,
+    "md5": "fecbe524cf91b037f39b932a6d88f66c",
+    "sha256": "fca54b6b3d2cf6632e79a6a93413d77c0019743ff1bbef52e93188a28d79fc20",
+    "downloadSeconds": 13.165,
+    "checksumVerified": true
+  },
+  "extraction": {
+    "stage": "complete",
+    "sourceDataTimestamp": "2026-09-25T20:24:36Z",
+    "elements": 19678,
+    "bufferedBounds": [
+      -76.6945750000126,
+      39.108224999811924,
+      -76.58875599983642,
+      39.21576000007699
+    ],
+    "missingMemberWays": 0,
+    "unsupportedNestedRelations": 0,
+    "invalidSourceWays": 0,
+    "jsonBytes": 8505736,
+    "gzipBytes": 1345936,
+    "sha256": "c213b9fed5f0b53b7b77c500d3b2eb47d67c92f84d945403c0edeca2ba8667d8",
+    "seconds": 146.291
+  },
+  "goal": "Attractive Remodel: residential deck/fence/remodeling flyer outreach; 5 hours",
+  "method": "Maintained property scorer before bounded OSM validation; no exclusion gate relaxed.",
+  "evidenceCodeSha256": "eb9edd9b33fd4ae536858e2c3dbba0b08c730f18ef7570765a2748678ff143d2",
+  "windows": [
+    {
+      "number": 1,
+      "id": "ad6e183c89cf81d7a0f5abc26ca93998eef75c8abad72b97948575cf2eaddf0d",
+      "areaSquareMeters": 10468,
+      "propertyRecords": null,
+      "residentialRecords": null,
+      "propertyConfidence": null,
+      "partialPropertyCoverage": null,
+      "censusIntersectingBlockGroups": 1,
+      "censusContextUnits": 602,
+      "rank": null,
+      "propertyStatus": "unavailable",
+      "mapStatus": "not_requested",
+      "rawOSMElements": null,
+      "eligibleMappedFeatures": null,
+      "roadSupportedTargets": null,
+      "mapReasons": [],
+      "supportedMinutes": null
+    },
+    {
+      "number": 2,
+      "id": "957fb5ab29577ed00a56e96e44a67b37e130f343b86665567a5665344a091f9e",
+      "areaSquareMeters": 7572882,
+      "propertyRecords": 4742,
+      "residentialRecords": 4348,
+      "propertyConfidence": "LOW",
+      "partialPropertyCoverage": true,
+      "censusIntersectingBlockGroups": 23,
+      "censusContextUnits": 14062,
+      "rank": 92,
+      "propertyStatus": "ranked",
+      "mapStatus": "success",
+      "rawOSMElements": 2627,
+      "eligibleMappedFeatures": 289,
+      "roadSupportedTargets": 0,
+      "mapReasons": [
+        "A mapped non-target feature has no reliable footprint. Review the surrounding area manually."
+      ],
+      "supportedMinutes": null
+    },
+    {
+      "number": 3,
+      "id": "1fef6a2bccfb97c43adc71c5e4c94c2c815138ce174deeb0588c7d4924304ca6",
+      "areaSquareMeters": 4262739,
+      "propertyRecords": 1731,
+      "residentialRecords": 1503,
+      "propertyConfidence": "HIGH",
+      "partialPropertyCoverage": false,
+      "censusIntersectingBlockGroups": 14,
+      "censusContextUnits": 9403,
+      "rank": 87,
+      "propertyStatus": "ranked",
+      "mapStatus": "success",
+      "rawOSMElements": 1664,
+      "eligibleMappedFeatures": 95,
+      "roadSupportedTargets": 0,
+      "mapReasons": [
+        "A mapped non-target feature has no reliable footprint. Review the surrounding area manually."
+      ],
+      "supportedMinutes": null
+    },
+    {
+      "number": 4,
+      "id": "0d1d9169d5de85f9e4d8930ebc6f8fc236a91b1f8746803b3082d53df3ceb98d",
+      "areaSquareMeters": 93711,
+      "propertyRecords": 8,
+      "residentialRecords": 0,
+      "propertyConfidence": "INSUFFICIENT",
+      "partialPropertyCoverage": false,
+      "censusIntersectingBlockGroups": 1,
+      "censusContextUnits": 1062,
+      "rank": null,
+      "propertyStatus": "unavailable",
+      "mapStatus": "not_requested",
+      "rawOSMElements": null,
+      "eligibleMappedFeatures": null,
+      "roadSupportedTargets": null,
+      "mapReasons": [],
+      "supportedMinutes": null
+    },
+    {
+      "number": 5,
+      "id": "f710202e3c5ab7f4cea6849b6595dda6d67d2c962d212ac4d2a343372decbd97",
+      "areaSquareMeters": 4026,
+      "propertyRecords": null,
+      "residentialRecords": null,
+      "propertyConfidence": null,
+      "partialPropertyCoverage": null,
+      "censusIntersectingBlockGroups": 1,
+      "censusContextUnits": 1062,
+      "rank": null,
+      "propertyStatus": "unavailable",
+      "mapStatus": "not_requested",
+      "rawOSMElements": null,
+      "eligibleMappedFeatures": null,
+      "roadSupportedTargets": null,
+      "mapReasons": [],
+      "supportedMinutes": null
+    },
+    {
+      "number": 6,
+      "id": "a113f3725c305ef71f4f6a16b9a33d4e12ec1aaeaa99af925ef81e40a37c4576",
+      "areaSquareMeters": 7504350,
+      "propertyRecords": 3651,
+      "residentialRecords": 3180,
+      "propertyConfidence": "HIGH",
+      "partialPropertyCoverage": false,
+      "censusIntersectingBlockGroups": 17,
+      "censusContextUnits": 10164,
+      "rank": 87,
+      "propertyStatus": "ranked",
+      "mapStatus": "success",
+      "rawOSMElements": 2076,
+      "eligibleMappedFeatures": 251,
+      "roadSupportedTargets": 0,
+      "mapReasons": [
+        "A mapped non-target feature has no reliable footprint. Review the surrounding area manually."
+      ],
+      "supportedMinutes": null
+    },
+    {
+      "number": 7,
+      "id": "abcefede9b88c53bb70faba52062d838f39449220bd5da8a1009603d2a364886",
+      "areaSquareMeters": 4610282,
+      "propertyRecords": 2105,
+      "residentialRecords": 1730,
+      "propertyConfidence": "HIGH",
+      "partialPropertyCoverage": false,
+      "censusIntersectingBlockGroups": 9,
+      "censusContextUnits": 4608,
+      "rank": 82,
+      "propertyStatus": "ranked",
+      "mapStatus": "success",
+      "rawOSMElements": 2240,
+      "eligibleMappedFeatures": 5,
+      "roadSupportedTargets": 0,
+      "mapReasons": [
+        "A mapped non-target feature has no reliable footprint. Review the surrounding area manually."
+      ],
+      "supportedMinutes": null
+    },
+    {
+      "number": 8,
+      "id": "0ca799bf6ced812681413d864274d86d4d4f050c1caed53b331235d3b51a8a25",
+      "areaSquareMeters": 86630,
+      "propertyRecords": 52,
+      "residentialRecords": 47,
+      "propertyConfidence": "HIGH",
+      "partialPropertyCoverage": false,
+      "censusIntersectingBlockGroups": 2,
+      "censusContextUnits": 785,
+      "rank": 90,
+      "propertyStatus": "ranked",
+      "mapStatus": "success",
+      "rawOSMElements": 48,
+      "eligibleMappedFeatures": 0,
+      "roadSupportedTargets": 0,
+      "mapReasons": [
+        "We found insufficient connected target and road evidence to automatically create a practical Zone. Review or draw it manually."
+      ],
+      "supportedMinutes": null
+    },
+    {
+      "number": 9,
+      "id": "e786b3231a2a007097a23d1162ca6220c835699e79ac0043426391ea6fee938b",
+      "areaSquareMeters": 724332,
+      "propertyRecords": 386,
+      "residentialRecords": 373,
+      "propertyConfidence": "HIGH",
+      "partialPropertyCoverage": false,
+      "censusIntersectingBlockGroups": 5,
+      "censusContextUnits": 2783,
+      "rank": 97,
+      "propertyStatus": "ranked",
+      "mapStatus": "success",
+      "rawOSMElements": 258,
+      "eligibleMappedFeatures": 35,
+      "roadSupportedTargets": 35,
+      "mapReasons": [
+        "Mapped target features are near connected permitted local-road linework.",
+        "Known campaign-ineligible land and mapped highway/rail barriers are excluded from each proposed polygon.",
+        "OSM coverage and real-world pedestrian access are incomplete; inspect each proposed Zone before use."
+      ],
+      "supportedMinutes": 24
+    }
+  ],
+  "selected": [
+    {
+      "planId": "scale-area_750ec957deefbfc7303f9827",
+      "primary": "e786b3231a2a007097a23d1162ca6220c835699e79ac0043426391ea6fee938b",
+      "sections": [
+        "e786b3231a2a007097a23d1162ca6220c835699e79ac0043426391ea6fee938b"
+      ],
+      "zones": 1,
+      "targets": 10,
+      "minutes": 24,
+      "roadMeters": 403,
+      "mapValidation": "available",
+      "schoolOverlap": false
+    },
+    {
+      "planId": "scale-area_02661c59f20cc838ec9b7695",
+      "primary": "957fb5ab29577ed00a56e96e44a67b37e130f343b86665567a5665344a091f9e",
+      "sections": [
+        "957fb5ab29577ed00a56e96e44a67b37e130f343b86665567a5665344a091f9e"
+      ],
+      "zones": 0,
+      "targets": null,
+      "minutes": null,
+      "roadMeters": 0,
+      "mapValidation": "needs_review",
+      "schoolOverlap": false
+    },
+    {
+      "planId": "scale-area_cc60efe29954d747ef6bf06e",
+      "primary": "0ca799bf6ced812681413d864274d86d4d4f050c1caed53b331235d3b51a8a25",
+      "sections": [
+        "0ca799bf6ced812681413d864274d86d4d4f050c1caed53b331235d3b51a8a25"
+      ],
+      "zones": 0,
+      "targets": null,
+      "minutes": null,
+      "roadMeters": 0,
+      "mapValidation": "needs_review",
+      "schoolOverlap": false
+    }
+  ],
+  "limitations": [
+    "Census totals cover whole intersecting block groups and are not additive across windows.",
+    "Property fit does not establish individual service need.",
+    "Partial Maryland coverage remains disclosed.",
+    "Regional snapshot transport is local proof, not deployed.",
+    "Unresolved exclusions block automatic boundaries; no five-hour recommendation established."
+  ]
+}

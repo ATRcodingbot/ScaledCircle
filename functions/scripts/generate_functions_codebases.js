@@ -321,7 +321,7 @@ function transformIndex(mode) {
       if (mode === "job-alert-email") return jobAlertEmailSecrets.has(identifier);
       if (mode === "campaign-funding") return false;
       if (mode === "assignment") return false;
-      if (mode === "discovery") return false;
+      if (mode === "discovery") return identifier === "CENSUS_API_KEY";
       if (mode === "job-room") return false;
       if (mode === "transactional-email") return identifier === "SUPPORT_EMAIL_SMTP_PASSWORD";
       if (mode === "admin-ops") return false;
@@ -399,6 +399,7 @@ function copyPackage(destination, mode) {
           "group_assignment.js", "smart_zone_planning.js", "smart_zone_geography.js", "smart_zone_serviceability.js",
           "smart_zone_intelligence.js", "smart_zone_intelligence_runtime.js", "property_service_area_analysis.js",
           "property_service_area_geometry.js", "property_intelligence.js", "property_source_http.js",
+          "property_service_area_runtime.js", "managed_growth.js",
           "smart_zone_entry_contract.js", "service_area_resolution.js",
           "subscription_entitlements.js"].includes(name)) continue;
     if (mode === "job-room" && name.endsWith(".js") &&

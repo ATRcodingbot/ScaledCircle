@@ -23,3 +23,9 @@ test('provider outage is truthful and not persisted as reusable evidence',async 
   assert.equal(writes,0);assert.equal(result.confidence,'INSUFFICIENT');assert.doesNotMatch(JSON.stringify(result),/403/);
   assert.match(publicAnalysis({source:'none'}).limitations[0],/No service demand/);
 });
+
+test('aggregate Census context never invents polygon density, spacing or address pace',()=>{
+ const result=require('./property_service_area_runtime').withPhysicalChannel({source:'ACS',inputGranularity:'aggregate_census',propertyCount:10000,residentialStructureCount:10000},geometry);
+ assert.equal(result.physicalLogistics.homesPerSquareKm,null);assert.equal(result.physicalLogistics.averagePropertySpacingMeters,null);
+ assert.equal(result.physicalLogistics.walkingMinutesPerReachableAddress,null);
+});

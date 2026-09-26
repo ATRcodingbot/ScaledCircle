@@ -101,6 +101,10 @@ String advisoryWorkload(num minutes) {
 }
 
 String intelligentAreaFailureMessage(Map<String, dynamic> plan) {
+  if (plan['reasonCode'] == 'property_evidence_unavailable' &&
+      plan['explanation'] is String) {
+    return plan['explanation'] as String;
+  }
   const fallback =
       "We couldn't find enough reliable data to recommend an area here yet. You can still draw your own area.";
   final search = plan['searchRegion'];
@@ -159,6 +163,7 @@ class _IntelligenceRecommendationEvidence extends StatelessWidget {
         smartZonePlanCanApply(plan) &&
         (!plan.containsKey('geographicSource') ||
             plan['geographicSource'] != null);
+    final ranked = recommendation['propertyRecommendation'] is Map;
     final zones = (plan['zones'] as List? ?? []).whereType<Map>();
     final minutes =
         recommendation['supportedMinutes'] ?? plan['totalEstimatedMinutes'];
@@ -188,20 +193,35 @@ class _IntelligenceRecommendationEvidence extends StatelessWidget {
       children: [
         if (recommendation['goal'] != null)
           Text(
-            'Goal: ${recommendation['goal']}',
+            'Looking for: ${recommendation['goal']}',
             style: Theme.of(context).textTheme.titleMedium,
           ),
         if (recommendation['locationLabel'] != null)
           Text('Location: ${recommendation['locationLabel']}'),
         const SizedBox(height: 12),
-        if (!valid) ...[
-          Text(intelligentAreaFailureMessage(plan)),
-        ] else ...[
+        if (!valid && !ranked) Text(intelligentAreaFailureMessage(plan)),
+        if (ranked || valid) ...[
+          if (!valid && ranked)
+            Text(
+              plan['explanation']?.toString() ??
+                  'Recommended based on Property Intelligence. Street-level planning data needs review.',
+            ),
+          Text(
+            'Planning confidence: ${recommendation['planningConfidence'] ?? 'Limited'}',
+          ),
+          Text(
+            'Map validation: ${switch (recommendation['mapValidation']) {
+              'available' => 'Street evidence available',
+              'partial' => 'Partial — cached street evidence needs review',
+              _ => 'Needs review',
+            }}',
+          ),
           Text('Why this area', style: Theme.of(context).textTheme.titleSmall),
           for (final reason in recommendation['why'] as List? ?? [])
             Text('• $reason'),
           const SizedBox(height: 12),
-          if (minutes is num)
+          if (!valid) const Text('Estimated field workload: not established'),
+          if (valid && minutes is num)
             Text(
               'Estimated field workload: ${advisoryWorkload(minutes)} (advisory)',
               style: Theme.of(context).textTheme.titleMedium,
@@ -218,7 +238,7 @@ class _IntelligenceRecommendationEvidence extends StatelessWidget {
             ),
           const SizedBox(height: 12),
           Text('Evidence', style: Theme.of(context).textTheme.titleSmall),
-          if (evidence['eligibleMappedFeatureCount'] is num)
+          if (valid && evidence['eligibleMappedFeatureCount'] is num)
             Text(
               '${evidence['eligibleMappedFeatureCount']} mapped target features',
             ),
@@ -234,6 +254,22 @@ class _IntelligenceRecommendationEvidence extends StatelessWidget {
               '${signal['label']}: ${signal['value']}${signal['source'] == null ? '' : ' — ${signal['source']}'}',
             ),
         ],
+        if (ranked)
+          ExpansionTile(
+            tilePadding: EdgeInsets.zero,
+            title: const Text('Property evidence and dates'),
+            children: [
+              for (final section
+                  in (recommendation['propertyRecommendation']['sections']
+                              as List? ??
+                          [])
+                      .whereType<Map>())
+                if (section['evidence'] is Map)
+                  Text(
+                    '${section['evidence']['source']} · Source vintage: ${section['evidence']['dataUpdatedAt'] ?? 'Not supplied by source'} · Retrieved/analyzed: ${section['evidence']['generatedAt'] ?? 'Not recorded'}',
+                  ),
+            ],
+          ),
         const SizedBox(height: 12),
         Text(
           'Confidence and limitations',

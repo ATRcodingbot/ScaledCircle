@@ -17,7 +17,7 @@ async function setup({snapshot=true,actorUid=null}={}){
     db.doc('campaigns/'+campaignId).set(campaign),db.doc('businessSubscriptions/'+businessId).set({planId:'scale',status:'active',expiresAt:new Date(Date.now()+86400000)}),
     db.doc('businessGrowthProfiles/'+businessId).set(profile),db.doc('discoveryPreferences/'+businessId).set(prefs)]);
   if(actorUid)await db.doc(`businessWorkspaces/${businessId}/members/${actorUid}`).set({businessId,uid:actorUid,status:'active',seatIndex:1,permissions:['campaigns','intelligence']});
-  const api=endpointHarness({db,FieldValue,context:{uid:businessId,actorUid:actorUid||businessId,role:'business',permissions:['campaigns','intelligence']},
+  const api=endpointHarness({db,FieldValue,analyzeProperty:async geometry=>require('./smart_zone_planning').pointInsidePolygon(fixture.anchor,geometry)?{source:'synthetic-property-fixture',confidence:'HIGH',propertyCount:100,residentialStructureCount:80,geometryDigest:require('./property_intelligence').geometryDigest(geometry)}:null,context:{uid:businessId,actorUid:actorUid||businessId,role:'business',permissions:['campaigns','intelligence']},
     fetchSnapshot:async({selectedBoundary,onDiagnostic})=>{
       onDiagnostic({status:snapshot?'success':'unavailable',reasonCode:'local_fixture'});
       return snapshot?geography.snapshotFromElements(selectedBoundary,fixture.elements,{dataTimestamp:fixture.dataTimestamp,fetchedAt:fixture.retrievedAt}):null;
