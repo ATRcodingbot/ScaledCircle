@@ -37,3 +37,16 @@ Download/Print Map remains a free, read-only operation using exact saved coordin
 Focused backend, rules, client and web compilation evidence and exact deployed revisions are recorded in the final deployment appendix after verification. Tests use synthetic emulator data; production acceptance does not create fabricated activity.
 
 Mike Email remains **EXTERNAL USER SIGN-IN BLOCKER — OAUTH NOT YET TESTED**. No OAuth configuration, provider connection, email send or Google sign-in attempt is part of this deployment.
+
+## Final validation result
+
+Implementation commit: `37bb124733913bfd2412bc1fa7bf2053c9c0e443`. Promotion-verification commit: `ca8bfd5`. See [deployment appendix](campaign-execution-authority-deployment-20260926.md) for all active revisions, preserved configuration scope and production readback.
+
+- 88 CRM/calendar/contact/planner/history tests passed (41 maintained regressions + 15 planner + 20 history backend + 12 geometry).
+- 79 execution-authority/rules/economic regression tests passed. These produce 167 backend/source/rules tests across the current focused runs.
+- 23 exact prepared-package checks passed; seven mocked deployment-runner tests passed.
+- 53 focused Flutter UI/regression tests passed; analyzer clean across 14 affected components.
+- Production Flutter web compilation passed. Native compilation was not run; the native dependency lock and frozen checkout remain unchanged.
+- Firestore rules and all 24 required function revisions are deployed. Hosting is deployed and the served bundle matches the built artifact.
+
+Known limits remain explicit: automatic material recommendations require verified accessible distribution-point data; linked own-team schedules support initial scheduling/completion but not rescheduling/cancellation in this change; partial or paused marketplace settlements without exact completed geography are not projected as whole-zone marketing history. Real production customer/campaign execution was not fabricated for acceptance.

@@ -73,3 +73,38 @@ Ignored evidence is retained under `.firebase/campaign-authority/`: the generati
 The 79 source tests and 23 package checks are distinct evidence sets, not a claim that 102 production operations were exercised. Production completion is established by exact target readbacks, with rules/projection and all marketplace authority guards deployed before the planner and Hosting expose own-team creation.
 
 The deployment runner additionally passed seven fully mocked Python safety tests covering runtime/build/trigger/environment/secret drift, unexpected source files, preflight rejection, post-deployment drift rejection without retry, and preservation of the source-only command flags. These tests make no cloud calls. Run them with `python -m unittest discover -s tools -p deploy_campaign_planner_overlay_test.py -v`.
+
+## Completed production readback
+
+All 24 existing callable/projection targets below are ACTIVE. Final retained before/after comparison reports no preserved configuration differences for every target. Firestore rules compiled and deployed before planner activation. Hosting deployment completed, and the public `main.dart.js` SHA-256 matches the prepared production build: `7165a22648a5620c0b8183255055542faea17f49ea7fc43cffc8673fe4bc4ff2`.
+
+| Function | Active revision |
+| --- | --- |
+| `quoteCampaignFunding` | `quotecampaignfunding-00008-zuh` |
+| `createCampaignFundingCheckoutSession` | `createcampaignfundingcheckoutsession-00011-cel` |
+| `publishFundedCampaign` | `publishfundedcampaign-00007-yej` |
+| `getCampaignFundingState` | `getcampaignfundingstate-00004-zir` |
+| `fundCampaign` | `fundcampaign-00004-zin` |
+| `applyToCampaign` | `applytocampaign-00005-nap` |
+| `assignScalerToZone` | `assignscalertozone-00008-rip` |
+| `assignScalerToCampaignLocations` | `assignscalertocampaignlocations-00004-kih` |
+| `configureZoneGroupAssignment` | `configurezonegroupassignment-00003-pib` |
+| `acceptZoneGroupSlot` | `acceptzonegroupslot-00005-rir` |
+| `startTrackingSession` | `starttrackingsession-00004-rav` |
+| `initializeCampaignCompletion` | `initializecampaigncompletion-00005-rem` |
+| `startCampaignCompletion` | `startcampaigncompletion-00002-reg` |
+| `appendCampaignCompletionEvidence` | `appendcampaigncompletionevidence-00002-saw` |
+| `submitCampaignCompletion` | `submitcampaigncompletion-00002-por` |
+| `submitZoneCompletion` | `submitzonecompletion-00010-cop` |
+| `reviewCampaignCompletion` | `reviewcampaigncompletion-00005-xez` |
+| `finalizeZoneReview` | `finalizezonereview-00005-yoc` |
+| `approveZonePayout` | `approvezonepayout-00008-vod` |
+| `getSmartZonePlan` | `getsmartzoneplan-00006-way` |
+| `applySmartZonePlan` | `applysmartzoneplan-00006-now` |
+| `analyzeCampaignZone` | `analyzecampaignzone-00007-fey` |
+| `projectCampaignDiscoveryV1` | `projectcampaigndiscoveryv1-00002-col` |
+| `businessOperationsV1` | `businessoperationsv1-00010-pep` |
+
+Read-only production calls with no authentication and with an invalid token both returned HTTP 401 / `UNAUTHENTICATED`. In the existing authorized Mike Business session, Business Home loaded and Create Campaign → Flyer Distribution opened the new Campaign → Area → Materials → Review sequence. Selecting My Own Team changed the final stage to Review & Schedule and displayed the no-Scaler-compensation explanation. No form was committed and no synthetic production campaign was created.
+
+The complete create/schedule/complete/overlap lifecycle is verified with synthetic emulator tests, not fabricated production activity. The production screenshot is retained locally at `.firebase/campaign-planner-deploy/own-team-planner-production.png`.
