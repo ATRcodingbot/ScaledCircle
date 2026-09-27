@@ -205,6 +205,11 @@ async function transition(paymentId, paymentUpdate, campaignUpdate) {
     const campaignSnapshot = await transaction.get(campaignRef);
     if (!campaignSnapshot.exists) throw new Error("campaign_missing");
     campaignExecution.assertMarketplace(campaignSnapshot.data(), HttpsError);
+    // A provider event still reconciles funds but cannot reopen list-closed work.
+    if ((campaignSnapshot.data().workEntryClosed === true ||
+        (campaignSnapshot.data().archived === true && campaignSnapshot.data().status === 'completed')) && campaignUpdate.status) {
+      campaignUpdate = {...campaignUpdate, status: campaignSnapshot.data().status};
+    }
     transaction.set(paymentRef, {...paymentUpdate, updatedAt: FieldValue.serverTimestamp()}, {merge: true});
     transaction.set(campaignRef, {...campaignUpdate, updatedAt: FieldValue.serverTimestamp()}, {merge: true});
   });

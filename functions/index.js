@@ -2529,102 +2529,36 @@ exports.fundCampaign = onCall(
 );
 
 /**
- * Permanently delete an unfunded draft and its setup records.
- * Launched or funded campaigns must be retained for payment and audit history.
+ * Legacy entry point for server-reviewed logical removal of an eligible draft.
+ * Retain the campaign audit record, linked history and shared assets.
  */
 exports.deleteDraftCampaign = onCall(
-  {
-    enforceAppCheck: false,
-    maxInstances: 5,
-  },
-  businessOperation("deleteDraftCampaign", async (request) => {
-    if (!request.auth) {
-      throw new HttpsError(
-        "unauthenticated",
-        "You must be logged in to delete a draft campaign.",
-      );
+  {enforceAppCheck: false, maxInstances: 5},
+  businessOperation('deleteDraftCampaign', async request => {
+    try {
+      const workspace = businessWorkspaceService();
+      const service = require('./campaign_list_lifecycle').createService({db, FieldValue, authorize: async (r, tx) => {
+        const uid = r.auth?.uid;
+        await workspace.actor(uid);
+        const profile = (await tx.get(db.doc('users/' + uid))).data();
+        if (profile?.role === 'admin') throw new HttpsError('permission-denied', 'Use a Business campaign-management account.');
+        return workspace.authority({uid, businessId: r.data.businessId, permission: 'campaigns', transaction: tx, allowExpired: true});
+      }});
+      const campaignId = cleanId(request.data?.campaignId);
+      if (!campaignId) throw new HttpsError('invalid-argument', 'Choose a campaign.');
+      const businessId = request[workspaceAccess.CONTEXT]?.businessId || request.auth?.uid;
+      const base = {...request, data: {businessId, operation: 'campaignListActions', input: {campaignId}}};
+      const preview = await service.execute(base);
+      if (preview.status === 'deleted') return {campaignId, alreadyDeleted: true};
+      return await service.execute({...base, data: {businessId, operation: 'changeCampaignListState',
+        requestId: crypto.createHash('sha256').update('legacy-delete:' + campaignId + ':' + preview.version).digest('hex'),
+        input: {campaignId, action: 'delete', expectedVersion: preview.version}}});
+    } catch (error) {
+      if (['unauthenticated', 'permission-denied', 'failed-precondition', 'invalid-argument', 'not-found', 'already-exists', 'aborted'].includes(error.code)) {
+        throw new HttpsError(error.code, error.message);
+      }
+      throw error;
     }
-
-    const campaignId = cleanId(request.data?.campaignId);
-
-    if (!campaignId) {
-      throw new HttpsError(
-        "invalid-argument",
-        "A valid campaignId is required.",
-      );
-    }
-
-    const campaignReference = db.collection("campaigns").doc(campaignId);
-    const campaignSnapshot = await campaignReference.get();
-
-    if (!campaignSnapshot.exists) {
-      return {campaignId, alreadyDeleted: true};
-    }
-
-    const campaign = campaignSnapshot.data() || {};
-
-    if ((campaign.businessId !== (request[workspaceAccess.CONTEXT]?.businessId || request.auth.uid))) {
-      throw new HttpsError(
-        "permission-denied",
-        "You do not own this campaign.",
-      );
-    }
-
-    if (campaign.status !== "draft") {
-      throw new HttpsError(
-        "failed-precondition",
-        "Only draft campaigns can be deleted.",
-      );
-    }
-
-    if (campaign.fundingStatus === "reserved" ||
-        moneyValue(campaign.reservedWorkerBudget) > 0) {
-      throw new HttpsError(
-        "failed-precondition",
-        "This draft has reserved funding and cannot be deleted until funding is released.",
-      );
-    }
-
-    const [
-      zonesSnapshot,
-      locationsSnapshot,
-      assetsSnapshot,
-      routesSnapshot,
-      completionsSnapshot,
-      applicationsSnapshot,
-      assignedScalersSnapshot,
-    ] = await Promise.all([
-      db.collection("campaignZones").where("campaignId", "==", campaignId).get(),
-      db.collection("campaignLocations").where("campaignId", "==", campaignId).get(),
-      db.collection("marketingAssets").where("campaignId", "==", campaignId).get(),
-      db.collection("campaignRoutes").where("campaignId", "==", campaignId).get(),
-      db.collection("campaignCompletions").where("campaignId", "==", campaignId).get(),
-      campaignReference.collection("applications").get(),
-      campaignReference.collection("assignedScalers").get(),
-    ]);
-    const writer = db.bulkWriter();
-    const relatedDocuments = [
-      ...zonesSnapshot.docs,
-      ...locationsSnapshot.docs,
-      ...assetsSnapshot.docs,
-      ...routesSnapshot.docs,
-      ...completionsSnapshot.docs,
-      ...applicationsSnapshot.docs,
-      ...assignedScalersSnapshot.docs,
-    ];
-
-    for (const document of relatedDocuments) {
-      writer.delete(document.ref);
-    }
-
-    writer.delete(campaignReference);
-    await writer.close();
-
-    return {
-      campaignId,
-      deletedRelatedRecords: relatedDocuments.length,
-      alreadyDeleted: false,
-    };
   }),
 );
 
@@ -3003,6 +2937,7 @@ exports.assignScalerToCampaignLocations = completionAuthorityCallable(
         throw new HttpsError("not-found", "The campaign application is unavailable.");
       }
       const campaign = campaignSnapshot.data() || {};
+      require('./campaign_list_lifecycle').assertAcceptingWork(campaign, HttpsError);
     campaignExecution.assertMarketplace(campaign, HttpsError);
       const application = applicationSnapshot.data() || {};
       if (!context.isAdmin && campaign.businessId !== context.uid) {
@@ -3111,6 +3046,7 @@ exports.initializeCampaignCompletion = completionAuthorityCallable(
         throw new HttpsError("not-found", "The campaign assignment or saved route is unavailable.");
       }
       const campaign = campaignSnapshot.data() || {};
+      require('./campaign_list_lifecycle').assertAcceptingWork(campaign, HttpsError);
     campaignExecution.assertMarketplace(campaign, HttpsError);
       const zone = zoneSnapshot.data() || {};
       const route = routeSnapshot.data() || {};
@@ -3124,6 +3060,8 @@ exports.initializeCampaignCompletion = completionAuthorityCallable(
       const completionRef = db.collection("campaignCompletions").doc(completionId);
       let created = false;
       await db.runTransaction(async (transaction) => {
+        const currentCampaign = (await transaction.get(db.collection('campaigns').doc(campaignId))).data();
+        require('./campaign_list_lifecycle').assertAcceptingWork(currentCampaign, HttpsError);
         const existing = await transaction.get(completionRef);
         if (existing.exists) return;
         transaction.create(completionRef, {
@@ -3153,6 +3091,8 @@ exports.initializeCampaignCompletion = completionAuthorityCallable(
     const completionRef = db.collection("campaignCompletions").doc(completionId);
     let created = false;
     await db.runTransaction(async (transaction) => {
+      const currentCampaign = (await transaction.get(db.collection('campaigns').doc(campaignId))).data();
+      require('./campaign_list_lifecycle').assertAcceptingWork(currentCampaign, HttpsError);
       const existing = await transaction.get(completionRef);
       if (existing.exists) return;
       transaction.create(completionRef, {
@@ -3178,7 +3118,9 @@ exports.startCampaignCompletion = completionAuthorityCallable(async (request) =>
     const snapshot = await transaction.get(ref);
     if (!snapshot.exists) throw new HttpsError("not-found", "Completion not found.");
     const completion = snapshot.data() || {};
-    campaignExecution.assertMarketplace((await transaction.get(db.collection("campaigns").doc(cleanId(completion.campaignId) || "missing"))).data(), HttpsError);
+    const campaign = (await transaction.get(db.collection("campaigns").doc(cleanId(completion.campaignId) || "missing"))).data();
+    campaignExecution.assertMarketplace(campaign, HttpsError);
+    require('./campaign_list_lifecycle').assertAcceptingWork(campaign, HttpsError);
     if (!context.isAdmin && completion.scalerId !== context.uid) {
       throw new HttpsError("permission-denied", "This completion belongs to another Scaler.");
     }
@@ -7632,6 +7574,7 @@ exports.startAssignedZone = trackingCallable("startAssignedZone", async (request
     }
     const zone = zoneSnapshot.data();
     const campaign = campaignSnapshot.data();
+    require('./campaign_list_lifecycle').assertAcceptingWork(campaign, HttpsError);
     campaignExecution.assertMarketplace(campaign, HttpsError);
     const participant = participantSnapshot.data() || null;
     const groupAuthorized = participantSnapshot.exists && participant?.scalerUid === context.uid &&
@@ -7834,6 +7777,7 @@ exports.assignScalerToZone = trackingCallable("assignScalerToZone", businessOper
       throw new HttpsError("not-found", "The campaign assignment is no longer available.");
     }
     const campaign = campaignSnapshot.data();
+    require('./campaign_list_lifecycle').assertAcceptingWork(campaign, HttpsError);
     campaignExecution.assertMarketplace(campaign, HttpsError);
     const zone = zoneSnapshot.data();
     const application = applicationSnapshot.data();
@@ -8067,6 +8011,7 @@ exports.configureZoneGroupAssignment = trackingCallable(
       ]);
       if (!campaignSnapshot.exists || !zoneSnapshot.exists) throw new HttpsError("not-found", "Campaign zone not found.");
       const campaign = campaignSnapshot.data() || {};
+    require('./campaign_list_lifecycle').assertAcceptingWork(campaign, HttpsError);
     campaignExecution.assertMarketplace(campaign, HttpsError); const zone = zoneSnapshot.data() || {};
       if ((!context.isAdmin && campaign.businessId !== context.uid) || zone.campaignId !== campaignId) throw new HttpsError("permission-denied", "This campaign does not belong to you.");
       if (String(campaign.status || "") !== "open") throw new HttpsError("failed-precondition", "This campaign is no longer accepting Scaler assignments.");
@@ -8177,7 +8122,8 @@ exports.acceptZoneGroupSlot = trackingCallable("acceptZoneGroupSlot", async (req
     const share = Number(group.initialSharesCents?.[slot - 1]);
     const participant = groupAssignment.initialParticipant({zoneId, campaignId, businessId: group.businessId,
       scalerUid, slotNumber: slot, shareCents: share});
-    const campaign = campaignSnapshot.data() || {}; const materialRequired = materialRequiredForCampaign(campaign);
+    const campaign = campaignSnapshot.data() || {};
+    require('./campaign_list_lifecycle').assertAcceptingWork(campaign, HttpsError); const materialRequired = materialRequiredForCampaign(campaign);
     if (String(campaign.status || "") !== "open") {
       throw new HttpsError("failed-precondition", "This campaign is no longer accepting Scaler assignments.");
     }
@@ -8722,6 +8668,7 @@ exports.applyToCampaign = trackingCallable("applyToCampaign", async (request) =>
     ]);
     if (!campaignSnapshot.exists) throw new HttpsError("not-found", "Campaign not found.");
     const campaign = campaignSnapshot.data() || {};
+    require('./campaign_list_lifecycle').assertAcceptingWork(campaign, HttpsError);
     campaignExecution.assertMarketplace(campaign, HttpsError);
     if (!["open", "published", "active", "available"].includes(String(campaign.status))) {
       throw new HttpsError("failed-precondition", "This campaign is not accepting applications.");
@@ -10122,6 +10069,7 @@ exports.startTrackingSession = trackingCallable("startTrackingSession", async (r
       throw new HttpsError("not-found", "The assigned job was not found.");
     }
     const campaign = campaignSnapshot.data() || {};
+    require('./campaign_list_lifecycle').assertAcceptingWork(campaign, HttpsError);
     campaignExecution.assertMarketplace(campaign, HttpsError);
     const zone = zoneSnapshot.data() || {};
     const participant = participantSnapshot.data() || null;

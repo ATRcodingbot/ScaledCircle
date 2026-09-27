@@ -48,6 +48,9 @@ for (const flavor of ["production", "staging", "legacy"]) test(`${flavor}: mode 
         await assertFails(updateDoc(doc(db("owner"), `campaigns/${id}`), patch));
       }
     }
+    for (const patch of [{archived:true}, {hiddenFromBusinessHistory:true}, {workEntryClosed:true}, {acceptingApplications:true}, {deletedAt:serverTimestamp()}, {closedAt:serverTimestamp()}]) {
+      await assertFails(updateDoc(doc(db('owner'),'campaigns/marketplace'),patch));
+    }
     for(const id of ['own_team','marketplace','legacy']) {
       await assertFails(updateDoc(doc(db('owner'),`campaignZones/${id}`),{
         zoneIntelligence:{version:'ZoneIntelligenceV1',status:'available',workload:{minutes:30,oneScaler:true}}}));

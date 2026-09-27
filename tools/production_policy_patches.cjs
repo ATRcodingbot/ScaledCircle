@@ -11,14 +11,17 @@ function section(source,name,transform) {
   const next=source.indexOf('\nexports.',start+1),end=next<0?source.length:next;
   return source.slice(0,start)+transform(source.slice(start,end))+source.slice(end);
 }
-function patch(source) {
+function patch(source, {includeMapping = true} = {}) {
   source=source.replaceAll('\r','');
   source="const productionPolicy = require('./production_campaign_policy');\n"+source;
+  if (includeMapping) {
   source=once(source,'async function smartZoneCampaign(request) {',
     'async function smartZoneCampaign(request) {\n  await assertProductionEnvironment(request,false);');
+  }
   source=once(source,'async function requireVerifiedUser(request, message) {',
     'async function requireVerifiedUser(request, message) {\n  await assertProductionEnvironment(request,false);');
   source=source.replaceAll('stagingPhysicalQa.reserved(request.data?.campaignId)','false');
+  if (includeMapping) {
   source=section(source,'analyzeCampaignZone',s=>once(s,'    const cleanZoneId = zoneId.trim();',
     `    const cleanZoneId = zoneId.trim();
     await assertProductionEnvironment(request,false);
@@ -53,6 +56,7 @@ function patch(source) {
       const existing = await transaction.get(db.collection("campaignZones")`);
     return s;
   });
+  }
   source=section(source,'applyToCampaign',s=>{
     s=once(s,'new Set(["campaignId"])','new Set(["campaignId", "acceptedOfferDigest"])');
     s=once(s,'    transaction.create(applicationRef, {',`    let acceptedTerms;

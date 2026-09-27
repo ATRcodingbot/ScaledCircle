@@ -172,6 +172,7 @@ service cloud.firestore {
 
       allow update:
         if request.resource.data.get("status", "") == resource.data.get("status", "")
+        && !(resource.data.get("status", "") in ["deleted", "closed"])
         && isApprovedAccount()
         && resource.data.businessId == request.auth.uid
         && request.resource.data.businessId == resource.data.businessId
@@ -1220,6 +1221,9 @@ service cloud.firestore {
 
     function financialCampaignFields() {
       return [
+        'archived', 'archivedAt', 'archivedBy', 'hiddenFromBusinessHistory',
+        'deletedAt', 'deletedBy', 'closedAt', 'closedBy', 'restoredAt', 'restoredBy',
+        'workEntryClosed', 'closedFromStatus', 'marketplaceVisible', 'acceptingApplications',
         'executionMode', 'planningSchemaVersion', 'planningVersion', 'planningStage', 'materialsAreaDigest',
         'campaignWorkload', 'workloadVersion', 'workloadUpdatedBy', 'workloadUpdatedAt',
         'smartZoneSelectionIds', 'smartZoneObjective',

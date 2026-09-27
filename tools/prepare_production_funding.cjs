@@ -106,6 +106,7 @@ function prepare() {
     const payment=(await transaction.get(db.doc('campaignPayments/'+(cleanId(campaign.fundingPaymentId)||'missing')))).data();
     campaignExecution.assertMarketplace(campaign,HttpsError);
     if(campaign.status!=='open')campaignExecution.assertPlanningReview(campaign,docs.map(d=>({...d.data(),id:d.id})),HttpsError);
+    require('./campaign_list_lifecycle').assertAcceptingWork(campaign,HttpsError);
     if(campaign.status==='open')return {campaignId:input.campaignId,status:'open',replay:true};
     if(campaign.status!=='draft'||!zones.length||campaign.fundingStatus!=='funded'||payment?.status!=='paid'||
        payment.stripeMode!==PAYMENT_ENVIRONMENT.stripeMode||payment.campaignId!==input.campaignId||payment.businessUid!==input.uid) {
@@ -174,7 +175,7 @@ function prepare() {
    let filename=path.join(root,'functions-campaign-funding',name);
    if(!fs.existsSync(filename))filename=path.join(root,'functions',name);
    let content=name==='campaign_start_readback.js'
-     ?require('./campaign_start_readback.cjs')(require('./prepare_production_engineering.cjs').prepareSource())
+     ?require('./campaign_start_readback.cjs')(require('./prepare_production_engineering.cjs').prepareSource({includeMapping:false}))
      :fs.readFileSync(filename,'utf8');
    content=require('./production_settlement_adapter.cjs').moduleSource(name,content);
    if(name==='campaign_funding_lifecycle.js') {

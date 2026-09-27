@@ -1,3 +1,4 @@
+import '../../widgets/campaign_list_actions.dart';
 import 'package:flutter_app/navigation/authenticated_app_bar.dart';
 import 'business_results_overview.dart';
 import '../../navigation/context_back_button.dart';
@@ -15,7 +16,7 @@ import '../../theme/app_theme.dart';
 
 enum BusinessCampaignView { campaigns, results }
 
-class BusinessCampaignsScreen extends StatelessWidget {
+class BusinessCampaignsScreen extends StatefulWidget {
   const BusinessCampaignsScreen({
     super.key,
     required this.businessId,
@@ -26,6 +27,45 @@ class BusinessCampaignsScreen extends StatelessWidget {
   final String businessId;
   final BusinessCampaignView view;
   final VoidCallback onCreateCampaign;
+
+  @override
+  State<BusinessCampaignsScreen> createState() =>
+      _BusinessCampaignsScreenState();
+}
+
+class _BusinessCampaignsScreenState extends State<BusinessCampaignsScreen> {
+  bool _archived = false;
+  String get businessId => widget.businessId;
+  BusinessCampaignView get view => widget.view;
+  VoidCallback get onCreateCampaign => widget.onCreateCampaign;
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _archived =
+        PageStorage.maybeOf(
+          context,
+        )?.readState(context, identifier: 'campaign-filter-$businessId') ==
+        true;
+  }
+
+  @override
+  void didUpdateWidget(covariant BusinessCampaignsScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.businessId != businessId) {
+      _archived =
+          PageStorage.maybeOf(
+            context,
+          )?.readState(context, identifier: 'campaign-filter-$businessId') ==
+          true;
+    }
+  }
+
+  void _filter(bool value) {
+    setState(() => _archived = value);
+    PageStorage.maybeOf(
+      context,
+    )?.writeState(context, value, identifier: 'campaign-filter-$businessId');
+  }
 
   int _priority(
     Map<String, dynamic> data,
@@ -51,6 +91,7 @@ class BusinessCampaignsScreen extends StatelessWidget {
       ),
     ),
     body: StreamBuilder<List<DocumentSnapshot<Map<String, dynamic>>>>(
+      key: ValueKey('campaign-list-$businessId'),
       stream: businessWorkspaceRecords(
         FirebaseFirestore.instance,
         'campaigns',
@@ -66,6 +107,7 @@ class BusinessCampaignsScreen extends StatelessWidget {
           return const Center(child: CircularProgressIndicator());
         }
         return StreamBuilder<List<DocumentSnapshot<Map<String, dynamic>>>>(
+          key: ValueKey('campaign-zones-$businessId'),
           stream: businessWorkspaceRecords(
             FirebaseFirestore.instance,
             'campaignZones',
@@ -88,8 +130,7 @@ class BusinessCampaignsScreen extends StatelessWidget {
             final docs =
                 snapshot.data!.where((doc) {
                   final data = doc.data()!;
-                  if (data['archived'] == true ||
-                      data['hiddenFromBusinessHistory'] == true) {
+                  if (!campaignInList(data, archived: _archived)) {
                     return false;
                   }
                   return view == BusinessCampaignView.campaigns ||
@@ -107,11 +148,7 @@ class BusinessCampaignsScreen extends StatelessWidget {
             if (view == BusinessCampaignView.results) {
               return BusinessResultsOverview(
                 campaigns: snapshot.data!
-                    .where(
-                      (d) =>
-                          d.data()?['archived'] != true &&
-                          d.data()?['hiddenFromBusinessHistory'] != true,
-                    )
+                    .where((d) => campaignInList(d.data()!, archived: false))
                     .map((d) => {...d.data()!, 'id': d.id})
                     .toList(),
                 zones: zoneSnapshot.data!
@@ -119,49 +156,6 @@ class BusinessCampaignsScreen extends StatelessWidget {
                     .toList(),
               );
             }
-            if (docs.isEmpty) {
-              return Center(
-                child: Padding(
-                  padding: const EdgeInsets.all(24),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        view == BusinessCampaignView.results
-                            ? Icons.insights_outlined
-                            : Icons.campaign_outlined,
-                        size: 48,
-                        color: AppColors.textSecondary,
-                      ),
-                      const SizedBox(height: 14),
-                      Text(
-                        view == BusinessCampaignView.results
-                            ? 'No campaign results yet'
-                            : 'No campaigns yet',
-                        style: Theme.of(context).textTheme.headlineSmall,
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        view == BusinessCampaignView.results
-                            ? 'Submitted and completed campaign results will appear here.'
-                            : 'Create a campaign when you are ready to reach your next area.',
-                        textAlign: TextAlign.center,
-                      ),
-                      if (view == BusinessCampaignView.campaigns &&
-                          BusinessWorkspaceSession.can('campaigns')) ...[
-                        const SizedBox(height: 18),
-                        FilledButton.icon(
-                          onPressed: onCreateCampaign,
-                          icon: const Icon(Icons.add),
-                          label: const Text('Create Campaign'),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-              );
-            }
-
             return ListView.separated(
               padding: const EdgeInsets.all(20),
               itemCount: docs.length + 1,
@@ -178,6 +172,32 @@ class BusinessCampaignsScreen extends StatelessWidget {
                       const Text(
                         'Create work, manage assignments and review submissions.',
                       ),
+                      const SizedBox(height: 12),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          ChoiceChip(
+                            label: const Text('Current'),
+                            selected: !_archived,
+                            onSelected: (_) => _filter(false),
+                          ),
+                          ChoiceChip(
+                            label: const Text('Archived'),
+                            selected: _archived,
+                            onSelected: (_) => _filter(true),
+                          ),
+                        ],
+                      ),
+                      if (docs.isEmpty)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 24),
+                          child: Text(
+                            _archived
+                                ? 'No archived campaigns'
+                                : 'No campaigns yet',
+                          ),
+                        ),
                       const SizedBox(height: 12),
                       if (BusinessWorkspaceSession.can('campaigns'))
                         FilledButton.icon(
@@ -219,6 +239,10 @@ class BusinessCampaignsScreen extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text('Status: ${status.replaceAll('_', ' ')}'),
+                        if (data['fundingStatus'] != null)
+                          Text(
+                            'Funding: ${data['fundingStatus'].toString().replaceAll('_', ' ')}',
+                          ),
                         if (location != null && location.isNotEmpty)
                           Text(location),
                         Text(compensation.primaryText),
@@ -234,7 +258,17 @@ class BusinessCampaignsScreen extends StatelessWidget {
                         ),
                       ],
                     ),
-                    trailing: const Icon(Icons.chevron_right),
+                    trailing: BusinessWorkspaceSession.can('campaigns')
+                        ? CampaignListActions(
+                            key: ValueKey('$businessId/${doc.id}'),
+                            businessId: businessId,
+                            campaignId: doc.id,
+                            onManage: () => AppNavigation.push(
+                              context,
+                              AppRoutes.campaignDetail(doc.id),
+                            ),
+                          )
+                        : const Icon(Icons.chevron_right),
                     onTap: () => AppNavigation.push(
                       context,
                       AppRoutes.campaignDetail(doc.id),

@@ -864,7 +864,7 @@ class _CampaignDetailsScreenState extends State<CampaignDetailsScreen> {
         return AlertDialog(
           title: const Text('Delete Campaign'),
           content: const Text(
-            'Permanently delete this unfunded draft and its zone setup? This cannot be undone.',
+            'Remove this unfinished draft from the working list? Required audit history and shared assets are retained. This cannot be undone.',
           ),
           actions: [
             TextButton(
@@ -1089,7 +1089,11 @@ class _CampaignDetailsScreenState extends State<CampaignDetailsScreen> {
         ),
       );
     }
-    if (status != 'open' || fundingStatus != 'funded') {
+    final refundPolicyStatus =
+        status == 'closed' && data['workEntryClosed'] == true
+        ? data['closedFromStatus']?.toString()
+        : status;
+    if (refundPolicyStatus != 'open' || fundingStatus != 'funded') {
       return const SizedBox.shrink();
     }
     return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(

@@ -102,6 +102,7 @@ service cloud.firestore {
       // Campaigns may be edited only while draft. Publishing, money, contracts,
       // ownership, assignments and audit attribution remain server-authoritative.
       allow update: if request.resource.data.get("status", "") == resource.data.get("status", "")
+        && !(resource.data.get("status", "") in ["deleted", "closed"])
         && workspaceMember(resource.data.businessId, ['campaigns'])
         && !resource.data.get('certificationFixture', false) && resource.data.status == 'draft'
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
@@ -165,7 +166,7 @@ service cloud.firestore {
           && scalerId == request.auth.uid && z.assignedScalerId == request.auth.uid
           && z.campaignId == campaignId && z.businessId == businessId
           && get(/databases/$(database)/documents/campaigns/$(campaignId)).data.businessId == businessId
-          && !(get(/databases/$(database)/documents/campaigns/$(campaignId)).data.status in ['completed', 'cancelled', 'canceled', 'archived'])
+          && !(get(/databases/$(database)/documents/campaigns/$(campaignId)).data.status in ['completed', 'cancelled', 'canceled', 'canceling', 'archived', 'closed', 'deleted'])
         && z.status in ['assigned', 'accepted', 'in_progress', 'paused', 'paused_work_window', 'paused_out_of_window', 'ready'];
     }
     match /campaignDiscovery/{campaignId} {
@@ -329,6 +330,7 @@ service cloud.firestore {
 
       allow update:
         if request.resource.data.get("status", "") == resource.data.get("status", "")
+        && !(resource.data.get("status", "") in ["deleted", "closed"])
         && isApprovedAccount()
         && resource.data.businessId == request.auth.uid
         && request.resource.data.businessId == resource.data.businessId
@@ -861,7 +863,7 @@ service cloud.firestore {
               && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'scaler'
               && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.active == true
               && resource.data.status in ['assigned', 'in_progress']
-              && !(get(/databases/$(database)/documents/campaigns/$(resource.data.campaignId)).data.status in ['completed', 'cancelled', 'canceled', 'archived'])
+              && !(get(/databases/$(database)/documents/campaigns/$(resource.data.campaignId)).data.status in ['completed', 'cancelled', 'canceled', 'canceling', 'archived', 'closed', 'deleted'])
             && get(/databases/$(database)/documents/campaigns/$(resource.data.campaignId)).data.businessId == resource.data.businessId)
           || get(
             /databases/$(database)/documents/campaigns/$(resource.data.campaignId)
@@ -1054,7 +1056,7 @@ service cloud.firestore {
             && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.active == true
             && resource.data.status in ['accepted', 'participating', 'paused']
             && get(/databases/$(database)/documents/campaigns/$(resource.data.campaignId)).data.businessId == resource.data.businessId
-            && !(get(/databases/$(database)/documents/campaigns/$(resource.data.campaignId)).data.status in ['completed', 'cancelled', 'canceled', 'archived'])
+            && !(get(/databases/$(database)/documents/campaigns/$(resource.data.campaignId)).data.status in ['completed', 'cancelled', 'canceled', 'canceling', 'archived', 'closed', 'deleted'])
           && get(/databases/$(database)/documents/campaignZones/$(resource.data.zoneId)).data.campaignId == resource.data.campaignId
           && get(/databases/$(database)/documents/campaignZones/$(resource.data.zoneId)).data.businessId == resource.data.businessId
           && request.auth.uid in get(/databases/$(database)/documents/campaignZones/$(resource.data.zoneId)).data.assignedScalerIds
@@ -1399,6 +1401,9 @@ service cloud.firestore {
 
     function financialCampaignFields() {
       return [
+        'archived', 'archivedAt', 'archivedBy', 'hiddenFromBusinessHistory',
+        'deletedAt', 'deletedBy', 'closedAt', 'closedBy', 'restoredAt', 'restoredBy',
+        'workEntryClosed', 'closedFromStatus', 'marketplaceVisible', 'acceptingApplications',
         'executionMode', 'planningSchemaVersion', 'planningVersion', 'planningStage', 'materialsAreaDigest',
         'campaignWorkload', 'workloadVersion', 'workloadUpdatedBy', 'workloadUpdatedAt',
         'smartZoneSelectionIds', 'smartZoneObjective',

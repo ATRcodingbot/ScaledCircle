@@ -67,18 +67,18 @@ test("failed own-team entry calls produce no financial, Scaler, tracking, or pub
   assert.equal((await db.doc(`wallets/${owner}`).get()).data().availableCredits, 500);
   assert.equal((await db.doc(`campaignCompletions/${completionId}`).get()).data().status, "in_progress");
 });
-test("own-team Smart Zones reaches geographic planning with no membership; marketplace keeps its membership gate", async () => {
+test("recommendations retain Scale access and marketplace membership gates; no provider call without authority", async () => {
   const geography = require("./smart_zone_geography");
   const original = geography.fetchSnapshot;
   let called = 0;
   geography.fetchSnapshot = async () => { called++; throw Error("synthetic_geography_unavailable"); };
   try {
     await db.doc(`campaigns/${campaignId}`).set({businessId: owner, executionMode: "own_team", status: "draft", serviceArea: [{latitude: 39, longitude: -76}, {latitude: 39.001, longitude: -76}, {latitude: 39.001, longitude: -75.999}]});
-    await assert.rejects(call("getSmartZonePlan", {campaignId}), error => error.code === "unavailable");
-    assert.equal(called, 1);
+    await assert.rejects(call("getSmartZonePlan", {campaignId}), error => error.code === "permission-denied" && /Scale plan/.test(error.message));
+    assert.equal(called, 0);
     await db.doc(`campaigns/${campaignId}`).update({executionMode: "marketplace"});
     await assert.rejects(call("getSmartZonePlan", {campaignId}), error => error.code === "failed-precondition" && /membership/.test(error.message));
-    assert.equal(called, 1);
+    assert.equal(called, 0);
   } finally { geography.fetchSnapshot = original; }
 });
 

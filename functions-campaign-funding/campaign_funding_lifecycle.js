@@ -84,7 +84,11 @@ function cancelRefundEligibility(input = {}) {
   const campaign = input.campaign || {};
   const payment = input.payment || {};
   const blockers = [];
-  if (!new Set(["open", "funded"]).has(String(campaign.status || "")) ||
+  // Organizational closure preserves the exact pre-close refund policy. It
+  // grants no refund and bypasses none of the financial/work checks below.
+  const policyStatus = campaign.status === 'closed' && campaign.workEntryClosed === true
+    ? campaign.closedFromStatus : campaign.status;
+  if (!new Set(["open", "funded"]).has(String(policyStatus || "")) ||
       campaign.fundingStatus !== "funded" || payment.status !== "paid") blockers.push("not_funded");
   if (campaign.fundingReviewRequired === true || payment.settlementFrozen === true) blockers.push("financial_review");
   if (campaign.refundRequestedAt || payment.refundRequestedAt ||

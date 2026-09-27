@@ -1469,6 +1469,9 @@ service cloud.firestore {
 
     function financialCampaignFields() {
       return [
+        'archived', 'archivedAt', 'archivedBy', 'hiddenFromBusinessHistory',
+        'deletedAt', 'deletedBy', 'closedAt', 'closedBy', 'restoredAt', 'restoredBy',
+        'workEntryClosed', 'closedFromStatus', 'marketplaceVisible', 'acceptingApplications',
         'executionMode', 'planningSchemaVersion', 'planningVersion', 'planningStage', 'materialsAreaDigest',
         'campaignWorkload', 'workloadVersion', 'workloadUpdatedBy', 'workloadUpdatedAt',
         'smartZoneSelectionIds', 'smartZoneObjective',

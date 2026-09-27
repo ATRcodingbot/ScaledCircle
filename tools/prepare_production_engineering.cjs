@@ -15,7 +15,7 @@ function replaceFunction(source,name,replacement) {
   if(!node)throw Error('Missing maintained function '+name);
   return source.slice(0,node.start)+replacement+source.slice(node.end);
 }
-function prepareSource(){
+function prepareSource({includeMapping = true} = {}){
   let source=fs.readFileSync(path.join(root,'functions','index.js'),'utf8');
   source=replaceFunction(source,'assertPhysicalQaRequest',`async function assertProductionEnvironment(request, scalerOnly=true) {
     const project=process.env.GCLOUD_PROJECT||process.env.GOOGLE_CLOUD_PROJECT;
@@ -120,7 +120,7 @@ function prepareSource(){
        !['in_progress','paused_work_window'].includes(freshZone.data().status)) {
       throw new HttpsError('permission-denied','This active assignment is unavailable.');
     }`);
-  source=require('./production_policy_patches.cjs').patch(source);
+  source=require('./production_policy_patches.cjs').patch(source, {includeMapping});
   source=require('./production_settlement_adapter.cjs').exportsSource(source);
   source=source.replace('try {await assertProductionEnvironment(request);return await handler(request);}',
     'try {await assertProductionEnvironment(request,name!==\'reviewPausedWorkV1\');return await handler(request);}');
