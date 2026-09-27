@@ -4947,6 +4947,7 @@ exports.applySmartZonePlan = onCall(
         homeCountStatus: "estimated",
         homeCountMethod: "osm_classified_mapped_features_v2",
         smartZoneTargetEvidence: {...zone.targetEvidence, geometryDigest: operations.zoneGeometryDigest(zone.geometry)},
+        zoneIntelligence: zone.zoneIntelligence,
         smartZoneQuality: zone.quality,
         smartZonePlanningTargets: zone.planningTargets,
         smartZonePlanningNetwork: zone.planningNetwork,
@@ -8591,3 +8592,22 @@ exports.listStagingAssignedLocationIds = onCall({ region: 'us-east1', maxInstanc
   }
   return { locationIds: ids.sort() };
 });
+
+exports.getCampaignZoneIntelligence = onCall(
+  {enforceAppCheck: false, maxInstances: 5, timeoutSeconds: 60},
+  businessOperation("getCampaignZoneIntelligence", async (request) => {
+    const context = await authenticatedUserContext(request, "Sign in to review your campaign area.");
+    if (context.role !== "business" || context.isAdmin || !context.permissions?.includes("campaigns")) {
+      throw new HttpsError("permission-denied", "Business campaign access is required.");
+    }
+    try {
+      return await require('./zone_intelligence_runtime').preview({db, context, data:request.data || {},
+        fetchSnapshot:require('./smart_zone_public_cache_runtime').createAcquirer({
+          db, bucket:getStorage().bucket(), liveFetch:smartZoneGeography.fetchSnapshot}), endpoint:OVERPASS_URL});
+    } catch (error) {
+      const known = ["unauthenticated", "permission-denied", "not-found", "invalid-argument", "failed-precondition"].includes(error.code);
+      throw new HttpsError(known ? error.code : "unavailable", known ? error.message :
+        "Area evidence is temporarily unavailable. Your boundary has not changed.");
+    }
+  }),
+);

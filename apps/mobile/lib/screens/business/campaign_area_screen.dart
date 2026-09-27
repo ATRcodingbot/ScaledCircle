@@ -18,6 +18,7 @@ import '../../models/campaign_freehand_geometry.dart';
 import '../../services/property_intelligence_service.dart';
 import '../../services/scaled_circle_intelligence_service.dart';
 import '../../widgets/property_intelligence_panel.dart';
+import '../../widgets/zone_intelligence_summary.dart';
 
 class CampaignAreaRecommendationResult {
   const CampaignAreaRecommendationResult.adjust(this.adjustedBoundary)
@@ -49,6 +50,8 @@ class CampaignAreaScreen extends StatefulWidget {
   final Map<String, double>? initialBounds;
   final String? searchContextLabel;
   final TileProvider? tileProvider;
+  final ZoneEvidenceLoader? zoneEvidenceLoader;
+  final String Function()? zoneEvidenceIdentity;
   final MapController? mapController;
   final Future<bool> Function()? analyzePersistedZone;
   final Future<PropertyIntelligenceAnalysis> Function(
@@ -72,6 +75,8 @@ class CampaignAreaScreen extends StatefulWidget {
     this.initialBounds,
     this.searchContextLabel,
     this.tileProvider,
+    this.zoneEvidenceLoader,
+    this.zoneEvidenceIdentity,
     this.mapController,
     this.analyzePersistedZone,
     this.analyzeGeometry,
@@ -117,6 +122,7 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
   _AreaDrawingSnapshot? _beforeFreehand;
   _AreaDrawingSnapshot? _freehandUndo;
   late String _zoneName;
+  String _evidenceCampaignId = "";
 
   static const LatLng _defaultCenter = LatLng(39.2904, -76.6122);
 
@@ -127,6 +133,8 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
     super.initState();
 
     _zoneName = widget.pendingZoneData?['zoneName']?.toString() ?? 'Zone 1';
+    _evidenceCampaignId =
+        widget.pendingZoneData?['campaignId']?.toString() ?? '';
 
     _loadExistingArea();
   }
@@ -210,6 +218,8 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
 
       setState(() {
         _zoneName = rawData['zoneName']?.toString() ?? _zoneName;
+        _evidenceCampaignId = rawData['campaignId']?.toString() ?? '';
+
         _selectedShape = existingShape;
 
         _mappingLocked =
@@ -1829,70 +1839,34 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
                         ),
                         const SizedBox(height: 12),
                       ],
-                      if (metrics != null)
+                      if (metrics != null &&
+                          !_drawingFreehand &&
+                          !_traceInvalid)
                         Card(
                           child: Padding(
                             padding: const EdgeInsets.all(14),
                             child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                const Row(
-                                  children: [
-                                    Icon(Icons.analytics_outlined),
-                                    SizedBox(width: 8),
-                                    Expanded(
-                                      child: Text(
-                                        'Preliminary Zone Intelligence',
-                                        style: TextStyle(
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 17,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
+                                Text(
+                                  '${metrics.areaAcres.toStringAsFixed(1)} acres',
                                 ),
-
-                                const SizedBox(height: 12),
-
-                                Wrap(
-                                  spacing: 8,
-                                  runSpacing: 8,
-                                  children: [
-                                    Chip(
-                                      avatar: const Icon(
-                                        Icons.square_foot,
-                                        size: 18,
-                                      ),
-                                      label: Text(
-                                        '${metrics.areaAcres.toStringAsFixed(1)} acres',
-                                      ),
-                                    ),
-
-                                    const Chip(
-                                      avatar: Icon(
-                                        Icons.route_outlined,
-                                        size: 18,
-                                      ),
-                                      label: Text('Route not yet verified'),
-                                    ),
-                                    const Chip(
-                                      avatar: Icon(
-                                        Icons.analytics_outlined,
-                                        size: 18,
-                                      ),
-                                      label: Text(
-                                        'Workload pending target analysis',
-                                      ),
-                                    ),
-                                  ],
-                                ),
-
                                 const SizedBox(height: 8),
-
-                                const Text(
-                                  'Geographic area is calculated from your territory. '
-                                  'Home and workload estimates are handled separately.',
-                                  style: TextStyle(fontSize: 12),
-                                  textAlign: TextAlign.center,
+                                ZoneIntelligencePreview(
+                                  geometry: _generatedArea
+                                      .map(
+                                        (p) => <String, double>{
+                                          'latitude': p.latitude,
+                                          'longitude': p.longitude,
+                                        },
+                                      )
+                                      .toList(),
+                                  campaignId: _evidenceCampaignId,
+                                  zoneId: widget.pendingZoneData == null
+                                      ? widget.campaignReference.id
+                                      : null,
+                                  loader: widget.zoneEvidenceLoader,
+                                  identity: widget.zoneEvidenceIdentity,
                                 ),
                               ],
                             ),

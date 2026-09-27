@@ -1136,6 +1136,15 @@ void main() {
             'campaignId': 'campaign',
           },
           tileProvider: MapTiles(),
+          zoneEvidenceIdentity: () => 'fixture-owner',
+          zoneEvidenceLoader: (input) async => <String, dynamic>{
+            'version': 'ZoneIntelligenceV1',
+            'geometryDigest': CampaignAreaGeometry.savedDigest(
+              input['geometry'],
+            ),
+            'status': 'unavailable',
+            'mappedTargetCount': null,
+          },
           analyzePersistedZone: () async {
             expect(reference.saved, isNotNull);
             persistedAnalyses++;

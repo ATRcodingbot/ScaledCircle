@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'zone_intelligence_summary.dart';
 
 bool smartZonePlanCanApply(Map<String, dynamic> plan) =>
     plan['recommendationStatus'] == 'review_required' &&
@@ -15,10 +16,58 @@ String smartZoneEvidenceQuality(Map<String, dynamic> item) =>
     : 'Basic Area Estimate';
 
 class SmartZoneRecommendationEvidence extends StatelessWidget {
-  const SmartZoneRecommendationEvidence({super.key, required this.plan});
+  const SmartZoneRecommendationEvidence({
+    super.key,
+    required this.plan,
+    this.selectedZoneIndex = 0,
+  });
+  final int selectedZoneIndex;
   final Map<String, dynamic> plan;
   @override
   Widget build(BuildContext context) {
+    final zones = (plan['zones'] as List? ?? []).whereType<Map>().toList();
+    if (smartZonePlanCanApply(plan) &&
+        selectedZoneIndex >= 0 &&
+        selectedZoneIndex < zones.length &&
+        zones[selectedZoneIndex]['zoneIntelligence'] is Map) {
+      final selected = zones[selectedZoneIndex];
+      final recommendation = plan['recommendationContext'] as Map? ?? {};
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (recommendation['goal'] != null)
+            Text('Looking for: ${recommendation['goal']}'),
+          Text(
+            'Selected recommendation: ${zones.length} separate area${zones.length == 1 ? '' : 's'}',
+          ),
+          if (recommendation['supportedMinutes'] is num)
+            Text(
+              'Combined advisory workload for these areas: ${advisoryWorkload(recommendation['supportedMinutes'] as num)}',
+            ),
+          if (recommendation['supportedMinutes'] is num &&
+              recommendation['requestedHours'] is num &&
+              recommendation['supportedMinutes'] <
+                  recommendation['requestedHours'] * 60)
+            Text(
+              'These areas support less than the requested ${recommendation['requestedHours']} hours. No additional targets have been assumed.',
+            ),
+          const Text(
+            'Limited/Beta — review each boundary and local access before use.',
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'Area ${selectedZoneIndex + 1}',
+            style: Theme.of(context).textTheme.titleLarge,
+          ),
+          ZoneIntelligenceSummary(
+            data: Map<String, dynamic>.from(
+              selected['zoneIntelligence'] as Map,
+            ),
+            geometry: selected['geometry'],
+          ),
+        ],
+      );
+    }
     if (plan['recommendationContext'] is Map) {
       return _IntelligenceRecommendationEvidence(plan: plan);
     }

@@ -23,7 +23,7 @@ function effectiveWorkType(args){
   if(!['residential','business'].includes(serviceability.intent(args.workType)))return args.workType;
   if(args.intelligenceContext?.targetIntent==='unsupported')return 'unsupported';
   if(args.intelligenceContext?.targetIntent==='business')return 'b2b_outreach';
-  if(args.intelligenceContext?.targetIntent==='residential')return 'flyer_distribution';
+  if(args.intelligenceContext?.targetIntent==='residential')return serviceability.intent(args.workType)==='residential'?args.workType:'flyer_distribution';
   return args.workType;
 }
 function partition(args){
@@ -209,13 +209,13 @@ function generate(args,evidence){
     verifiedDeliveryPoints:false,targetIntent:evidence.targetIntent,
     limitations:['Mapped features are not verified households, entrances, delivery points or customer demand.',
       'Workload uses a disclosed planning pace and mapped local street length. Actual access and duration require review.']};};
-  const zones=selected.map((c,i)=>({zoneNumber:i+1,name:`Area ${i+1}`,geometry:c.geometry,
+  const zones=selected.map((c,i)=>({zoneIntelligence:require('./zone_intelligence').recommended(c,args.workType,evidence.targetIntent),zoneNumber:i+1,name:`Area ${i+1}`,geometry:c.geometry,
     geometryValidation:planning.validateGeometry(c.geometry),workload:{...c.workload,confidence:'low',
       reason:'Advisory mapped-feature pace and supporting local street length; no execution route has been approved.'},
     recommendedScalers:1,workability:'review_recommended_area',quality:{label:'Review marketing area',reasons:c.ranking.reasons},
     serviceability:'serviceable_geography',sourceComponentIds:c.sourceComponentIds,
     planningTargets:{kind:'mapped_target_candidates',verifiedDeliveryPoints:false,
-      features:c.features.map(f=>({sourceId:f.id,kind:f.kind,latitude:f.latitude,longitude:f.longitude}))},
+      features:c.features.map(f=>({sourceId:f.id,kind:f.kind,latitude:f.latitude,longitude:f.longitude,observedTags:f.observedTags||{}}))},
     planningNetwork:{kind:'connected_mapped_road_network',isExecutionRoute:false,accessVerified:false,
       suggestedRoute:null,segments:c.networkSegments,
       limitations:['Supporting street evidence only. Separate areas are not joined by an invented route.']},

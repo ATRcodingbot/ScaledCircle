@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../models/campaign_area_geometry.dart';
+import 'zone_intelligence_summary.dart';
 
 class ZoneIntelligenceCard extends StatelessWidget {
   final String zoneName;
@@ -19,6 +20,10 @@ class ZoneIntelligenceCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final canPreview =
+        data['campaignId'] is String &&
+        data['businessId'] is String &&
+        geometryForPreview(data) != null;
     final estimatedHomes = (data['estimatedHomes'] as num?)?.toInt();
     final assumedCount =
         data['homeCountMethod'] == 'smart_zone_conservative_density_v1';
@@ -109,114 +114,123 @@ class ZoneIntelligenceCard extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 20),
-              _MetricRow(
-                icon: Icons.home_work_outlined,
-                label: mappedMethod
-                    ? 'Mapped ${mappedEvidence['targetIntent'] == 'business' ? 'business' : 'residential'} target features'
-                    : currentPlanning
-                    ? regional
-                          ? 'Regional housing estimate'
-                          : planning['metric']?.toString() ?? 'Property records'
-                    : 'Target-specific home estimate',
-                value: mappedMethod
-                    ? currentMappedTargets
-                          ? mappedEvidence['eligibleMappedFeatureCount']
-                                    ?.toString() ??
-                                'Unavailable'
-                          : 'Unavailable'
-                    : currentPlanning
-                    ? (regional && regionalCount != null
-                              ? '${regionalCount.toInt().toString().replaceAllMapped(RegExp(r'(\d)(?=(\d{3})+(?!\d))'), (m) => '${m[1]},')} units'
-                              : planning['residentialProperties']
-                                    ?.toString()) ??
-                          'Unavailable'
-                    : assumedCount
-                    ? 'Unavailable'
-                    : _homeLabel(estimatedHomes, homeStatus),
-                supportingText: mappedMethod
-                    ? currentMappedTargets
-                          ? '${mappedEvidence['source'] ?? 'Source unavailable'} · Source date: ${mappedEvidence['dataTimestamp'] ?? 'Not recorded'} · Retrieved: ${mappedEvidence['fetchedAt'] ?? 'Not recorded'}\nMapped features are not distinct households or verified accessible delivery points.\n${(mappedEvidence['limitations'] as List? ?? []).join(' ')}'
-                          : 'The mapped feature evidence does not match this saved geometry. Analyze the current target again.'
-                    : currentPlanning
-                    ? regional
-                          ? 'Total for ${geographies.isEmpty ? "the returned" : geographies.length} Census block groups overlapping your boundary; includes locations outside the selected area. '
-                                'This is not a count of houses or accessible doors inside your target, or a guaranteed upper bound. '
-                                '${planning['status'] == "partial" ? "Partial source coverage. " : ""}'
-                          : '${planning['source'] ?? "Source unavailable"} · ${planning['dataDate'] ?? "Date unknown"}\n${planning['status'] == "partial" ? "Partial coverage" : planning['status']}\n${planning['reason'] ?? "Not an exact household or accessible-door count."}'
-                    : assumedCount
-                    ? 'The older recommendation used assumed distribution productivity, not observed properties. Analyze the current target for source-backed information.'
-                    : _homeSupport(homeStatus, analysisStatus),
-              ),
-              if (regional)
-                ExpansionTile(
-                  tilePadding: EdgeInsets.zero,
-                  title: const Text('Census source and uncertainty details'),
-                  children: [
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: SelectableText(
-                        [
-                          'Source: ${planning['source']}',
-                          'Dataset/table: ${planning['sourceVersion'] ?? "Not recorded"}',
-                          if (planning['sourceVersion'] ==
-                              'ACS_2024_5YR_B25034')
-                            'Estimate period: 2020–2024 (ACS 5-year). Housing-unit total: B25034_001E. This is not a 2024 point-in-time count.'
-                          else
-                            'Estimate period: Not recorded for this dataset.',
-                          'Boundary vintage: ${planning['boundaryVersion'] ?? "Not recorded"}',
-                          'Retrieved: ${checkedAt == null ? "Not recorded" : DateTime.fromMillisecondsSinceEpoch(checkedAt.toInt(), isUtc: true).toIso8601String()} (UTC)',
-                          'Geographic IDs (deduplicated): ${geographies.join(", ")}',
-                          'Uncertainty: Margin-of-error variables were not retained in this result. No numeric confidence interval is available.',
-                          'Method: Whole overlapping block-group totals; no area weighting or assumed uniform density.',
-                        ].join('\n\n'),
-                      ),
-                    ),
-                  ],
+              if (canPreview)
+                ZoneIntelligencePreview(
+                  campaignId: data['campaignId'] as String,
+                  zoneId: data['id']?.toString(),
+                  geometry: data['serviceArea'],
+                )
+              else ...[
+                _MetricRow(
+                  icon: Icons.home_work_outlined,
+                  label: mappedMethod
+                      ? 'Mapped ${mappedEvidence['targetIntent'] == 'business' ? 'business' : 'residential'} target features'
+                      : currentPlanning
+                      ? regional
+                            ? 'Regional housing estimate'
+                            : planning['metric']?.toString() ??
+                                  'Property records'
+                      : 'Target-specific home estimate',
+                  value: mappedMethod
+                      ? currentMappedTargets
+                            ? mappedEvidence['eligibleMappedFeatureCount']
+                                      ?.toString() ??
+                                  'Unavailable'
+                            : 'Unavailable'
+                      : currentPlanning
+                      ? (regional && regionalCount != null
+                                ? '${regionalCount.toInt().toString().replaceAllMapped(RegExp(r'(\d)(?=(\d{3})+(?!\d))'), (m) => '${m[1]},')} units'
+                                : planning['residentialProperties']
+                                      ?.toString()) ??
+                            'Unavailable'
+                      : assumedCount
+                      ? 'Unavailable'
+                      : _homeLabel(estimatedHomes, homeStatus),
+                  supportingText: mappedMethod
+                      ? currentMappedTargets
+                            ? '${mappedEvidence['source'] ?? 'Source unavailable'} · Source date: ${mappedEvidence['dataTimestamp'] ?? 'Not recorded'} · Retrieved: ${mappedEvidence['fetchedAt'] ?? 'Not recorded'}\nMapped features are not distinct households or verified accessible delivery points.\n${(mappedEvidence['limitations'] as List? ?? []).join(' ')}'
+                            : 'The mapped feature evidence does not match this saved geometry. Analyze the current target again.'
+                      : currentPlanning
+                      ? regional
+                            ? 'Total for ${geographies.isEmpty ? "the returned" : geographies.length} Census block groups overlapping your boundary; includes locations outside the selected area. '
+                                  'This is not a count of houses or accessible doors inside your target, or a guaranteed upper bound. '
+                                  '${planning['status'] == "partial" ? "Partial source coverage. " : ""}'
+                            : '${planning['source'] ?? "Source unavailable"} · ${planning['dataDate'] ?? "Date unknown"}\n${planning['status'] == "partial" ? "Partial coverage" : planning['status']}\n${planning['reason'] ?? "Not an exact household or accessible-door count."}'
+                      : assumedCount
+                      ? 'The older recommendation used assumed distribution productivity, not observed properties. Analyze the current target for source-backed information.'
+                      : _homeSupport(homeStatus, analysisStatus),
                 ),
-              const Divider(),
-              _MetricRow(
-                icon: Icons.route_outlined,
-                label: 'Route',
-                value: 'Not yet verified',
-                supportingText:
-                    currentPlanning &&
-                        (planning['areaSquareMeters'] as num? ?? 0) > 25000000
-                    ? 'Saved target: ${((planning['areaSquareMeters'] as num) / 1000000).toStringAsFixed(2)} km². Route queries support up to 25 km² per reviewed work area. '
-                          'Census analysis succeeded independently. Select and review a smaller work area before route analysis; the full territory remains saved until you explicitly edit it. '
-                          'Automatic tiled route subdivision is not supported. Query partitions do not determine Scaler count.'
-                    : null,
-              ),
-              const Divider(),
-              _MetricRow(
-                icon: Icons.analytics_outlined,
-                label: 'Workload',
-                value: currentPlanning
-                    ? 'Requires route/stop review'
-                    : _workloadLabel(analysisStatus, homeStatus),
-                supportingText: currentPlanning
-                    ? planning['workloadReason']?.toString()
-                    : null,
-              ),
-              if (currentPlanning) ...[
+                if (regional)
+                  ExpansionTile(
+                    tilePadding: EdgeInsets.zero,
+                    title: const Text('Census source and uncertainty details'),
+                    children: [
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: SelectableText(
+                          [
+                            'Source: ${planning['source']}',
+                            'Dataset/table: ${planning['sourceVersion'] ?? "Not recorded"}',
+                            if (planning['sourceVersion'] ==
+                                'ACS_2024_5YR_B25034')
+                              'Estimate period: 2020–2024 (ACS 5-year). Housing-unit total: B25034_001E. This is not a 2024 point-in-time count.'
+                            else
+                              'Estimate period: Not recorded for this dataset.',
+                            'Boundary vintage: ${planning['boundaryVersion'] ?? "Not recorded"}',
+                            'Retrieved: ${checkedAt == null ? "Not recorded" : DateTime.fromMillisecondsSinceEpoch(checkedAt.toInt(), isUtc: true).toIso8601String()} (UTC)',
+                            'Geographic IDs (deduplicated): ${geographies.join(", ")}',
+                            'Uncertainty: Margin-of-error variables were not retained in this result. No numeric confidence interval is available.',
+                            'Method: Whole overlapping block-group totals; no area weighting or assumed uniform density.',
+                          ].join('\n\n'),
+                        ),
+                      ),
+                    ],
+                  ),
                 const Divider(),
                 _MetricRow(
-                  icon: Icons.inventory_2_outlined,
-                  label: 'Entered campaign material quantity',
-                  value:
-                      planning['materialsAvailable']?.toString() ??
-                      'Not entered',
+                  icon: Icons.route_outlined,
+                  label: 'Route',
+                  value: 'Not yet verified',
                   supportingText:
-                      'A draft input, not confirmed inventory or approved work. Scope, pieces per stop, spares and accessible stops remain unverified. No coverage percentage is inferred.',
+                      currentPlanning &&
+                          (planning['areaSquareMeters'] as num? ?? 0) > 25000000
+                      ? 'Saved target: ${((planning['areaSquareMeters'] as num) / 1000000).toStringAsFixed(2)} km². Route queries support up to 25 km² per reviewed work area. '
+                            'Census analysis succeeded independently. Select and review a smaller work area before route analysis; the full territory remains saved until you explicitly edit it. '
+                            'Automatic tiled route subdivision is not supported. Query partitions do not determine Scaler count.'
+                      : null,
                 ),
-                for (final limitation
-                    in (planning['limitations'] as List? ?? const []))
-                  Text(
-                    limitation.toString().replaceAll(
-                      'property_source_access_challenge',
-                      'Maryland parcel source unavailable: HTTP 403 access challenge. The Census fallback is separate.',
-                    ),
-                    style: Theme.of(context).textTheme.bodySmall,
+                const Divider(),
+                _MetricRow(
+                  icon: Icons.analytics_outlined,
+                  label: 'Workload',
+                  value: currentPlanning
+                      ? 'Requires route/stop review'
+                      : _workloadLabel(analysisStatus, homeStatus),
+                  supportingText: currentPlanning
+                      ? planning['workloadReason']?.toString()
+                      : null,
+                ),
+                if (currentPlanning) ...[
+                  const Divider(),
+                  _MetricRow(
+                    icon: Icons.inventory_2_outlined,
+                    label: 'Entered campaign material quantity',
+                    value:
+                        planning['materialsAvailable']?.toString() ??
+                        'Not entered',
+                    supportingText:
+                        'A draft input, not confirmed inventory or approved work. Scope, pieces per stop, spares and accessible stops remain unverified. No coverage percentage is inferred.',
                   ),
+                  for (final limitation
+                      in (planning['limitations'] as List? ?? const []))
+                    Text(
+                      limitation.toString().replaceAll(
+                        'property_source_access_challenge',
+                        'Maryland parcel source unavailable: HTTP 403 access challenge. The Census fallback is separate.',
+                      ),
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                ],
               ],
               const Divider(),
               _MetricRow(
@@ -252,6 +266,9 @@ class ZoneIntelligenceCard extends StatelessWidget {
       ),
     );
   }
+
+  static String? geometryForPreview(Map<String, dynamic> data) =>
+      CampaignAreaGeometry.savedDigest(data['serviceArea']);
 
   static String _homeLabel(int? homes, String status) {
     if (status == 'unavailable') return 'Unavailable';

@@ -17,7 +17,7 @@ void main() {
       expect(source, contains('Recommend an Area'));
       expect(source, contains('Use Recommended Area'));
       expect(source, contains('Adjust Area'));
-      expect(source, contains('SmartZoneRecommendationEvidence(plan: plan)'));
+      expect(source, contains('selectedZoneIndex: selectedZoneIndex'));
       expect(source, contains('Scaler compensation recommendation'));
       expect(source, contains('Recommended base payout'));
       expect(source, contains('Estimated effective compensation'));

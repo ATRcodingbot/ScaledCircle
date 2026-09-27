@@ -176,7 +176,7 @@ assert.deepEqual(Object.keys(assignment).sort(), [
 ]);
 assert.deepEqual(Object.keys(discovery).sort(), [
   "listStagingAssignedLocationIds",
-  "analyzeCampaignZone", "applySmartZonePlan", "getSmartZonePlan",
+  "analyzeCampaignZone", "applySmartZonePlan", "getSmartZonePlan", "getCampaignZoneIntelligence",
   "projectStagingCampaignDiscovery", "refreshStagingCampaignDiscovery",
   "resolveServiceAreaPlace", "saveDiscoveryPreferences",
 ].sort());

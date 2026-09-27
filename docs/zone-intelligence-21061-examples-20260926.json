@@ -1,0 +1,1510 @@
+{
+  "basis": "Local projection of retained actual production run; new UI/endpoint are NOT deployed.",
+  "runId": "475c2e025e0a7a052822d835cdac2cdd3be2e70073a5f249bc04341f83c22fc4",
+  "source": "0a6bc1f2cc87eb7d745c195a558dff01cc24cf84",
+  "snapshot": "2026-09-25T20:24:36Z",
+  "requestedMinutes": 300,
+  "totalTargets": 95,
+  "totalStreetMeters": 2084,
+  "totalAdvisoryMinutes": 189,
+  "options": [
+    {
+      "option": 0,
+      "areas": [
+        {
+          "area": 1,
+          "candidateId": "f481ddf980906dc2b4edadcb",
+          "propertyAreaId": "e786b3231a2a007097a23d1162ca6220c835699e79ac0043426391ea6fee938b",
+          "geometry": [
+            {
+              "latitude": 39.2010987,
+              "longitude": -76.6241099
+            },
+            {
+              "latitude": 39.2002528,
+              "longitude": -76.6237861
+            },
+            {
+              "latitude": 39.2001407,
+              "longitude": -76.623296
+            },
+            {
+              "latitude": 39.2001407,
+              "longitude": -76.6231106
+            },
+            {
+              "latitude": 39.2018208,
+              "longitude": -76.621068
+            },
+            {
+              "latitude": 39.2019646,
+              "longitude": -76.621068
+            },
+            {
+              "latitude": 39.2020986,
+              "longitude": -76.6215076
+            },
+            {
+              "latitude": 39.2020986,
+              "longitude": -76.621693
+            },
+            {
+              "latitude": 39.2020445,
+              "longitude": -76.6224267
+            },
+            {
+              "latitude": 39.2017147,
+              "longitude": -76.6234441
+            },
+            {
+              "latitude": 39.2015499,
+              "longitude": -76.6239204
+            },
+            {
+              "latitude": 39.2012424,
+              "longitude": -76.6241099
+            }
+          ],
+          "zoneIntelligence": {
+            "version": "ZoneIntelligenceV1",
+            "geometryDigest": "9cfeff0d31a89a350e7067428ceb3d830441309c2ba3667c8b27115b37d2bde3",
+            "status": "available",
+            "mode": "recommended",
+            "targetIntent": "residential",
+            "campaignType": "flyer_distribution",
+            "mappedTargetCount": 10,
+            "propertyMix": {
+              "basis": "observed_osm_tags",
+              "classifiedCount": 10,
+              "unknownCount": 0,
+              "categories": [
+                {
+                  "label": "Attached/semi-detached",
+                  "count": 10
+                }
+              ]
+            },
+            "supportingStreetMeters": 403,
+            "workload": {
+              "minutes": 24,
+              "oneScaler": true,
+              "exceedsSingleScalerLimit": false,
+              "limitMinutes": 360,
+              "version": "SmartZonePlanningV5",
+              "supportedTargetCount": 10,
+              "propertiesPerHour": 45,
+              "walkingMetersPerMinute": 80,
+              "networkTraversalFactor": 2,
+              "minimumMinutes": 15,
+              "campaignType": "flyer_distribution",
+              "conversationDuration": null
+            },
+            "regionalContext": {
+              "scope": "regional_property_context",
+              "signals": [
+                {
+                  "label": "Analyzed property records",
+                  "value": 386,
+                  "source": "Maryland Open Data"
+                },
+                {
+                  "label": "Service-area fit",
+                  "value": "Inside your saved service area",
+                  "source": "Saved Business service areas"
+                },
+                {
+                  "label": "Predominant construction era",
+                  "value": "1960–1979",
+                  "source": "Maryland Open Data"
+                }
+              ],
+              "source": {
+                "analysisId": "f0b6374ffe0b79e2d0bb181f1d579508004fc2865f68a96d526267f241a83d49",
+                "geometryDigest": "60741421c1724d7afd4dcbeaad5f5f91914cd1436970e7cba4491b54bd4f8816",
+                "source": "Maryland Open Data",
+                "sourceVersion": "MD_OPEN_DATA_ed4q-f8tm",
+                "dataUpdatedAt": null,
+                "generatedAt": "2026-09-26T23:51:15.453Z",
+                "inputGranularity": "parcel_level",
+                "geographicCoverageMethod": "server_point_in_polygon",
+                "confidence": "HIGH"
+              }
+            },
+            "reasons": [
+              "373 residential records or housing units among 386 analyzed; the source granularity applies.",
+              "Ranked by observed residential share only; no supported component-specific need or condition metric is available."
+            ],
+            "source": {
+              "name": "OpenStreetMap",
+              "dataTimestamp": "2026-09-25T20:24:36Z",
+              "fetchedAt": "2026-09-26T21:55:03.501020+00:00",
+              "freshness": "fresh",
+              "transport": "regional_cache",
+              "evidenceHash": "e8a4659e57e434ce21ed712e60a53f9fc71762a1f8e6a4c640f0a9976c61f263",
+              "provider": "geofabrik_maryland",
+              "importedAt": "2026-09-26T23:17:16.762Z",
+              "sourceHash": "fca54b6b3d2cf6632e79a6a93413d77c0019743ff1bbef52e93188a28d79fc20",
+              "datasetVersion": "SmartZonePublicCacheV1",
+              "parserVersion": "SmartZoneOsmGeometryV2",
+              "bounds": [
+                -76.6945750000126,
+                39.108224999811924,
+                -76.58875599983642,
+                39.21576000007699
+              ],
+              "queryBounds": [
+                -76.64,
+                39.2,
+                -76.6205213494102,
+                39.20550632199956
+              ],
+              "geometryVersion": "WGS84_OSM_complete_geometry_v2",
+              "uncertaintyGuards": 2,
+              "refreshFailed": false
+            },
+            "limitations": [
+              "Incomplete mapped exclusion features have conservative avoidance areas.",
+              "Planning heuristic only; this does not establish property condition, homeowner intent, or demand.",
+              "Generic residential classifications do not establish single-family homes or the presence or condition of decks, roofs, or other components.",
+              "Completed-footprint overlap only; this does not measure saturation, response, conversion or customer demand.",
+              "Mapped features are not verified households, entrances, delivery points or a material quantity.",
+              "Property condition, ownership and customer intent are not established.",
+              "Local access and actual field duration need review."
+            ],
+            "executionRouteVerified": false
+          }
+        },
+        {
+          "area": 2,
+          "candidateId": "19579b03c75529233e390c02",
+          "propertyAreaId": "a113f3725c305ef71f4f6a16b9a33d4e12ec1aaeaa99af925ef81e40a37c4576",
+          "geometry": [
+            {
+              "latitude": 39.1862686,
+              "longitude": -76.6362234
+            },
+            {
+              "latitude": 39.1850802,
+              "longitude": -76.6357232
+            },
+            {
+              "latitude": 39.1850802,
+              "longitude": -76.6355378
+            },
+            {
+              "latitude": 39.185284,
+              "longitude": -76.6353229
+            },
+            {
+              "latitude": 39.1863242,
+              "longitude": -76.634694
+            },
+            {
+              "latitude": 39.186468,
+              "longitude": -76.634694
+            },
+            {
+              "latitude": 39.186615,
+              "longitude": -76.6354034
+            },
+            {
+              "latitude": 39.186615,
+              "longitude": -76.6355889
+            },
+            {
+              "latitude": 39.1865949,
+              "longitude": -76.6357667
+            },
+            {
+              "latitude": 39.1864123,
+              "longitude": -76.6362234
+            }
+          ],
+          "zoneIntelligence": {
+            "version": "ZoneIntelligenceV1",
+            "geometryDigest": "90d36107df6c3cbc280531a3f2c9b3f4bc91f5542b3707114da108afee44e9f8",
+            "status": "available",
+            "mode": "recommended",
+            "targetIntent": "residential",
+            "campaignType": "flyer_distribution",
+            "mappedTargetCount": 11,
+            "propertyMix": {
+              "basis": "observed_osm_tags",
+              "classifiedCount": 11,
+              "unknownCount": 0,
+              "categories": [
+                {
+                  "label": "Detached",
+                  "count": 11
+                }
+              ]
+            },
+            "supportingStreetMeters": 251,
+            "workload": {
+              "minutes": 21,
+              "oneScaler": true,
+              "exceedsSingleScalerLimit": false,
+              "limitMinutes": 360,
+              "version": "SmartZonePlanningV5",
+              "supportedTargetCount": 11,
+              "propertiesPerHour": 45,
+              "walkingMetersPerMinute": 80,
+              "networkTraversalFactor": 2,
+              "minimumMinutes": 15,
+              "campaignType": "flyer_distribution",
+              "conversationDuration": null
+            },
+            "regionalContext": {
+              "scope": "regional_property_context",
+              "signals": [
+                {
+                  "label": "Analyzed property records",
+                  "value": 3651,
+                  "source": "Maryland Open Data"
+                },
+                {
+                  "label": "Service-area fit",
+                  "value": "Inside your saved service area",
+                  "source": "Saved Business service areas"
+                },
+                {
+                  "label": "Predominant construction era",
+                  "value": "1940–1959",
+                  "source": "Maryland Open Data"
+                }
+              ],
+              "source": {
+                "analysisId": "e9e63d469c2f316ca67311ca93a545dac1a4a28dcf390096c2ad2779ffea53a3",
+                "geometryDigest": "a94d021e44b2125005190ce30f011f9d4b024368b96b3d31fe2e28ced6e0a6c5",
+                "source": "Maryland Open Data",
+                "sourceVersion": "MD_OPEN_DATA_ed4q-f8tm",
+                "dataUpdatedAt": null,
+                "generatedAt": "2026-09-26T23:51:13.769Z",
+                "inputGranularity": "parcel_level",
+                "geographicCoverageMethod": "server_point_in_polygon",
+                "confidence": "HIGH"
+              }
+            },
+            "reasons": [
+              "3180 residential records or housing units among 3651 analyzed; the source granularity applies.",
+              "Ranked by observed residential share only; no supported component-specific need or condition metric is available."
+            ],
+            "source": {
+              "name": "OpenStreetMap",
+              "dataTimestamp": "2026-09-25T20:24:36Z",
+              "fetchedAt": "2026-09-26T21:55:03.501020+00:00",
+              "freshness": "fresh",
+              "transport": "regional_cache",
+              "evidenceHash": "b826e03ce452023d81ed6e090b759232a8058e4fce4ff0d90dad30af5ce66009",
+              "provider": "geofabrik_maryland",
+              "importedAt": "2026-09-26T23:17:16.762Z",
+              "sourceHash": "fca54b6b3d2cf6632e79a6a93413d77c0019743ff1bbef52e93188a28d79fc20",
+              "datasetVersion": "SmartZonePublicCacheV1",
+              "parserVersion": "SmartZoneOsmGeometryV2",
+              "bounds": [
+                -76.6945750000126,
+                39.108224999811924,
+                -76.58875599983642,
+                39.21576000007699
+              ],
+              "queryBounds": [
+                -76.64,
+                39.160000000000004,
+                -76.61960151515059,
+                39.2
+              ],
+              "geometryVersion": "WGS84_OSM_complete_geometry_v2",
+              "uncertaintyGuards": 26,
+              "refreshFailed": false
+            },
+            "limitations": [
+              "Incomplete mapped exclusion features have conservative avoidance areas.",
+              "Planning heuristic only; this does not establish property condition, homeowner intent, or demand.",
+              "Generic residential classifications do not establish single-family homes or the presence or condition of decks, roofs, or other components.",
+              "Completed-footprint overlap only; this does not measure saturation, response, conversion or customer demand.",
+              "Mapped features are not verified households, entrances, delivery points or a material quantity.",
+              "Property condition, ownership and customer intent are not established.",
+              "Local access and actual field duration need review."
+            ],
+            "executionRouteVerified": false
+          }
+        }
+      ]
+    },
+    {
+      "option": 1,
+      "areas": [
+        {
+          "area": 1,
+          "candidateId": "63ae6ee448d4fa058969422e",
+          "propertyAreaId": "957fb5ab29577ed00a56e96e44a67b37e130f343b86665567a5665344a091f9e",
+          "geometry": [
+            {
+              "latitude": 39.1336626,
+              "longitude": -76.6269969
+            },
+            {
+              "latitude": 39.1327769,
+              "longitude": -76.6267201
+            },
+            {
+              "latitude": 39.1327599,
+              "longitude": -76.6264751
+            },
+            {
+              "latitude": 39.1327599,
+              "longitude": -76.6262898
+            },
+            {
+              "latitude": 39.1328114,
+              "longitude": -76.6260511
+            },
+            {
+              "latitude": 39.1342303,
+              "longitude": -76.6256606
+            },
+            {
+              "latitude": 39.1343741,
+              "longitude": -76.6256606
+            },
+            {
+              "latitude": 39.1345611,
+              "longitude": -76.6259322
+            },
+            {
+              "latitude": 39.1345611,
+              "longitude": -76.6261175
+            },
+            {
+              "latitude": 39.1345171,
+              "longitude": -76.6268246
+            },
+            {
+              "latitude": 39.134279,
+              "longitude": -76.6269273
+            },
+            {
+              "latitude": 39.1338063,
+              "longitude": -76.6269969
+            }
+          ],
+          "zoneIntelligence": {
+            "version": "ZoneIntelligenceV1",
+            "geometryDigest": "12cb64258af9b1cac0b9ff4fa92d6b06ef0a85ca83ab354494b663a7f13f1411",
+            "status": "available",
+            "mode": "recommended",
+            "targetIntent": "residential",
+            "campaignType": "flyer_distribution",
+            "mappedTargetCount": 8,
+            "propertyMix": {
+              "basis": "observed_osm_tags",
+              "classifiedCount": 8,
+              "unknownCount": 0,
+              "categories": [
+                {
+                  "label": "Attached/semi-detached",
+                  "count": 8
+                }
+              ]
+            },
+            "supportingStreetMeters": 264,
+            "workload": {
+              "minutes": 18,
+              "oneScaler": true,
+              "exceedsSingleScalerLimit": false,
+              "limitMinutes": 360,
+              "version": "SmartZonePlanningV5",
+              "supportedTargetCount": 8,
+              "propertiesPerHour": 45,
+              "walkingMetersPerMinute": 80,
+              "networkTraversalFactor": 2,
+              "minimumMinutes": 15,
+              "campaignType": "flyer_distribution",
+              "conversationDuration": null
+            },
+            "regionalContext": {
+              "scope": "regional_property_context",
+              "signals": [
+                {
+                  "label": "Analyzed property records",
+                  "value": 4742,
+                  "source": "Maryland Open Data"
+                },
+                {
+                  "label": "Service-area fit",
+                  "value": "Inside your saved service area",
+                  "source": "Saved Business service areas"
+                },
+                {
+                  "label": "Predominant construction era",
+                  "value": "1940–1959",
+                  "source": "Maryland Open Data"
+                }
+              ],
+              "source": {
+                "analysisId": "acd7c69fe8be462eab629d744a3016f174a9e894b6f4b1717e769efa06ff698b",
+                "geometryDigest": "418a94138fc4d09b0a13aa72ba6363eda8e03522ab79db18bc778cc0a325f6e3",
+                "source": "Maryland Open Data",
+                "sourceVersion": "MD_OPEN_DATA_ed4q-f8tm",
+                "dataUpdatedAt": null,
+                "generatedAt": "2026-09-26T23:51:09.963Z",
+                "inputGranularity": "parcel_level",
+                "geographicCoverageMethod": "server_point_in_polygon",
+                "confidence": "LOW"
+              }
+            },
+            "reasons": [
+              "4348 residential records or housing units among 4742 analyzed; the source granularity applies.",
+              "Ranked by observed residential share only; no supported component-specific need or condition metric is available."
+            ],
+            "source": {
+              "name": "OpenStreetMap",
+              "dataTimestamp": "2026-09-25T20:24:36Z",
+              "fetchedAt": "2026-09-26T21:55:03.501020+00:00",
+              "freshness": "fresh",
+              "transport": "regional_cache",
+              "evidenceHash": "b06c353f73a9b6b94d5e4fb65aefdfc5ae25e05570a5a2daa815bd767ab4b57b",
+              "provider": "geofabrik_maryland",
+              "importedAt": "2026-09-26T23:17:16.762Z",
+              "sourceHash": "fca54b6b3d2cf6632e79a6a93413d77c0019743ff1bbef52e93188a28d79fc20",
+              "datasetVersion": "SmartZonePublicCacheV1",
+              "parserVersion": "SmartZoneOsmGeometryV2",
+              "bounds": [
+                -76.6945750000126,
+                39.108224999811924,
+                -76.58875599983642,
+                39.21576000007699
+              ],
+              "queryBounds": [
+                -76.64,
+                39.12,
+                -76.61868456320674,
+                39.160000000000004
+              ],
+              "geometryVersion": "WGS84_OSM_complete_geometry_v2",
+              "uncertaintyGuards": 27,
+              "refreshFailed": false
+            },
+            "limitations": [
+              "Incomplete mapped exclusion features have conservative avoidance areas.",
+              "The provider query reached the 5000-record safety limit; coverage is partial.",
+              "Planning heuristic only; this does not establish property condition, homeowner intent, or demand.",
+              "Generic residential classifications do not establish single-family homes or the presence or condition of decks, roofs, or other components.",
+              "The provider reported partial coverage.",
+              "Completed-footprint overlap only; this does not measure saturation, response, conversion or customer demand.",
+              "Mapped features are not verified households, entrances, delivery points or a material quantity.",
+              "Property condition, ownership and customer intent are not established.",
+              "Local access and actual field duration need review."
+            ],
+            "executionRouteVerified": false
+          }
+        },
+        {
+          "area": 2,
+          "candidateId": "9433b540d4466223af698194",
+          "propertyAreaId": "957fb5ab29577ed00a56e96e44a67b37e130f343b86665567a5665344a091f9e",
+          "geometry": [
+            {
+              "latitude": 39.1466917,
+              "longitude": -76.6395807
+            },
+            {
+              "latitude": 39.1464799,
+              "longitude": -76.6392352
+            },
+            {
+              "latitude": 39.1462681,
+              "longitude": -76.6388898
+            },
+            {
+              "latitude": 39.1460219,
+              "longitude": -76.6384703
+            },
+            {
+              "latitude": 39.1460219,
+              "longitude": -76.6382849
+            },
+            {
+              "latitude": 39.1465074,
+              "longitude": -76.6380814
+            },
+            {
+              "latitude": 39.1466512,
+              "longitude": -76.6380814
+            },
+            {
+              "latitude": 39.1469834,
+              "longitude": -76.6386813
+            },
+            {
+              "latitude": 39.1469834,
+              "longitude": -76.6388667
+            },
+            {
+              "latitude": 39.1469741,
+              "longitude": -76.6390597
+            },
+            {
+              "latitude": 39.1468355,
+              "longitude": -76.6395807
+            }
+          ],
+          "zoneIntelligence": {
+            "version": "ZoneIntelligenceV1",
+            "geometryDigest": "b82ed75c1937b01130988ed391021c205a68a7ca61fffbe7a3a42ea7d07b5141",
+            "status": "available",
+            "mode": "recommended",
+            "targetIntent": "residential",
+            "campaignType": "flyer_distribution",
+            "mappedTargetCount": 8,
+            "propertyMix": {
+              "basis": "observed_osm_tags",
+              "classifiedCount": 8,
+              "unknownCount": 0,
+              "categories": [
+                {
+                  "label": "Multifamily/shared residential",
+                  "count": 8
+                }
+              ]
+            },
+            "supportingStreetMeters": 121,
+            "workload": {
+              "minutes": 15,
+              "oneScaler": true,
+              "exceedsSingleScalerLimit": false,
+              "limitMinutes": 360,
+              "version": "SmartZonePlanningV5",
+              "supportedTargetCount": 8,
+              "propertiesPerHour": 45,
+              "walkingMetersPerMinute": 80,
+              "networkTraversalFactor": 2,
+              "minimumMinutes": 15,
+              "campaignType": "flyer_distribution",
+              "conversationDuration": null
+            },
+            "regionalContext": {
+              "scope": "regional_property_context",
+              "signals": [
+                {
+                  "label": "Analyzed property records",
+                  "value": 4742,
+                  "source": "Maryland Open Data"
+                },
+                {
+                  "label": "Service-area fit",
+                  "value": "Inside your saved service area",
+                  "source": "Saved Business service areas"
+                },
+                {
+                  "label": "Predominant construction era",
+                  "value": "1940–1959",
+                  "source": "Maryland Open Data"
+                }
+              ],
+              "source": {
+                "analysisId": "acd7c69fe8be462eab629d744a3016f174a9e894b6f4b1717e769efa06ff698b",
+                "geometryDigest": "418a94138fc4d09b0a13aa72ba6363eda8e03522ab79db18bc778cc0a325f6e3",
+                "source": "Maryland Open Data",
+                "sourceVersion": "MD_OPEN_DATA_ed4q-f8tm",
+                "dataUpdatedAt": null,
+                "generatedAt": "2026-09-26T23:51:09.963Z",
+                "inputGranularity": "parcel_level",
+                "geographicCoverageMethod": "server_point_in_polygon",
+                "confidence": "LOW"
+              }
+            },
+            "reasons": [
+              "4348 residential records or housing units among 4742 analyzed; the source granularity applies.",
+              "Ranked by observed residential share only; no supported component-specific need or condition metric is available."
+            ],
+            "source": {
+              "name": "OpenStreetMap",
+              "dataTimestamp": "2026-09-25T20:24:36Z",
+              "fetchedAt": "2026-09-26T21:55:03.501020+00:00",
+              "freshness": "fresh",
+              "transport": "regional_cache",
+              "evidenceHash": "b06c353f73a9b6b94d5e4fb65aefdfc5ae25e05570a5a2daa815bd767ab4b57b",
+              "provider": "geofabrik_maryland",
+              "importedAt": "2026-09-26T23:17:16.762Z",
+              "sourceHash": "fca54b6b3d2cf6632e79a6a93413d77c0019743ff1bbef52e93188a28d79fc20",
+              "datasetVersion": "SmartZonePublicCacheV1",
+              "parserVersion": "SmartZoneOsmGeometryV2",
+              "bounds": [
+                -76.6945750000126,
+                39.108224999811924,
+                -76.58875599983642,
+                39.21576000007699
+              ],
+              "queryBounds": [
+                -76.64,
+                39.12,
+                -76.61868456320674,
+                39.160000000000004
+              ],
+              "geometryVersion": "WGS84_OSM_complete_geometry_v2",
+              "uncertaintyGuards": 27,
+              "refreshFailed": false
+            },
+            "limitations": [
+              "Incomplete mapped exclusion features have conservative avoidance areas.",
+              "The provider query reached the 5000-record safety limit; coverage is partial.",
+              "Planning heuristic only; this does not establish property condition, homeowner intent, or demand.",
+              "Generic residential classifications do not establish single-family homes or the presence or condition of decks, roofs, or other components.",
+              "The provider reported partial coverage.",
+              "Completed-footprint overlap only; this does not measure saturation, response, conversion or customer demand.",
+              "Mapped features are not verified households, entrances, delivery points or a material quantity.",
+              "Property condition, ownership and customer intent are not established.",
+              "Local access and actual field duration need review."
+            ],
+            "executionRouteVerified": false
+          }
+        },
+        {
+          "area": 3,
+          "candidateId": "9cb8525c9571beb6b4cd78d9",
+          "propertyAreaId": "957fb5ab29577ed00a56e96e44a67b37e130f343b86665567a5665344a091f9e",
+          "geometry": [
+            {
+              "latitude": 39.124518,
+              "longitude": -76.6376813
+            },
+            {
+              "latitude": 39.1244421,
+              "longitude": -76.6376464
+            },
+            {
+              "latitude": 39.1241273,
+              "longitude": -76.6373645
+            },
+            {
+              "latitude": 39.1240364,
+              "longitude": -76.6368229
+            },
+            {
+              "latitude": 39.1240364,
+              "longitude": -76.6366376
+            },
+            {
+              "latitude": 39.1242586,
+              "longitude": -76.6357615
+            },
+            {
+              "latitude": 39.1244024,
+              "longitude": -76.6357615
+            },
+            {
+              "latitude": 39.1247062,
+              "longitude": -76.6357648
+            },
+            {
+              "latitude": 39.1248139,
+              "longitude": -76.6358272
+            },
+            {
+              "latitude": 39.125105,
+              "longitude": -76.6361258
+            },
+            {
+              "latitude": 39.12512,
+              "longitude": -76.636572
+            },
+            {
+              "latitude": 39.12512,
+              "longitude": -76.6367573
+            },
+            {
+              "latitude": 39.1250086,
+              "longitude": -76.6372261
+            },
+            {
+              "latitude": 39.1246618,
+              "longitude": -76.6376813
+            }
+          ],
+          "zoneIntelligence": {
+            "version": "ZoneIntelligenceV1",
+            "geometryDigest": "a8e83ec51b102273f1eceaa0d4cbc03a801af31bd5a1a14dc998931496df34fb",
+            "status": "available",
+            "mode": "recommended",
+            "targetIntent": "residential",
+            "campaignType": "flyer_distribution",
+            "mappedTargetCount": 8,
+            "propertyMix": {
+              "basis": "observed_osm_tags",
+              "classifiedCount": 8,
+              "unknownCount": 0,
+              "categories": [
+                {
+                  "label": "Attached/semi-detached",
+                  "count": 8
+                }
+              ]
+            },
+            "supportingStreetMeters": 350,
+            "workload": {
+              "minutes": 20,
+              "oneScaler": true,
+              "exceedsSingleScalerLimit": false,
+              "limitMinutes": 360,
+              "version": "SmartZonePlanningV5",
+              "supportedTargetCount": 8,
+              "propertiesPerHour": 45,
+              "walkingMetersPerMinute": 80,
+              "networkTraversalFactor": 2,
+              "minimumMinutes": 15,
+              "campaignType": "flyer_distribution",
+              "conversationDuration": null
+            },
+            "regionalContext": {
+              "scope": "regional_property_context",
+              "signals": [
+                {
+                  "label": "Analyzed property records",
+                  "value": 4742,
+                  "source": "Maryland Open Data"
+                },
+                {
+                  "label": "Service-area fit",
+                  "value": "Inside your saved service area",
+                  "source": "Saved Business service areas"
+                },
+                {
+                  "label": "Predominant construction era",
+                  "value": "1940–1959",
+                  "source": "Maryland Open Data"
+                }
+              ],
+              "source": {
+                "analysisId": "acd7c69fe8be462eab629d744a3016f174a9e894b6f4b1717e769efa06ff698b",
+                "geometryDigest": "418a94138fc4d09b0a13aa72ba6363eda8e03522ab79db18bc778cc0a325f6e3",
+                "source": "Maryland Open Data",
+                "sourceVersion": "MD_OPEN_DATA_ed4q-f8tm",
+                "dataUpdatedAt": null,
+                "generatedAt": "2026-09-26T23:51:09.963Z",
+                "inputGranularity": "parcel_level",
+                "geographicCoverageMethod": "server_point_in_polygon",
+                "confidence": "LOW"
+              }
+            },
+            "reasons": [
+              "4348 residential records or housing units among 4742 analyzed; the source granularity applies.",
+              "Ranked by observed residential share only; no supported component-specific need or condition metric is available."
+            ],
+            "source": {
+              "name": "OpenStreetMap",
+              "dataTimestamp": "2026-09-25T20:24:36Z",
+              "fetchedAt": "2026-09-26T21:55:03.501020+00:00",
+              "freshness": "fresh",
+              "transport": "regional_cache",
+              "evidenceHash": "b06c353f73a9b6b94d5e4fb65aefdfc5ae25e05570a5a2daa815bd767ab4b57b",
+              "provider": "geofabrik_maryland",
+              "importedAt": "2026-09-26T23:17:16.762Z",
+              "sourceHash": "fca54b6b3d2cf6632e79a6a93413d77c0019743ff1bbef52e93188a28d79fc20",
+              "datasetVersion": "SmartZonePublicCacheV1",
+              "parserVersion": "SmartZoneOsmGeometryV2",
+              "bounds": [
+                -76.6945750000126,
+                39.108224999811924,
+                -76.58875599983642,
+                39.21576000007699
+              ],
+              "queryBounds": [
+                -76.64,
+                39.12,
+                -76.61868456320674,
+                39.160000000000004
+              ],
+              "geometryVersion": "WGS84_OSM_complete_geometry_v2",
+              "uncertaintyGuards": 27,
+              "refreshFailed": false
+            },
+            "limitations": [
+              "Incomplete mapped exclusion features have conservative avoidance areas.",
+              "The provider query reached the 5000-record safety limit; coverage is partial.",
+              "Planning heuristic only; this does not establish property condition, homeowner intent, or demand.",
+              "Generic residential classifications do not establish single-family homes or the presence or condition of decks, roofs, or other components.",
+              "The provider reported partial coverage.",
+              "Completed-footprint overlap only; this does not measure saturation, response, conversion or customer demand.",
+              "Mapped features are not verified households, entrances, delivery points or a material quantity.",
+              "Property condition, ownership and customer intent are not established.",
+              "Local access and actual field duration need review."
+            ],
+            "executionRouteVerified": false
+          }
+        },
+        {
+          "area": 4,
+          "candidateId": "d48d07f39c2f3a813970af94",
+          "propertyAreaId": "957fb5ab29577ed00a56e96e44a67b37e130f343b86665567a5665344a091f9e",
+          "geometry": [
+            {
+              "latitude": 39.1244548,
+              "longitude": -76.6354979
+            },
+            {
+              "latitude": 39.1242954,
+              "longitude": -76.6350203
+            },
+            {
+              "latitude": 39.1242954,
+              "longitude": -76.634835
+            },
+            {
+              "latitude": 39.1245513,
+              "longitude": -76.633793
+            },
+            {
+              "latitude": 39.1247918,
+              "longitude": -76.6336345
+            },
+            {
+              "latitude": 39.1249356,
+              "longitude": -76.6336345
+            },
+            {
+              "latitude": 39.1249664,
+              "longitude": -76.634409
+            },
+            {
+              "latitude": 39.1249664,
+              "longitude": -76.6345943
+            },
+            {
+              "latitude": 39.124914,
+              "longitude": -76.6354041
+            },
+            {
+              "latitude": 39.1245986,
+              "longitude": -76.6354979
+            }
+          ],
+          "zoneIntelligence": {
+            "version": "ZoneIntelligenceV1",
+            "geometryDigest": "7aa46e9d15b2490c0d9979572099a9b205ff043050a8ce5a962bc523346c3c3a",
+            "status": "available",
+            "mode": "recommended",
+            "targetIntent": "residential",
+            "campaignType": "flyer_distribution",
+            "mappedTargetCount": 6,
+            "propertyMix": {
+              "basis": "observed_osm_tags",
+              "classifiedCount": 6,
+              "unknownCount": 0,
+              "categories": [
+                {
+                  "label": "Attached/semi-detached",
+                  "count": 6
+                }
+              ]
+            },
+            "supportingStreetMeters": 162,
+            "workload": {
+              "minutes": 15,
+              "oneScaler": true,
+              "exceedsSingleScalerLimit": false,
+              "limitMinutes": 360,
+              "version": "SmartZonePlanningV5",
+              "supportedTargetCount": 6,
+              "propertiesPerHour": 45,
+              "walkingMetersPerMinute": 80,
+              "networkTraversalFactor": 2,
+              "minimumMinutes": 15,
+              "campaignType": "flyer_distribution",
+              "conversationDuration": null
+            },
+            "regionalContext": {
+              "scope": "regional_property_context",
+              "signals": [
+                {
+                  "label": "Analyzed property records",
+                  "value": 4742,
+                  "source": "Maryland Open Data"
+                },
+                {
+                  "label": "Service-area fit",
+                  "value": "Inside your saved service area",
+                  "source": "Saved Business service areas"
+                },
+                {
+                  "label": "Predominant construction era",
+                  "value": "1940–1959",
+                  "source": "Maryland Open Data"
+                }
+              ],
+              "source": {
+                "analysisId": "acd7c69fe8be462eab629d744a3016f174a9e894b6f4b1717e769efa06ff698b",
+                "geometryDigest": "418a94138fc4d09b0a13aa72ba6363eda8e03522ab79db18bc778cc0a325f6e3",
+                "source": "Maryland Open Data",
+                "sourceVersion": "MD_OPEN_DATA_ed4q-f8tm",
+                "dataUpdatedAt": null,
+                "generatedAt": "2026-09-26T23:51:09.963Z",
+                "inputGranularity": "parcel_level",
+                "geographicCoverageMethod": "server_point_in_polygon",
+                "confidence": "LOW"
+              }
+            },
+            "reasons": [
+              "4348 residential records or housing units among 4742 analyzed; the source granularity applies.",
+              "Ranked by observed residential share only; no supported component-specific need or condition metric is available."
+            ],
+            "source": {
+              "name": "OpenStreetMap",
+              "dataTimestamp": "2026-09-25T20:24:36Z",
+              "fetchedAt": "2026-09-26T21:55:03.501020+00:00",
+              "freshness": "fresh",
+              "transport": "regional_cache",
+              "evidenceHash": "b06c353f73a9b6b94d5e4fb65aefdfc5ae25e05570a5a2daa815bd767ab4b57b",
+              "provider": "geofabrik_maryland",
+              "importedAt": "2026-09-26T23:17:16.762Z",
+              "sourceHash": "fca54b6b3d2cf6632e79a6a93413d77c0019743ff1bbef52e93188a28d79fc20",
+              "datasetVersion": "SmartZonePublicCacheV1",
+              "parserVersion": "SmartZoneOsmGeometryV2",
+              "bounds": [
+                -76.6945750000126,
+                39.108224999811924,
+                -76.58875599983642,
+                39.21576000007699
+              ],
+              "queryBounds": [
+                -76.64,
+                39.12,
+                -76.61868456320674,
+                39.160000000000004
+              ],
+              "geometryVersion": "WGS84_OSM_complete_geometry_v2",
+              "uncertaintyGuards": 27,
+              "refreshFailed": false
+            },
+            "limitations": [
+              "Incomplete mapped exclusion features have conservative avoidance areas.",
+              "The provider query reached the 5000-record safety limit; coverage is partial.",
+              "Planning heuristic only; this does not establish property condition, homeowner intent, or demand.",
+              "Generic residential classifications do not establish single-family homes or the presence or condition of decks, roofs, or other components.",
+              "The provider reported partial coverage.",
+              "Completed-footprint overlap only; this does not measure saturation, response, conversion or customer demand.",
+              "Mapped features are not verified households, entrances, delivery points or a material quantity.",
+              "Property condition, ownership and customer intent are not established.",
+              "Local access and actual field duration need review."
+            ],
+            "executionRouteVerified": false
+          }
+        },
+        {
+          "area": 5,
+          "candidateId": "dba7f0e931f1b8e1ea73528f",
+          "propertyAreaId": "1fef6a2bccfb97c43adc71c5e4c94c2c815138ce174deeb0588c7d4924304ca6",
+          "geometry": [
+            {
+              "latitude": 39.1484335,
+              "longitude": -76.6419499
+            },
+            {
+              "latitude": 39.1482821,
+              "longitude": -76.6419428
+            },
+            {
+              "latitude": 39.1481216,
+              "longitude": -76.6418691
+            },
+            {
+              "latitude": 39.1481216,
+              "longitude": -76.6416838
+            },
+            {
+              "latitude": 39.1483009,
+              "longitude": -76.6411072
+            },
+            {
+              "latitude": 39.1484518,
+              "longitude": -76.6406446
+            },
+            {
+              "latitude": 39.148936,
+              "longitude": -76.6400819
+            },
+            {
+              "latitude": 39.1490798,
+              "longitude": -76.6400819
+            },
+            {
+              "latitude": 39.149281,
+              "longitude": -76.6401458
+            },
+            {
+              "latitude": 39.1494823,
+              "longitude": -76.6402096
+            },
+            {
+              "latitude": 39.1494823,
+              "longitude": -76.640395
+            },
+            {
+              "latitude": 39.1494543,
+              "longitude": -76.6406289
+            },
+            {
+              "latitude": 39.1485772,
+              "longitude": -76.6419499
+            }
+          ],
+          "zoneIntelligence": {
+            "version": "ZoneIntelligenceV1",
+            "geometryDigest": "3fe9a370e26d5735c35b881f5bd6db070a704caa95561b92b6fefb9c672a45ee",
+            "status": "available",
+            "mode": "recommended",
+            "targetIntent": "residential",
+            "campaignType": "flyer_distribution",
+            "mappedTargetCount": 30,
+            "propertyMix": {
+              "basis": "observed_osm_tags",
+              "classifiedCount": 30,
+              "unknownCount": 0,
+              "categories": [
+                {
+                  "label": "Attached/semi-detached",
+                  "count": 30
+                }
+              ]
+            },
+            "supportingStreetMeters": 233,
+            "workload": {
+              "minutes": 46,
+              "oneScaler": true,
+              "exceedsSingleScalerLimit": false,
+              "limitMinutes": 360,
+              "version": "SmartZonePlanningV5",
+              "supportedTargetCount": 30,
+              "propertiesPerHour": 45,
+              "walkingMetersPerMinute": 80,
+              "networkTraversalFactor": 2,
+              "minimumMinutes": 15,
+              "campaignType": "flyer_distribution",
+              "conversationDuration": null
+            },
+            "regionalContext": {
+              "scope": "regional_property_context",
+              "signals": [
+                {
+                  "label": "Analyzed property records",
+                  "value": 1731,
+                  "source": "Maryland Open Data"
+                },
+                {
+                  "label": "Service-area fit",
+                  "value": "Inside your saved service area",
+                  "source": "Saved Business service areas"
+                },
+                {
+                  "label": "Predominant construction era",
+                  "value": "1960–1979",
+                  "source": "Maryland Open Data"
+                }
+              ],
+              "source": {
+                "analysisId": "e4e7c517efc16c498df8f9d19cc568b6a3b9e42a41f1275758b2157e88fe5105",
+                "geometryDigest": "56ca5c33e0b2321051ed7c86309711f224527aa83579b8f92d1ccd71864e527f",
+                "source": "Maryland Open Data",
+                "sourceVersion": "MD_OPEN_DATA_ed4q-f8tm",
+                "dataUpdatedAt": null,
+                "generatedAt": "2026-09-26T23:51:11.173Z",
+                "inputGranularity": "parcel_level",
+                "geographicCoverageMethod": "server_point_in_polygon",
+                "confidence": "HIGH"
+              }
+            },
+            "reasons": [
+              "1503 residential records or housing units among 1731 analyzed; the source granularity applies.",
+              "Ranked by observed residential share only; no supported component-specific need or condition metric is available."
+            ],
+            "source": {
+              "name": "OpenStreetMap",
+              "dataTimestamp": "2026-09-25T20:24:36Z",
+              "fetchedAt": "2026-09-26T21:55:03.501020+00:00",
+              "freshness": "fresh",
+              "transport": "regional_cache",
+              "evidenceHash": "68d82981942f3c6a7cd995dd51eeb16f616403153292aa2aaaf6e6b3189adb34",
+              "provider": "geofabrik_maryland",
+              "importedAt": "2026-09-26T23:17:16.762Z",
+              "sourceHash": "fca54b6b3d2cf6632e79a6a93413d77c0019743ff1bbef52e93188a28d79fc20",
+              "datasetVersion": "SmartZonePublicCacheV1",
+              "parserVersion": "SmartZoneOsmGeometryV2",
+              "bounds": [
+                -76.6945750000126,
+                39.108224999811924,
+                -76.58875599983642,
+                39.21576000007699
+              ],
+              "queryBounds": [
+                -76.68,
+                39.1257422405891,
+                -76.64,
+                39.160000000000004
+              ],
+              "geometryVersion": "WGS84_OSM_complete_geometry_v2",
+              "uncertaintyGuards": 20,
+              "refreshFailed": false
+            },
+            "limitations": [
+              "Incomplete mapped exclusion features have conservative avoidance areas.",
+              "Planning heuristic only; this does not establish property condition, homeowner intent, or demand.",
+              "Generic residential classifications do not establish single-family homes or the presence or condition of decks, roofs, or other components.",
+              "Completed-footprint overlap only; this does not measure saturation, response, conversion or customer demand.",
+              "Mapped features are not verified households, entrances, delivery points or a material quantity.",
+              "Property condition, ownership and customer intent are not established.",
+              "Local access and actual field duration need review."
+            ],
+            "executionRouteVerified": false
+          }
+        }
+      ]
+    },
+    {
+      "option": 2,
+      "areas": [
+        {
+          "area": 1,
+          "candidateId": "5db0acf0489354f2a5f696fd",
+          "propertyAreaId": "a113f3725c305ef71f4f6a16b9a33d4e12ec1aaeaa99af925ef81e40a37c4576",
+          "geometry": [
+            {
+              "latitude": 39.16489,
+              "longitude": -76.6346939
+            },
+            {
+              "latitude": 39.1645496,
+              "longitude": -76.6345594
+            },
+            {
+              "latitude": 39.1644881,
+              "longitude": -76.634514
+            },
+            {
+              "latitude": 39.1644283,
+              "longitude": -76.6344367
+            },
+            {
+              "latitude": 39.1643866,
+              "longitude": -76.6343396
+            },
+            {
+              "latitude": 39.1643659,
+              "longitude": -76.6342421
+            },
+            {
+              "latitude": 39.1643533,
+              "longitude": -76.6341205
+            },
+            {
+              "latitude": 39.1643533,
+              "longitude": -76.6339351
+            },
+            {
+              "latitude": 39.1643888,
+              "longitude": -76.6333937
+            },
+            {
+              "latitude": 39.1646255,
+              "longitude": -76.6332455
+            },
+            {
+              "latitude": 39.1648407,
+              "longitude": -76.6331372
+            },
+            {
+              "latitude": 39.1649845,
+              "longitude": -76.6331372
+            },
+            {
+              "latitude": 39.1651814,
+              "longitude": -76.6333097
+            },
+            {
+              "latitude": 39.1651814,
+              "longitude": -76.6334951
+            },
+            {
+              "latitude": 39.1650337,
+              "longitude": -76.6346939
+            }
+          ],
+          "zoneIntelligence": {
+            "version": "ZoneIntelligenceV1",
+            "geometryDigest": "ba61e7f10e0de17b31aee711df520ad64b467e06f0a2870b0e581cff5bff164e",
+            "status": "available",
+            "mode": "recommended",
+            "targetIntent": "residential",
+            "campaignType": "flyer_distribution",
+            "mappedTargetCount": 7,
+            "propertyMix": {
+              "basis": "observed_osm_tags",
+              "classifiedCount": 7,
+              "unknownCount": 0,
+              "categories": [
+                {
+                  "label": "House (attachment unknown)",
+                  "count": 7
+                }
+              ]
+            },
+            "supportingStreetMeters": 185,
+            "workload": {
+              "minutes": 15,
+              "oneScaler": true,
+              "exceedsSingleScalerLimit": false,
+              "limitMinutes": 360,
+              "version": "SmartZonePlanningV5",
+              "supportedTargetCount": 7,
+              "propertiesPerHour": 45,
+              "walkingMetersPerMinute": 80,
+              "networkTraversalFactor": 2,
+              "minimumMinutes": 15,
+              "campaignType": "flyer_distribution",
+              "conversationDuration": null
+            },
+            "regionalContext": {
+              "scope": "regional_property_context",
+              "signals": [
+                {
+                  "label": "Analyzed property records",
+                  "value": 3651,
+                  "source": "Maryland Open Data"
+                },
+                {
+                  "label": "Service-area fit",
+                  "value": "Inside your saved service area",
+                  "source": "Saved Business service areas"
+                },
+                {
+                  "label": "Predominant construction era",
+                  "value": "1940–1959",
+                  "source": "Maryland Open Data"
+                }
+              ],
+              "source": {
+                "analysisId": "e9e63d469c2f316ca67311ca93a545dac1a4a28dcf390096c2ad2779ffea53a3",
+                "geometryDigest": "a94d021e44b2125005190ce30f011f9d4b024368b96b3d31fe2e28ced6e0a6c5",
+                "source": "Maryland Open Data",
+                "sourceVersion": "MD_OPEN_DATA_ed4q-f8tm",
+                "dataUpdatedAt": null,
+                "generatedAt": "2026-09-26T23:51:13.769Z",
+                "inputGranularity": "parcel_level",
+                "geographicCoverageMethod": "server_point_in_polygon",
+                "confidence": "HIGH"
+              }
+            },
+            "reasons": [
+              "3180 residential records or housing units among 3651 analyzed; the source granularity applies.",
+              "Ranked by observed residential share only; no supported component-specific need or condition metric is available."
+            ],
+            "source": {
+              "name": "OpenStreetMap",
+              "dataTimestamp": "2026-09-25T20:24:36Z",
+              "fetchedAt": "2026-09-26T21:55:03.501020+00:00",
+              "freshness": "fresh",
+              "transport": "regional_cache",
+              "evidenceHash": "b826e03ce452023d81ed6e090b759232a8058e4fce4ff0d90dad30af5ce66009",
+              "provider": "geofabrik_maryland",
+              "importedAt": "2026-09-26T23:17:16.762Z",
+              "sourceHash": "fca54b6b3d2cf6632e79a6a93413d77c0019743ff1bbef52e93188a28d79fc20",
+              "datasetVersion": "SmartZonePublicCacheV1",
+              "parserVersion": "SmartZoneOsmGeometryV2",
+              "bounds": [
+                -76.6945750000126,
+                39.108224999811924,
+                -76.58875599983642,
+                39.21576000007699
+              ],
+              "queryBounds": [
+                -76.64,
+                39.160000000000004,
+                -76.61960151515059,
+                39.2
+              ],
+              "geometryVersion": "WGS84_OSM_complete_geometry_v2",
+              "uncertaintyGuards": 26,
+              "refreshFailed": false
+            },
+            "limitations": [
+              "Incomplete mapped exclusion features have conservative avoidance areas.",
+              "Planning heuristic only; this does not establish property condition, homeowner intent, or demand.",
+              "Generic residential classifications do not establish single-family homes or the presence or condition of decks, roofs, or other components.",
+              "Completed-footprint overlap only; this does not measure saturation, response, conversion or customer demand.",
+              "Mapped features are not verified households, entrances, delivery points or a material quantity.",
+              "Property condition, ownership and customer intent are not established.",
+              "Local access and actual field duration need review."
+            ],
+            "executionRouteVerified": false
+          }
+        },
+        {
+          "area": 2,
+          "candidateId": "76091c11ffc2a4e523d7833c",
+          "propertyAreaId": "a113f3725c305ef71f4f6a16b9a33d4e12ec1aaeaa99af925ef81e40a37c4576",
+          "geometry": [
+            {
+              "latitude": 39.1650274,
+              "longitude": -76.6350447
+            },
+            {
+              "latitude": 39.1647467,
+              "longitude": -76.6349884
+            },
+            {
+              "latitude": 39.1646003,
+              "longitude": -76.6349329
+            },
+            {
+              "latitude": 39.1644302,
+              "longitude": -76.6348554
+            },
+            {
+              "latitude": 39.1643044,
+              "longitude": -76.634724
+            },
+            {
+              "latitude": 39.1641713,
+              "longitude": -76.6344665
+            },
+            {
+              "latitude": 39.1641713,
+              "longitude": -76.6342812
+            },
+            {
+              "latitude": 39.1643659,
+              "longitude": -76.6340567
+            },
+            {
+              "latitude": 39.1645097,
+              "longitude": -76.6340567
+            },
+            {
+              "latitude": 39.1652369,
+              "longitude": -76.6343429
+            },
+            {
+              "latitude": 39.1653741,
+              "longitude": -76.6346429
+            },
+            {
+              "latitude": 39.1653741,
+              "longitude": -76.6348283
+            },
+            {
+              "latitude": 39.1651712,
+              "longitude": -76.6350447
+            }
+          ],
+          "zoneIntelligence": {
+            "version": "ZoneIntelligenceV1",
+            "geometryDigest": "88ab48965a83008740b3369c75112171f39abd4ca072d14de464edb792d934bf",
+            "status": "available",
+            "mode": "recommended",
+            "targetIntent": "residential",
+            "campaignType": "flyer_distribution",
+            "mappedTargetCount": 7,
+            "propertyMix": {
+              "basis": "observed_osm_tags",
+              "classifiedCount": 7,
+              "unknownCount": 0,
+              "categories": [
+                {
+                  "label": "House (attachment unknown)",
+                  "count": 7
+                }
+              ]
+            },
+            "supportingStreetMeters": 115,
+            "workload": {
+              "minutes": 15,
+              "oneScaler": true,
+              "exceedsSingleScalerLimit": false,
+              "limitMinutes": 360,
+              "version": "SmartZonePlanningV5",
+              "supportedTargetCount": 7,
+              "propertiesPerHour": 45,
+              "walkingMetersPerMinute": 80,
+              "networkTraversalFactor": 2,
+              "minimumMinutes": 15,
+              "campaignType": "flyer_distribution",
+              "conversationDuration": null
+            },
+            "regionalContext": {
+              "scope": "regional_property_context",
+              "signals": [
+                {
+                  "label": "Analyzed property records",
+                  "value": 3651,
+                  "source": "Maryland Open Data"
+                },
+                {
+                  "label": "Service-area fit",
+                  "value": "Inside your saved service area",
+                  "source": "Saved Business service areas"
+                },
+                {
+                  "label": "Predominant construction era",
+                  "value": "1940–1959",
+                  "source": "Maryland Open Data"
+                }
+              ],
+              "source": {
+                "analysisId": "e9e63d469c2f316ca67311ca93a545dac1a4a28dcf390096c2ad2779ffea53a3",
+                "geometryDigest": "a94d021e44b2125005190ce30f011f9d4b024368b96b3d31fe2e28ced6e0a6c5",
+                "source": "Maryland Open Data",
+                "sourceVersion": "MD_OPEN_DATA_ed4q-f8tm",
+                "dataUpdatedAt": null,
+                "generatedAt": "2026-09-26T23:51:13.769Z",
+                "inputGranularity": "parcel_level",
+                "geographicCoverageMethod": "server_point_in_polygon",
+                "confidence": "HIGH"
+              }
+            },
+            "reasons": [
+              "3180 residential records or housing units among 3651 analyzed; the source granularity applies.",
+              "Ranked by observed residential share only; no supported component-specific need or condition metric is available."
+            ],
+            "source": {
+              "name": "OpenStreetMap",
+              "dataTimestamp": "2026-09-25T20:24:36Z",
+              "fetchedAt": "2026-09-26T21:55:03.501020+00:00",
+              "freshness": "fresh",
+              "transport": "regional_cache",
+              "evidenceHash": "b826e03ce452023d81ed6e090b759232a8058e4fce4ff0d90dad30af5ce66009",
+              "provider": "geofabrik_maryland",
+              "importedAt": "2026-09-26T23:17:16.762Z",
+              "sourceHash": "fca54b6b3d2cf6632e79a6a93413d77c0019743ff1bbef52e93188a28d79fc20",
+              "datasetVersion": "SmartZonePublicCacheV1",
+              "parserVersion": "SmartZoneOsmGeometryV2",
+              "bounds": [
+                -76.6945750000126,
+                39.108224999811924,
+                -76.58875599983642,
+                39.21576000007699
+              ],
+              "queryBounds": [
+                -76.64,
+                39.160000000000004,
+                -76.61960151515059,
+                39.2
+              ],
+              "geometryVersion": "WGS84_OSM_complete_geometry_v2",
+              "uncertaintyGuards": 26,
+              "refreshFailed": false
+            },
+            "limitations": [
+              "Incomplete mapped exclusion features have conservative avoidance areas.",
+              "Planning heuristic only; this does not establish property condition, homeowner intent, or demand.",
+              "Generic residential classifications do not establish single-family homes or the presence or condition of decks, roofs, or other components.",
+              "Completed-footprint overlap only; this does not measure saturation, response, conversion or customer demand.",
+              "Mapped features are not verified households, entrances, delivery points or a material quantity.",
+              "Property condition, ownership and customer intent are not established.",
+              "Local access and actual field duration need review."
+            ],
+            "executionRouteVerified": false
+          }
+        }
+      ]
+    }
+  ]
+}

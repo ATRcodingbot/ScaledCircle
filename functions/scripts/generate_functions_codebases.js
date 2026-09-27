@@ -107,6 +107,7 @@ const discoveryExports = new Set([
   "saveDiscoveryPreferences",
   "resolveServiceAreaPlace",
   "analyzeCampaignZone",
+  "getCampaignZoneIntelligence",
   "getSmartZonePlan",
   "applySmartZonePlan",
 ]);
@@ -397,7 +398,7 @@ function copyPackage(destination, mode) {
           "marketplace_work_types.js", "scaler_profile_notifications.js",
           "signup_notifications.js", "operational_layer.js",
           "group_assignment.js", "smart_zone_planning.js", "smart_zone_geography.js", "smart_zone_osm_geometry.js", "smart_zone_serviceability.js",
-          "smart_zone_intelligence.js", "smart_zone_intelligence_runtime.js", "smart_zone_public_cache.js", "smart_zone_public_cache_runtime.js", "property_service_area_analysis.js",
+          "zone_intelligence.js", "zone_intelligence_runtime.js", "smart_zone_intelligence.js", "smart_zone_intelligence_runtime.js", "smart_zone_public_cache.js", "smart_zone_public_cache_runtime.js", "property_service_area_analysis.js",
           "property_service_area_geometry.js", "property_intelligence.js", "property_source_http.js",
           "property_service_area_runtime.js", "managed_growth.js",
           "smart_zone_entry_contract.js", "service_area_resolution.js",

@@ -171,6 +171,13 @@ function shape({anchor, boundary, snapshot, workType, propertiesPerHour, desired
     }
     if (best) associated.push({...feature, ...best, component: components.get(best.edge.from)});
   }
+  // Descriptive preview reuses these exact eligibility, access and exclusion
+  // checks. It never substitutes a candidate hull for the user's boundary.
+  const servingComponents = new Set(associated.map(f => f.component));
+  const servingEdges = [...edges.values()].filter(e => servingComponents.has(components.get(e.from)));
+  const analysis = {features, supportedFeatures:associated.map(({edge,snap,meters,component,...f})=>f),
+    segments:servingEdges.map(e=>({from:e.a,to:e.b})),
+    streetMeters:servingEdges.reduce((sum,e)=>sum+e.meters,0)};
   const groups = new Map();
   associated.sort((a, b) => distance(anchor, a) - distance(anchor, b) || a.id.localeCompare(b.id));
   for (const feature of associated.slice(0, desiredTargetLimit)) {
@@ -222,7 +229,7 @@ function shape({anchor, boundary, snapshot, workType, propertiesPerHour, desired
     partition(items.slice(0, middle)); partition(items.slice(middle));
   }
   for (const items of groups.values()) partition(items);
-  return {candidates, targetIntent, geometryDiagnostics, eligibleMappedFeatureCount: features.length,
+  return {candidates, analysis, targetIntent, geometryDiagnostics, eligibleMappedFeatureCount: features.length,
     eligibleMappedSourceIds: features.map(feature => feature.id),
     roadSupportedTargetCount: associated.length,
     roadSupportedSourceIds: associated.map(feature => feature.id),

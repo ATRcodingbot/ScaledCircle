@@ -507,7 +507,10 @@ class _CampaignZonesScreenState extends State<CampaignZonesScreen> {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    SmartZoneRecommendationEvidence(plan: plan),
+                    SmartZoneRecommendationEvidence(
+                      plan: plan,
+                      selectedZoneIndex: selectedZoneIndex,
+                    ),
                     const SizedBox(height: 16),
                     if (zones.isNotEmpty)
                       SmartZoneGeometryMap(
@@ -2310,7 +2313,7 @@ class _CampaignZonesScreenState extends State<CampaignZonesScreen> {
                         zoneName: zoneName,
                         displayOrdinal: identity.ordinal,
                         identityColor: smartZoneColor(identity.styleKey - 1),
-                        data: data,
+                        data: {...data, 'id': zone.id},
                         onTap: _campaignLocked || data['mapLocked'] == true
                             ? null
                             : () {

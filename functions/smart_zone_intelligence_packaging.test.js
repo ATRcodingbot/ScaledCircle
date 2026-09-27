@@ -8,7 +8,7 @@ function nodes(source){const map=new Map();for(const n of parser.parse(source).p
 const main=read('functions/index.js'),discovery=read('functions-discovery/index.js');
 test('deployment endpoint/projection AST parity and PI/crypto/cache bindings are retained',()=>{
  const a=nodes(main),b=nodes(discovery),p=nodes(read('functions-business-profile/index.js'));
- for(const name of ['smartZoneRecommendationContext','smartZoneCampaign','smartZonePlanArguments','generateSmartZonePlan','exports.getSmartZonePlan','exports.applySmartZonePlan'])assert.equal(b.get(name),a.get(name),name);
+ for(const name of ['smartZoneRecommendationContext','smartZoneCampaign','smartZonePlanArguments','generateSmartZonePlan','exports.getSmartZonePlan','exports.applySmartZonePlan','exports.getCampaignZoneIntelligence'])assert.equal(b.get(name),a.get(name),name);
  assert.equal(p.get('exports.getBusinessWorkspaceContext'),a.get('exports.getBusinessWorkspaceContext'));
  let checked=0;traverse(parser.parse(discovery),{ReferencedIdentifier(p){if(['CENSUS_API_KEY','FieldValue','crypto','getStorage'].includes(p.node.name)){
    assert.ok(p.scope.getBinding(p.node.name),p.node.name);checked++;}}});assert.ok(checked>=5);
@@ -18,7 +18,7 @@ test('discovery transitive PI runtime resolves with exact maintained modules and
   const source=read('functions/'+name),copy=read('functions-discovery/'+name);assert.equal(copy.replace(/\r\n/g,'\n'),source.replace(/\r\n/g,'\n'),name);
   for(const match of source.matchAll(/require\(['"](\.\/[^'"]+)['"]\)/g))visit(path.posix.join(path.posix.dirname(name),match[1])+(/\.js$/.test(match[1])?'':'.js'));
  }
- for(const name of ['smart_zone_intelligence.js','smart_zone_intelligence_runtime.js','property_service_area_runtime.js','smart_zone_public_cache_runtime.js'])visit(name);
+ for(const name of ['smart_zone_intelligence.js','smart_zone_intelligence_runtime.js','property_service_area_runtime.js','smart_zone_public_cache_runtime.js','zone_intelligence_runtime.js'])visit(name);
  const pkg=JSON.parse(read('functions-discovery/package.json')),lock=JSON.parse(read('functions-discovery/package-lock.json')),root=JSON.parse(read('functions/package-lock.json'));
  assert.equal(pkg.dependencies['polygon-clipping'],'0.15.7');assert.equal(lock.packages[''].dependencies['polygon-clipping'],'0.15.7');
  for(const key of ['node_modules/polygon-clipping','node_modules/robust-predicates','node_modules/splaytree'])assert.deepEqual(lock.packages[key],root.packages[key]);
