@@ -79,6 +79,9 @@ class BusinessResultSummary {
 
   static BusinessZoneResultState zoneState(Map<String, dynamic> zone) {
     final status = _text(zone['status']);
+    // Only the server-owned operational retirement state excludes a historical
+    // test. A client-supplied test label must never hide ordinary submitted work.
+    if (status == 'test_retired') return BusinessZoneResultState.none;
     final reviewStatus = _text(zone['reviewStatus']);
     final hasSubmissionEvidence =
         _nonEmpty(zone['submittedCompletionId']) ||

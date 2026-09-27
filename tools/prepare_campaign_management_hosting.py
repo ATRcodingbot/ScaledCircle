@@ -3,11 +3,11 @@ import argparse
 import urllib.request
 import prepare_mapping_21061_hosting as base
 
-base.STATE = base.ROOT / '.firebase/campaign-management/hosting'
+base.STATE = base.ROOT / '.firebase/campaign-management/hosting-final'
 base.BASE_STATE = base.ROOT / '.firebase/ga4-hosting-20260927'
 base.BASE = base.BASE_STATE / 'public'
 base.PUBLIC = base.STATE / 'public'
-base.CONFIG = base.ROOT / 'firebase.campaign-management.private.json'
+base.CONFIG = base.ROOT / 'firebase.campaign-management-final.private.json'
 base.MAINTAINED = base.BASE_STATE / 'firebase.hosting.private.json'
 base.MANIFEST = base.STATE / 'manifest.private.json'
 base.EXPECTED_LIVE = 'sites/scaled-circle/versions/f70910ac1cd42499'

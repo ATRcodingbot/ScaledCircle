@@ -398,4 +398,5 @@ function createArchiveService({db,auth,FieldValue,projectId,readProvider,review,
 const createDraftArchiveService=args=>createArchiveService(args,draftArchivePlan);
 const createLegacyVisibilityArchiveService=args=>createArchiveService(args,legacyVisibilityArchivePlan);
 module.exports = {VERSION, digest, planSnapshot, inventory, createService,draftArchivePlan,quiesceReviewedAccountAuth,
-  createDraftArchiveService,legacyVisibilityArchivePlan,createLegacyVisibilityArchiveService};
+  createDraftArchiveService,legacyVisibilityArchivePlan,createLegacyVisibilityArchiveService,
+  ...require('./production_hygiene_test_retirement.cjs')};
