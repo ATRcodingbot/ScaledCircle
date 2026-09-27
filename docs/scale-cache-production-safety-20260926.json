@@ -1,0 +1,34 @@
+{
+  "productionCandidatesRegeneratedExactly": 9,
+  "checks": {
+    "candidateKnownLandOverlap": false,
+    "candidateGuardOverlap": false,
+    "networkKnownLandIntersection": false,
+    "networkGuardIntersection": false,
+    "candidateBarrierIntersection": false
+  },
+  "corkranSchoolIdsExpected": [
+    "286993905",
+    "286993971",
+    "19468867"
+  ],
+  "corkranSchoolIdsFound": [
+    "19468867",
+    "286993905",
+    "286993971"
+  ],
+  "sourceChange": false,
+  "workloadDifferenceCause": "Retained replay omitted anchor, defaulting to each PI section center; deployed callable uses full selected ZIP vertex centroid. One supporting street tree is 97 m longer, adding 3 advisory minutes. Targets and source snapshot unchanged.",
+  "anchorComparison": [
+    {
+      "section": "957fb5ab29577ed00a56e96e44a67b37e130f343b86665567a5665344a091f9e",
+      "productionAnchor": {
+        "latitude": 39.15981641233317,
+        "longitude": -76.63768821649623
+      },
+      "productionMinutes": 68,
+      "retainedReplaySectionCenterMinutes": 65
+    }
+  ],
+  "queries": 6
+}
