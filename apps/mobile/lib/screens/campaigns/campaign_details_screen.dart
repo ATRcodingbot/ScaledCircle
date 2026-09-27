@@ -1,3 +1,5 @@
+import '../../widgets/campaign_list_actions.dart';
+import '../../navigation/protected_route_gate.dart';
 import 'package:flutter_app/widgets/map_source_credit.dart';
 import 'package:flutter_app/navigation/authenticated_app_bar.dart';
 import '../../widgets/campaign_card_header.dart';
@@ -852,70 +854,6 @@ class _CampaignDetailsScreenState extends State<CampaignDetailsScreen> {
     }
 
     await liveCampaign.reference.update(updateData);
-  }
-
-  Future<void> _deleteCampaign(
-    BuildContext context,
-    DocumentReference reference,
-  ) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) {
-        return AlertDialog(
-          title: const Text('Delete Campaign'),
-          content: const Text(
-            'Remove this unfinished draft from the working list? Required audit history and shared assets are retained. This cannot be undone.',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.pop(dialogContext, false);
-              },
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.red,
-                foregroundColor: Colors.white,
-              ),
-              onPressed: () {
-                Navigator.pop(dialogContext, true);
-              },
-              child: const Text('Delete'),
-            ),
-          ],
-        );
-      },
-    );
-
-    if (confirmed != true) {
-      return;
-    }
-
-    try {
-      await _secureFunctions.call(
-        functionName: 'deleteDraftCampaign',
-        data: {'campaignId': reference.id},
-      );
-
-      if (!context.mounted) {
-        return;
-      }
-
-      Navigator.pop(context);
-    } catch (e) {
-      if (!context.mounted) {
-        return;
-      }
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Your campaign could not be deleted. Check its status and try again.',
-          ),
-        ),
-      );
-    }
   }
 
   Future<void> _cancelAndRefundCampaign(
@@ -2056,10 +1994,12 @@ class _CampaignDetailsScreenState extends State<CampaignDetailsScreen> {
 
         final liveCampaign = snapshot.data!;
 
-        if (!liveCampaign.exists) {
-          return Scaffold(
-            appBar: _campaignAppBar(),
-            body: const Center(child: Text('This campaign no longer exists.')),
+        if (!liveCampaign.exists ||
+            (liveCampaign.data() as Map?)?['status'] == 'deleted') {
+          return const RouteRecoveryScreen(
+            title: 'Campaign no longer available',
+            destination: '/business/campaigns',
+            actionLabel: 'Return to Campaigns',
           );
         }
 
@@ -2493,19 +2433,16 @@ class _CampaignDetailsScreenState extends State<CampaignDetailsScreen> {
               ],
 
               if (status == 'draft')
-                SizedBox(
-                  height: 55,
-                  child: ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.red,
-                      foregroundColor: Colors.white,
-                    ),
-                    icon: const Icon(Icons.delete),
-                    label: const Text('Delete Draft'),
-                    onPressed: () {
-                      _deleteCampaign(context, liveCampaign.reference);
-                    },
-                  ),
+                CampaignListActions(
+                  businessId: data['businessId'] as String,
+                  campaignId: liveCampaign.id,
+                  directAction: 'delete',
+                  onManage: () {},
+                  onConfirmed: () {
+                    if (mounted) {
+                      AppNavigation.afterCampaignRemoval(this.context);
+                    }
+                  },
                 ),
             ],
           ),

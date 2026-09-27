@@ -4,6 +4,8 @@ import 'package:flutter_app/models/campaign_planner.dart';
 import 'package:flutter_app/models/campaign_card_compensation.dart';
 import 'package:flutter_app/screens/business/campaign_planner_screen.dart';
 import 'package:flutter_app/widgets/campaign_marketing_history.dart';
+import 'package:flutter_app/navigation/app_shell_identity.dart';
+import 'package:flutter_app/navigation/authenticated_app_bar.dart';
 
 const area = [
   {'latitude': 39.0, 'longitude': -76.0},
@@ -124,6 +126,97 @@ Future<void> press(WidgetTester tester, String label) async {
 }
 
 void main() {
+  for (final mode in ['own_team', 'marketplace']) {
+    testWidgets(
+      '$mode keeps one canonical header on Area, Materials and Review',
+      (tester) async {
+        final fixture = PlannerFixture(mode: mode);
+        await load(
+          tester,
+          AppShellIdentity(
+            uid: 'owner',
+            profile: const {'role': 'business'},
+            child: CampaignPlannerScreen(
+              campaignId: 'campaign1',
+              operation: fixture.call,
+            ),
+          ),
+        );
+        void header(String step) {
+          expect(find.byType(AuthenticatedAppBar), findsOneWidget);
+          expect(find.byType(AppBar), findsOneWidget);
+          expect(find.byTooltip('ScaledCircle Home'), findsOneWidget);
+          expect(find.byType(BackButton), findsOneWidget);
+          expect(find.byTooltip('Workspace and account'), findsOneWidget);
+          expect(find.text(step), findsOneWidget);
+        }
+
+        header('Step 2 — Area');
+        await press(tester, 'Continue to Materials');
+        header('Step 3 — Materials');
+        await press(
+          tester,
+          mode == 'own_team'
+              ? 'Continue to Review & Schedule'
+              : 'Continue to Review & Fund',
+        );
+        header(
+          mode == 'own_team'
+              ? 'Step 4 — Review & Schedule'
+              : 'Step 4 — Review & Fund',
+        );
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
+  testWidgets(
+    'empty draft header remains reachable at 360px / 2x and Home confirms unsaved entries',
+    (tester) async {
+      tester.view.physicalSize = const Size(360, 900);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final fixture = PlannerFixture(hasArea: false);
+      await tester.pumpWidget(
+        AppShellIdentity(
+          uid: 'owner',
+          profile: const {'role': 'business'},
+          child: MaterialApp(
+            builder: (context, child) => MediaQuery(
+              data: MediaQuery.of(
+                context,
+              ).copyWith(textScaler: const TextScaler.linear(2)),
+              child: child!,
+            ),
+            routes: {
+              '/business': (_) =>
+                  const Scaffold(body: Text('Business destination')),
+            },
+            home: CampaignPlannerScreen(operation: fixture.call),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Step 1 — Campaign'), findsOneWidget);
+      expect(find.byType(BackButton), findsOneWidget);
+      await tester.enterText(find.byType(TextField).first, 'Unsaved fixture');
+      await tester.tap(find.byTooltip('ScaledCircle Home'));
+      await tester.pumpAndSettle();
+      expect(find.text('Leave unsaved changes?'), findsOneWidget);
+      await tester.tap(find.text('Keep editing'));
+      await tester.pumpAndSettle();
+      expect(find.text('Unsaved fixture'), findsOneWidget);
+      await tester.tap(find.byTooltip('ScaledCircle Home'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Discard changes'));
+      await tester.pumpAndSettle();
+      expect(find.text('Business destination'), findsOneWidget);
+      expect(fixture.calls, isEmpty);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   test('regional housing counts cannot become material recommendations', () {
     const intel = CampaignMaterialIntelligence({
       'housingEstimate': 620,

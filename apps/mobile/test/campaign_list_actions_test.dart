@@ -108,7 +108,7 @@ void main() {
       }, open: () => opens++);
       await tester.tap(find.byTooltip('Campaign actions'));
       await tester.pumpAndSettle();
-      expect(find.text('Close campaign'), findsNothing);
+      expect(find.text('Cancel campaign'), findsNothing);
       expect(find.text('Delete draft'), findsNothing);
       await tester.tap(find.text('Open campaign / Manage work'));
       await tester.pumpAndSettle();
@@ -149,7 +149,7 @@ void main() {
         );
       });
       await choose(tester, 'close');
-      await tester.tap(find.widgetWithText(FilledButton, 'Close campaign'));
+      await tester.tap(find.widgetWithText(FilledButton, 'Cancel campaign'));
       await tester.pumpAndSettle();
       expect(find.text('This Zone now has accepted work.'), findsOneWidget);
       expect(find.text('The server confirmed this change.'), findsNothing);
@@ -200,12 +200,12 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.tab);
     await tester.sendKeyEvent(LogicalKeyboardKey.enter);
     await tester.pumpAndSettle();
-    expect(find.text('Close campaign'), findsOneWidget);
-    await tester.ensureVisible(find.text('Close campaign'));
-    await tester.tap(find.text('Close campaign'));
+    expect(find.text('Cancel campaign'), findsOneWidget);
+    await tester.ensureVisible(find.text('Cancel campaign'));
+    await tester.tap(find.text('Cancel campaign'));
     await tester.pumpAndSettle();
     expect(
-      find.widgetWithText(FilledButton, 'Close campaign').hitTestable(),
+      find.widgetWithText(FilledButton, 'Cancel campaign').hitTestable(),
       findsOneWidget,
     );
     expect(find.text('Cancel').hitTestable(), findsOneWidget);

@@ -13,7 +13,7 @@ typedef CampaignActionCall =
 
 const campaignActionLabels = {
   'delete': 'Delete draft',
-  'close': 'Close campaign',
+  'close': 'Cancel campaign',
   'archive': 'Archive',
   'restore': 'Restore to list',
 };
@@ -35,11 +35,15 @@ class CampaignListActions extends StatefulWidget {
     required this.onManage,
     this.call,
     this.sessionKey,
+    this.directAction,
+    this.onConfirmed,
   });
   final String businessId, campaignId;
   final VoidCallback onManage;
   final CampaignActionCall? call;
   final Object? Function()? sessionKey;
+  final String? directAction;
+  final VoidCallback? onConfirmed;
   @override
   State<CampaignListActions> createState() => _CampaignListActionsState();
 }
@@ -81,38 +85,43 @@ class _CampaignListActionsState extends State<CampaignListActions> {
       }, null);
       if (!mounted || session() != owner) return;
       final name = state['name'] as String? ?? 'Untitled Campaign';
-      final selected = await showDialog<String>(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: Text('Actions for $name'),
-          scrollable: true,
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              if ((state['reason'] as String? ?? '').isNotEmpty)
-                Text(state['reason'] as String),
-              for (final action in (state['actions'] as List? ?? []).where(
-                campaignActionLabels.containsKey,
-              ))
-                TextButton(
-                  onPressed: () => Navigator.pop(context, action),
-                  child: Text(campaignActionLabels[action]!),
+      final selected =
+          widget.directAction != null &&
+              (state['actions'] as List? ?? []).contains(widget.directAction)
+          ? widget.directAction
+          : await showDialog<String>(
+              context: context,
+              builder: (context) => AlertDialog(
+                title: Text('Actions for $name'),
+                scrollable: true,
+                content: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    if ((state['reason'] as String? ?? '').isNotEmpty)
+                      Text(state['reason'] as String),
+                    for (final action
+                        in (state['actions'] as List? ?? []).where(
+                          campaignActionLabels.containsKey,
+                        ))
+                      TextButton(
+                        onPressed: () => Navigator.pop(context, action),
+                        child: Text(campaignActionLabels[action]!),
+                      ),
+                    TextButton(
+                      onPressed: () => Navigator.pop(context, 'manage'),
+                      child: const Text('Open campaign / Manage work'),
+                    ),
+                  ],
                 ),
-              TextButton(
-                onPressed: () => Navigator.pop(context, 'manage'),
-                child: const Text('Open campaign / Manage work'),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('Cancel'),
+                  ),
+                ],
               ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel'),
-            ),
-          ],
-        ),
-      );
+            );
       if (!mounted || session() != owner || selected == null) return;
       if (selected == 'manage') {
         widget.onManage();
@@ -126,6 +135,7 @@ class _CampaignListActionsState extends State<CampaignListActions> {
           action: selected,
           state: state,
           currentSession: () => session() == owner,
+          onConfirmed: widget.onConfirmed,
           submit: () => call('changeCampaignListState', {
             'campaignId': campaignId,
             'action': selected,
@@ -159,16 +169,27 @@ class _CampaignListActionsState extends State<CampaignListActions> {
   // One logical request survives uncertain replies within the confirmation.
   late String requestId;
   @override
-  Widget build(BuildContext context) => IconButton(
-    tooltip: 'Campaign actions',
-    onPressed: _loading
-        ? null
-        : () {
-            requestId = BusinessOperationsService().requestId();
-            _open();
-          },
-    icon: Icon(_loading ? Icons.hourglass_empty : Icons.more_vert),
-  );
+  Widget build(BuildContext context) => widget.directAction != null
+      ? FilledButton.icon(
+          onPressed: _loading
+              ? null
+              : () {
+                  requestId = BusinessOperationsService().requestId();
+                  _open();
+                },
+          icon: const Icon(Icons.delete_outline),
+          label: Text(_loading ? 'Checking campaign…' : 'Delete Draft'),
+        )
+      : IconButton(
+          tooltip: 'Campaign actions',
+          onPressed: _loading
+              ? null
+              : () {
+                  requestId = BusinessOperationsService().requestId();
+                  _open();
+                },
+          icon: Icon(_loading ? Icons.hourglass_empty : Icons.more_vert),
+        );
 }
 
 class _CampaignActionConfirmation extends StatefulWidget {
@@ -178,11 +199,13 @@ class _CampaignActionConfirmation extends StatefulWidget {
     required this.state,
     required this.submit,
     required this.currentSession,
+    this.onConfirmed,
   });
   final String name, action;
   final Map<String, dynamic> state;
   final Future<Map<String, dynamic>> Function() submit;
   final bool Function() currentSession;
+  final VoidCallback? onConfirmed;
   @override
   State<_CampaignActionConfirmation> createState() =>
       _CampaignActionConfirmationState();
@@ -209,6 +232,11 @@ class _CampaignActionConfirmationState
         return;
       }
       if (result['confirmed'] != true) throw StateError('Unconfirmed');
+      if (widget.onConfirmed != null) {
+        Navigator.pop(context);
+        widget.onConfirmed!();
+        return;
+      }
       setState(() => _confirmed = true);
     } on FirebaseFunctionsException catch (error) {
       if (!mounted) return;

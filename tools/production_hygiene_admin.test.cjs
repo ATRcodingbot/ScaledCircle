@@ -123,3 +123,14 @@ test('Legacy launch archive preserves outstanding economics and requires explici
   delete s.rows[1].data.activeTrackingSessionId;r.archives[0].preserveOutstandingObligations=false;
   assert.throws(()=>legacyVisibilityArchivePlan(s,r));
 });
+
+test('Development credits do not prove accepted/submitted physical work is synthetic or authorize retirement',()=>{
+  const s=snapshot(),r={...review(),archives:[{id:'c',businessId:'owner',reviewedSynthetic:true,
+    evidence:'Development credit funding only',preserveOutstandingObligations:true}]};
+  s.rows=[row('campaigns/c',{businessId:'owner',status:'accepted',fundingStatus:'reserved'}),
+    row('wallets/owner/transactions/promo',{developmentOnly:true,cashValue:0,amount:10000}),
+    row('campaignCompletions/submitted',{campaignId:'c',status:'submitted',routeSimulated:false}),
+    row('payouts/p',{campaignId:'c',status:'pending_review',basePay:25})];
+  assert.throws(()=>legacyVisibilityArchivePlan(s,r));
+  assert.throws(()=>draftArchivePlan(s,r));
+});

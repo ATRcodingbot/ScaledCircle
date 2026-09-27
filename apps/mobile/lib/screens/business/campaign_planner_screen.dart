@@ -6,6 +6,7 @@ import '../../models/campaign_map_context.dart';
 import '../../models/material_logistics.dart';
 import '../../navigation/app_router.dart';
 import '../../navigation/app_routes.dart';
+import '../../navigation/authenticated_app_bar.dart';
 import '../../services/business_operations_service.dart';
 import '../../services/business_workspace_service.dart';
 import '../../services/business_onboarding_service.dart';
@@ -69,6 +70,48 @@ class _CampaignPlannerScreenState extends State<CampaignPlannerScreen> {
   String _executionMode = 'marketplace', _materialSource = 'business_provided';
   int _step = 0;
   bool _busy = false, _historyAccepted = false;
+  String _savedForm = '';
+  String get _form => [
+    _name.text,
+    _description.text,
+    _quantity.text,
+    _pay.text,
+    _bonus.text,
+    _staging.text,
+    _returnLocation.text,
+    _printNotes.text,
+    _executionMode,
+    _materialSource,
+    _start,
+    _end,
+    _logistics.toCallableData().toString(),
+  ].join('\u0000');
+
+  Future<bool> _confirmLeave() async {
+    if (_busy) return false;
+    if (_savedForm == _form) return true;
+    return await showDialog<bool>(
+          context: context,
+          builder: (dialogContext) => AlertDialog(
+            title: const Text('Leave unsaved changes?'),
+            content: const Text(
+              'Your saved campaign stays unchanged. Unsaved entries on this step will be discarded.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext, false),
+                child: const Text('Keep editing'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext, true),
+                child: const Text('Discard changes'),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+  }
+
   Map<String, dynamic>? _context, _history;
   MaterialLogisticsDraft _logistics = const MaterialLogisticsDraft();
   DateTime? _start, _end;
@@ -107,6 +150,7 @@ class _CampaignPlannerScreenState extends State<CampaignPlannerScreen> {
       widget.initialGoal,
       widget.initialService,
     ].whereType<String>().where((s) => s.isNotEmpty).join('\n');
+    _savedForm = _form;
     if (_campaignId != null) {
       _step = 1;
       _run(() async {
@@ -187,6 +231,7 @@ class _CampaignPlannerScreenState extends State<CampaignPlannerScreen> {
       _printNotes.text = _campaign['materialPrintNotes']?.toString() ?? '';
       _start = campaignPlanningDate(_campaign['startAt']);
       _end = campaignPlanningDate(_campaign['deadlineAt']);
+      _savedForm = _form;
     }
     if (_hasArea) {
       _history = null;
@@ -223,6 +268,7 @@ class _CampaignPlannerScreenState extends State<CampaignPlannerScreen> {
     _campaignId = result['campaignId'].toString();
     _step = 1;
     await _reload();
+    _savedForm = _form;
   });
 
   Future<void> _editArea() => _run(() async {
@@ -353,6 +399,7 @@ class _CampaignPlannerScreenState extends State<CampaignPlannerScreen> {
     });
     await _reload();
     _step = 3;
+    _savedForm = _form;
   });
 
   Future<void> _finish() => _run(() async {
@@ -542,8 +589,24 @@ class _CampaignPlannerScreenState extends State<CampaignPlannerScreen> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(
-      title: Text(_campaignId == null ? 'Create Campaign' : _name.text),
+    appBar: AuthenticatedAppBar(
+      title: const Text('Campaign setup'),
+      beforeNavigate: _confirmLeave,
+      bottom: PreferredSize(
+        preferredSize: Size.fromHeight(
+          MediaQuery.textScalerOf(context).scale(24) * 2 + 12,
+        ),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: Text(
+              'Step ${_step + 1} — ${['Campaign', 'Area', 'Materials', _ownTeam ? 'Review & Schedule' : 'Review & Fund'][_step]}',
+              maxLines: 2,
+            ),
+          ),
+        ),
+      ),
     ),
     body: Center(
       child: ConstrainedBox(

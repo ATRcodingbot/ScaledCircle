@@ -58,16 +58,25 @@ class _CampaignRouteContentState extends State<CampaignRouteContent> {
             );
           }
           final campaign = snapshot.data;
-          if (snapshot.hasError || campaign == null || !campaign.exists) {
+          if (snapshot.hasError ||
+              campaign == null ||
+              !campaign.exists ||
+              campaign.data()?['status'] == 'deleted') {
             return RouteRecoveryScreen(
-              title: 'Campaign not available.',
-              destination: widget.fallbackRoute,
+              title: snapshot.hasError
+                  ? 'Campaign temporarily unavailable'
+                  : 'Campaign no longer available',
+              destination: widget.isAdmin
+                  ? widget.fallbackRoute
+                  : '/business/campaigns',
+              actionLabel: widget.isAdmin
+                  ? 'Return to Dashboard'
+                  : 'Return to Campaigns',
             );
           }
           if (!widget.isAdmin &&
-              (campaign.data()?['businessId'] != widget.actorUid ||
-                  (widget.workspaceId != null &&
-                      campaign.data()?['businessId'] != widget.workspaceId))) {
+              campaign.data()?['businessId'] !=
+                  (widget.workspaceId ?? widget.actorUid)) {
             return RouteRecoveryScreen(
               title: "You don't have access to this campaign.",
               destination: widget.fallbackRoute,

@@ -72,6 +72,25 @@ test('stale draft label with accepted work cannot delete', async () => {
   const c = await seed(); await db.doc(`campaigns/${c}/applications/${worker}`).set({scalerId: worker, status: 'accepted'});
   await assert.rejects(change(c, 'delete'), {code: 'failed-precondition'});
 });
+
+test('nested legacy wallet history blocks deletion even when the parent says unfunded', async () => {
+  const c = await seed();
+  await db.doc(`wallets/${b}/transactions/${c}`).set({campaignId: c, type: 'campaign_reserve', amount: 50});
+  assert.deepEqual((await preview(c)).actions, []);
+  await assert.rejects(change(c, 'delete'), {code: 'failed-precondition'});
+  assert.equal((await saved(c)).status, 'draft');
+});
+
+test('completed own-team archive and restore preserve completed status and work records', async () => {
+  const c = await seed({executionMode: 'own_team', status: 'own_team_completed'});
+  await db.doc('campaignZones/' + c).set({campaignId: c, status: 'completed'});
+  assert.deepEqual((await preview(c)).actions, ['archive']);
+  await change(c, 'archive');
+  assert.deepEqual((await preview(c)).actions, ['restore']);
+  await change(c, 'restore');
+  assert.equal((await saved(c)).status, 'own_team_completed');
+  assert.equal((await db.doc('campaignZones/' + c).get()).data().status, 'completed');
+});
 test('signed-out, cross-workspace, analyst, disabled and Admin callers are denied', async () => {
   const c = await seed(), admin = await user('admin');
   for (const uid of [null, other, observer, admin]) await assert.rejects(preview(c, uid), e => ['permission-denied', 'unauthenticated'].includes(e.code));
@@ -95,7 +114,7 @@ test('unassigned active campaign closes with pending applications preserved and 
 });
 for (const [col, row] of [['campaignZones', {status: 'assigned', assignedScalerId: 'worker'}], ['campaignLocations', {status: 'assigned'}],
   ['assignmentCompensations', {immutable: true}], ['campaignCompletions', {status: 'submitted'}], ['trackingSessions', {status: 'in_progress'}],
-  ['zoneGroupAssignments', {}], ['payouts', {status: 'pending_review'}]]) test(col + ' blocks ordinary close and archive', async () => {
+  ['zoneGroupAssignments', {}], ['zoneScalerParticipations', {status: 'accepted'}], ['payouts', {status: 'pending_review'}]]) test(col + ' blocks ordinary close and archive', async () => {
   const c = await seed({status: 'open'}); await db.doc('campaignZones/empty_' + c).set({campaignId: c, status: 'unassigned'});
   await db.doc(col + '/' + c).set({businessId: b, campaignId: c, ...row});
   assert.deepEqual((await preview(c)).actions, []);

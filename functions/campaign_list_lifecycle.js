@@ -6,9 +6,10 @@ const crypto = require('node:crypto');
 const VERSION = 'CampaignListLifecycleV1';
 const CAP = 250;
 const OPEN = new Set(['open', 'funded', 'published', 'active', 'available', 'own_team_scheduled']);
-const TERMINAL = new Set(['closed', 'deleted', 'completed', 'canceled', 'cancelled', 'canceling', 'archived']);
+const COMPLETED = new Set(['completed', 'own_team_completed']);
+const TERMINAL = new Set(['closed', 'deleted', 'completed', 'own_team_completed', 'canceled', 'cancelled', 'canceling', 'archived']);
 const WORK_COLLECTIONS = ['assignmentCompensations', 'campaignCompletions', 'trackingSessions',
-  'zoneGroupAssignments', 'zoneParticipants', 'materialHandoffs', 'jobRooms', 'campaignSettlements', 'scalerEarnings', 'earnings', 'payouts'];
+  'zoneGroupAssignments', 'zoneParticipants', 'zoneScalerParticipations', 'materialHandoffs', 'jobRooms', 'campaignSettlements', 'scalerEarnings', 'earnings', 'payouts'];
 const FINANCE_COLLECTIONS = ['campaignPayments', 'financialOperations', 'walletTransactions', 'scalerTransfers'];
 function fail(code, message) { const e = new Error(message); e.code = code; throw e; }
 function id(value) {
@@ -48,9 +49,9 @@ function rules(campaign, facts) {
   let reason = '';
   if (campaign.status === 'deleted') reason = 'This draft was deleted. Its audit history is retained.';
   else if (campaign.archived === true) {
-    if (['completed', 'canceled', 'cancelled'].includes(campaign.status)) actions.push('restore');
+    if (COMPLETED.has(campaign.status) || ['canceled', 'cancelled'].includes(campaign.status)) actions.push('restore');
     else reason = 'This historical archive needs review before it can be restored.';
-  } else if (campaign.status === 'completed') actions.push('archive');
+  } else if (COMPLETED.has(campaign.status)) actions.push('archive');
   else if (campaign.status === 'draft') {
     if (money) reason = 'Payment or checkout history needs reconciliation. Open campaign funding or contact support before deleting this draft.';
     else if (work) reason = 'This draft has assigned, accepted or recorded work. Manage that work before removing the campaign.';
@@ -78,6 +79,7 @@ function createService({db, FieldValue, authorize}) {
       locations: db.collection('campaignLocations').where('campaignId', '==', campaignId),
       applications: ref.collection('applications'), assigned: ref.collection('assignedScalers'),
       items: db.collection(`businessOperations/${a.businessId}/items`).where('campaignId', '==', campaignId),
+      legacyWallet: db.collection(`wallets/${a.businessId}/transactions`).where('campaignId', '==', campaignId),
     };
     for (const name of [...WORK_COLLECTIONS, ...FINANCE_COLLECTIONS]) queries[name] = db.collection(name).where('campaignId', '==', campaignId);
     const entries = await Promise.all(Object.entries(queries).map(async ([name, query]) => [name, await rows(tx, query)]));
@@ -89,7 +91,7 @@ function createService({db, FieldValue, authorize}) {
     if (direct.some(s => !s.exists || s.data().campaignId !== campaignId)) fail('failed-precondition', 'Campaign bindings need review before a list action. Nothing changed.');
     const data = name => inventories[name].map(s => s.data());
     const facts = {...Object.fromEntries(['zones', 'locations', 'applications', 'assigned', 'items'].map(k => [k, data(k)])),
-      work: WORK_COLLECTIONS.flatMap(data), finance: FINANCE_COLLECTIONS.flatMap(data)};
+      work: WORK_COLLECTIONS.flatMap(data), finance: [...FINANCE_COLLECTIONS.flatMap(data), ...data('legacyWallet')]};
     const version = digest([snapshot.updateTime.toMillis(), snapshot.updateTime.nanoseconds,
       entries.flatMap(([name, docs]) => docs.map(d => [name, d.id, d.updateTime.toMillis(), d.updateTime.nanoseconds])),
       direct.map(d => [d.ref.path, d.updateTime.toMillis(), d.updateTime.nanoseconds])]);
