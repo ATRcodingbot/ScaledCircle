@@ -20,8 +20,8 @@ before(async () => {
 });
 after(async () => { await Promise.all(localRequire("firebase-admin/app").getApps().map(app => app.delete())); });
 async function seed(id, fields = {}) {
-  const zone = {id, businessId: owner, campaignId: id, serviceArea: geometry, serviceAreaPointCount: 3, mapped: true, analysisStatus: "complete", estimatedHomes: 20, serverEstimatedWalkingMinutes: 12, serverZoneMetricsVersion: "geometry_v1_server", serverZoneGeometryDigest: require("./operational_layer").zoneGeometryDigest(geometry)};
-  const campaign = {businessId: owner, campaignName: "Mode fixture", status: "draft", basePay: 50, serviceArea: geometry, ...fields};
+  const zone = {zoneIntelligence:{version:'ZoneIntelligenceV1',geometryDigest:require('./operational_layer').zoneGeometryDigest(geometry),status:'available',workload:{minutes:30,oneScaler:true}},id, businessId: owner, campaignId: id, serviceArea: geometry, serviceAreaPointCount: 3, mapped: true, analysisStatus: "complete", estimatedHomes: 20, serverEstimatedWalkingMinutes: 12, serverZoneMetricsVersion: "geometry_v1_server", serverZoneGeometryDigest: require("./operational_layer").zoneGeometryDigest(geometry)};
+  const campaign = {businessId: owner, campaignName: "Mode fixture", status: "draft", campaignWorkload:require('./campaign_workload_authority').requirement(5), basePay: 50, serviceArea: geometry, ...fields};
   if (campaign.planningStage === "review") campaign.materialsAreaDigest = authority.planningDigest(campaign, [zone]);
   await db.doc(`campaigns/${id}`).set(campaign);
   await db.doc(`campaignZones/${id}`).set(zone);
@@ -50,5 +50,16 @@ test("new marketplace planning requires reviewed current area before quote, pres
   await seed(id, {executionMode: "marketplace", planningSchemaVersion: 1, planningStage: "review"});
   assert.equal((await call("quoteCampaignFunding", id)).workerCompensationCents, 5000);
   await db.doc(`campaignZones/${id}`).update({serviceArea: geometry.map(point => ({...point, latitude: point.latitude + 0.001}))});
-  await assert.rejects(call("quoteCampaignFunding", id), error => error.details?.reason === "CURRENT_AREA_MATERIAL_REVIEW_REQUIRED");
+  await assert.rejects(call("quoteCampaignFunding", id), error => error.details?.reason === "CAMPAIGN_ZONES_INCOMPLETE");
+});
+
+test('required Zone count and current evidence fail before payment creation; requested hours do not change prices',async()=>{
+ const id='mode_workload_count';await seed(id,{executionMode:'marketplace',campaignWorkload:require('./campaign_workload_authority').requirement(8)});
+ await assert.rejects(call('quoteCampaignFunding',id),e=>e.details?.reason==='CAMPAIGN_ZONES_INCOMPLETE');
+ assert.equal((await db.collection('campaignPayments').where('campaignId','==',id).get()).size,0);
+ await db.doc('campaigns/'+id).update({campaignWorkload:require('./campaign_workload_authority').requirement(5)});
+ assert.equal((await call('quoteCampaignFunding',id)).workerCompensationCents,5000);
+ await db.doc('campaignZones/'+id).update({assignedScalerId:'existing-worker'});
+ await assert.rejects(call('quoteCampaignFunding',id),e=>e.details?.reason==='CAMPAIGN_ZONES_INCOMPLETE');
+ assert.equal((await db.collection('assignmentCompensations').where('campaignId','==',id).get()).size,0);
 });

@@ -7,6 +7,43 @@ const fixture=require('./fixtures/21061-corkran-osm-public.json'),geography=requ
 const app=initializeApp({projectId:'demo-smart-zone-intelligence'},'smart-zone-intelligence'),db=getFirestore(app);
 after(async()=>{await db.terminate();await deleteApp(app);});
 let seq=0;
+test('multipart re-entry and replacing one saved Zone retain the other identity and never requery',async()=>{
+ const s=await setup(),data={...s.data,desiredHours:8};
+ const initial=await s.api.getSmartZonePlan({data});
+ const runRef=db.doc(`propertyRecommendationWorkspaces/${s.businessId}/mappingRuns/${initial.recommendationRunId}`);
+ const run=(await runRef.get()).data(),first=run.searchEvidence.candidates[0];
+ // Explicit synthetic candidate variants exercise identity/transaction behavior only.
+ const candidates=[0,1,2].map(i=>({...first,id:'synthetic_'+i,
+   geometry:first.geometry.map(p=>({...p,longitude:p.longitude+i*.0003})),
+   features:first.features.map(f=>({...f,id:f.id+'_'+i,longitude:f.longitude+i*.0003}))}));
+ await runRef.update({'searchEvidence.candidates':candidates});
+ const plan=await s.api.getSmartZonePlan({data:{...data,recommendationRunId:initial.recommendationRunId}});
+ assert.equal(plan.zones.length,2);
+ await s.api.applySmartZonePlan({data:{...data,recommendationRunId:initial.recommendationRunId,planId:plan.planId}});
+ const savedCampaign=(await db.doc('campaigns/'+s.campaignId).get()).data();
+ assert.deepEqual(savedCampaign.serviceArea,[]);assert.equal(savedCampaign.geometryParts.length,2);
+ const before=await db.collection('campaignZones').where('campaignId','==',s.campaignId).get();
+ const kept=before.docs.find(d=>d.data().zoneNumber===1),changed=before.docs.find(d=>d.data().zoneNumber===2);
+ const calls=s.api.calls.provider;
+ const reopen={campaignId:s.campaignId,desiredHours:8,resumeSavedPlan:true};
+ const reopened=await s.api.getSmartZonePlan({data:reopen});
+ assert.deepEqual(reopened.selectionIds,plan.selectionIds);
+ const replace={...reopen,selectionIds:plan.selectionIds,replaceZoneIndex:1};
+ const next=await s.api.getSmartZonePlan({data:replace});
+ const apply={...replace,planId:next.planId};
+ await s.api.applySmartZonePlan({data:apply});
+ assert.deepEqual((await kept.ref.get()).data(),kept.data());
+ assert.notDeepEqual((await changed.ref.get()).data().serviceArea,changed.data().serviceArea);
+ assert.equal((await changed.ref.get()).data().zoneNumber,2);
+ assert.equal((await db.collection('campaignZones').where('campaignId','==',s.campaignId).get()).size,2);
+ assert.equal((await s.api.applySmartZonePlan({data:apply})).replay,true);
+ assert.equal(s.api.calls.provider,calls);
+ const savedBefore=(await db.doc('campaigns/'+s.campaignId).get()).data();
+ await db.doc('campaigns/'+s.campaignId).update({campaignWorkload:require('./campaign_workload_authority').requirement(10),workloadVersion:savedBefore.workloadVersion+1});
+ await assert.rejects(s.api.applySmartZonePlan({data:apply}),{code:'aborted'});
+ assert.equal((await db.doc('campaigns/'+s.campaignId).get()).data().campaignWorkload.requestedHours,10);
+ assert.equal((await db.collection('assignmentCompensations').where('campaignId','==',s.campaignId).get()).size,0);
+});
 async function setup({snapshot=true,actorUid=null}={}){
   const businessId='intelligence_'+Date.now()+'_'+(++seq),campaignId=businessId+'_campaign';
   const campaign={businessId,status:'draft',executionMode:'own_team',campaignType:'flyer_distribution',serviceArea:[],basePay:0,bonus:0};

@@ -59,4 +59,26 @@ async function preview({db,context,data,fetchSnapshot,endpoint,now=Date.now}) {
   try{snapshot=await fetchSnapshot({selectedBoundary:geometry,endpoint});}catch(_){/* safe unavailable projection */}
   return projection.analyze({geometry,snapshot,workType,propertyContext});
 }
-module.exports={preview};
+async function confirm(options) {
+  const {db,FieldValue,context,data}=options;
+  const campaignId=id(data.campaignId),zoneId=id(data.zoneId);
+  // Never persist a caller's substitute geometry or claimed observations.
+  const result=await preview({...options,data:{campaignId,zoneId}});
+  return db.runTransaction(async tx=>{
+    if(options.reauthorize)await options.reauthorize(tx);
+    const [cs,zs,payments,contracts]=await Promise.all([
+      tx.get(db.doc('campaigns/'+campaignId)),tx.get(db.doc('campaignZones/'+zoneId)),
+      tx.get(db.collection('campaignPayments').where('campaignId','==',campaignId).limit(1)),
+      tx.get(db.collection('assignmentCompensations').where('campaignId','==',campaignId).limit(1))]);
+    const c=cs.data(),z=zs.data();
+    if(!c||!z||c.businessId!==context.uid||z.businessId!==context.uid||z.campaignId!==campaignId)
+      fail('permission-denied','Choose your own campaign Zone.');
+    if(c.status!=='draft'||z.assignedScalerId||z.mapLocked||!['','unassigned'].includes(z.status||'')||
+        !payments.empty||!contracts.empty)fail('failed-precondition','This Zone is no longer an unfunded planning area.');
+    if(operations.zoneGeometryDigest(z.serviceArea)!==result.geometryDigest)
+      fail('aborted','The boundary changed. Analyze it again.');
+    tx.update(zs.ref,{zoneIntelligence:result,zoneIntelligenceUpdatedAt:FieldValue.serverTimestamp()});
+    return result;
+  });
+}
+module.exports={preview,confirm};

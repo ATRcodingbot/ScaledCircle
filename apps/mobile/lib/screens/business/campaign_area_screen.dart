@@ -955,6 +955,16 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
       });
       if (!mounted) return false;
       await reviewProductionRouteAnalysis(context, result.data);
+      final saved = await widget.campaignReference.get();
+      final campaignId = (saved.data() as Map?)?['campaignId'];
+      if (campaignId is String) {
+        await FirebaseFunctions.instanceFor(
+          region: 'us-east1',
+        ).httpsCallable('confirmCampaignZoneIntelligence').call({
+          'campaignId': campaignId,
+          'zoneId': widget.campaignReference.id,
+        });
+      }
 
       return true;
     } on FirebaseFunctionsException catch (e) {

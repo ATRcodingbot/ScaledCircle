@@ -165,7 +165,7 @@ test('requested workload selects nearby mapped sections without changing PI scor
  const section=(id,x,fit)=>({id,geometry:planning.rectangleAround(fixture.p(x,0),100,100),ranking:{fit}});
  const sections=[section('a',0,95),section('b',1000,85),section('c',9000,70)];
  const evidence={propertyCandidates:sections,candidates:sections.map(s=>({...s,propertyAreaId:s.id,workload:{estimatedMinutes:140}}))};
- const small=search.propertyOptions(evidence,90),large=search.propertyOptions(evidence,300);
+ const small=search.propertyOptions(evidence,90),large=search.propertyOptions(evidence,480);
  assert.deepEqual(small[0].selected.map(s=>s.id),['a']);assert.deepEqual(large[0].selected.map(s=>s.id),['a','b']);
  assert.deepEqual(sections.map(s=>s.ranking.fit),[95,85,70]);assert.equal(large[1].primary.id,'c');
 });
@@ -176,7 +176,7 @@ test('selecting one nearby territory does not discard distant unused territories
  const area=(id,section,x)=>({id,propertyAreaId:section.id,ranking:section.ranking,
   geometry:planning.rectangleAround(fixture.p(x,0),100,100),workload:{estimatedMinutes:30}});
  const areas=[area('a1',a,0),area('b1',b,2000),area('b2',b,4500)];
- const options=search.propertyOptions({propertyCandidates:[a,b],candidates:areas},300);
+ const options=search.propertyOptions({propertyCandidates:[a,b],candidates:areas},480);
  assert.deepEqual(options.map(o=>o.selected.map(c=>c.id)),[['a1','b1'],['b2']]);
  assert.equal(options.flatMap(o=>o.selected).reduce((n,c)=>n+c.workload.estimatedMinutes,0),90);
  assert.notDeepEqual(options[0].selected[0].geometry,options[0].selected[1].geometry);

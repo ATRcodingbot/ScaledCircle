@@ -41,6 +41,10 @@ function planningDigest(campaign, zones = []) {
 }
 
 function assertPlanningReview(campaign, zones, ErrorType) {
+  if (executionMode(campaign) === 'marketplace' && (campaign.status === 'draft' || campaign.campaignWorkload) &&
+      campaign.configurationMode !== 'exact_locations') {
+    require('./campaign_workload_authority').assertComplete(campaign, zones, ErrorType);
+  }
   if (!Object.hasOwn(campaign, "planningSchemaVersion")) return;
   if (campaign.planningSchemaVersion !== 1 || campaign.planningStage !== "review" ||
       typeof campaign.materialsAreaDigest !== "string" ||
@@ -78,7 +82,8 @@ async function assertRequestMarketplace({db, request, resource, ErrorType}) {
   const campaign = binding ? (await db.collection("campaigns").doc(campaignId).get()).data() : record;
   assertMarketplace(campaign, ErrorType);
   if (["quoteCampaignFunding", "createCampaignFundingCheckoutSession", "publishFundedCampaign", "fundCampaign"].includes(resource) &&
-      Object.hasOwn(campaign, "planningSchemaVersion") && campaign.status !== "open") {
+      (Object.hasOwn(campaign, "planningSchemaVersion") || campaign.campaignWorkload ||
+        (resource !== 'quoteCampaignFunding' && campaign.status === 'draft')) && campaign.status !== "open") {
     const zones = await db.collection("campaignZones").where("campaignId", "==", campaignId).get();
     assertPlanningReview(campaign, zones.docs.map(doc => ({...doc.data(), id: doc.id})), ErrorType);
   }

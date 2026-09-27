@@ -10,7 +10,7 @@ bool zoneEvidenceMatches(Map? data, dynamic geometry) =>
     data?['geometryDigest'] != null &&
     data?['geometryDigest'] == CampaignAreaGeometry.savedDigest(geometry);
 
-String _fieldWorkload(num minutes) {
+String fieldWorkload(num minutes) {
   final total = minutes.round();
   return total >= 60 ? '${total ~/ 60} hr ${total % 60} min' : '$total min';
 }
@@ -20,9 +20,13 @@ class ZoneIntelligenceSummary extends StatelessWidget {
     super.key,
     required this.data,
     required this.geometry,
+    this.comparisonReason,
   });
   final Map<String, dynamic> data;
   final dynamic geometry;
+
+  /// Only an explicit server comparison may describe an alternate as weaker.
+  final String? comparisonReason;
 
   @override
   Widget build(BuildContext context) {
@@ -48,48 +52,59 @@ class ZoneIntelligenceSummary extends StatelessWidget {
                 caseSensitive: false,
               ).hasMatch('${s['label']}'),
         );
+    final theme = Theme.of(context);
+    final categories = (mix?['categories'] as List? ?? [])
+        .whereType<Map>()
+        .toList();
+    final era = signals
+        .where(
+          (s) =>
+              RegExp('era|age', caseSensitive: false).hasMatch('${s['label']}'),
+        )
+        .toList();
+    final usable = count is num && count > 0 && meters != null && meters > 0;
+    final serviceFit = signals.any(
+      (s) =>
+          s['label'] == 'Service-area fit' &&
+          s['value'] == 'Inside your saved service area',
+    );
+    final reason = !usable
+        ? 'More mapping evidence is needed before this area can be recommended.'
+        : comparisonReason == lowerFitReason
+        ? 'This area is a weaker match than the top recommendation, but still has usable ${business ? 'business' : 'residential'} and street evidence.'
+        : comparisonReason == equalFitReason
+        ? 'This area has a similar match to the top recommendation, with usable ${business ? 'business' : 'residential'} and street evidence.'
+        : 'Mapped ${business ? 'businesses' : 'homes'} and local streets support reviewing this area for your campaign.';
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          data['mode'] == 'recommended'
-              ? 'Why ScaledCircle recommends this area'
-              : 'What we found in this area',
-          style: Theme.of(context).textTheme.titleMedium,
-        ),
-        const SizedBox(height: 8),
-        Text(
           count is num
               ? '$count mapped ${business ? 'business' : 'residential'} targets'
               : 'Mapped target count unavailable',
-          style: Theme.of(context).textTheme.titleMedium,
+          style: theme.textTheme.titleLarge,
         ),
         if (mix != null) ...[
-          for (final category
-              in (mix['categories'] as List? ?? []).whereType<Map>())
-            Text('${category['label']}: ${category['count']}'),
+          for (final category in categories)
+            Text(
+              categories.length == 1 && category['count'] == count
+                  ? propertyTypeLabel(category['label'].toString())
+                  : '${category['count']} ${propertyTypeLabel(category['label'].toString()).toLowerCase()}',
+              style: theme.textTheme.bodyLarge,
+            ),
           if ((mix['unknownCount'] as num? ?? 0) > 0)
             Text(
-              'Detailed mapped property classification is available for ${mix['classifiedCount']} of $count. ${mix['unknownCount']} remain unspecified.',
+              'Partial property detail · ${mix['unknownCount']} unspecified',
             ),
         ] else
-          const Text('Detailed property characteristics unavailable.'),
-        for (final signal in signals.where(
-          (s) =>
-              RegExp('era|age', caseSensitive: false).hasMatch('${s['label']}'),
-        ))
-          Text(
-            'Nearby ${signal['label'].toString().toLowerCase()}: ${signal['value']} (regional property context)',
-          ),
-        Text(
-          meters == null
-              ? 'Supporting street network unavailable'
-              : 'Supporting street network: ~${meters.round()} m / ${(meters / 1609.344).toStringAsFixed(2)} mi',
-        ),
+          const Text('Property type unavailable'),
+        const SizedBox(height: 16),
+        const Text('Estimated field time'),
         Text(
           workload?['minutes'] is num
-              ? 'Estimated field workload: ~${_fieldWorkload(workload!['minutes'] as num)}'
-              : 'Estimated field workload: not established',
+              ? '~${fieldWorkload(workload!['minutes'] as num)}'
+              : 'Not established',
+          style: theme.textTheme.headlineMedium,
         ),
         if (workload != null)
           Text(
@@ -97,13 +112,41 @@ class ZoneIntelligenceSummary extends StatelessWidget {
                 ? 'One-Scaler planning estimate'
                 : 'Exceeds the six-hour one-Scaler limit. Review smaller work areas.',
           ),
-        if (workload?['supportedTargetCount'] is num)
+        const SizedBox(height: 16),
+        Text(
+          meters == null
+              ? 'Supporting streets unavailable'
+              : '${meters.round()} m supporting streets',
+        ),
+        const SizedBox(height: 8),
+        if (!business) ...[
           Text(
-            'Workload uses ${workload!['supportedTargetCount']} street-supported mapped targets.',
+            'Nearby housing: ${era.isEmpty ? 'Unavailable' : 'Predominantly ${era.first['value']}'}',
           ),
-        if (meters != null) const Text('Street evidence available'),
-        const Text('Execution route not yet verified'),
-        for (final reason in data['reasons'] as List? ?? []) Text('• $reason'),
+          Text('Regional property context', style: theme.textTheme.bodySmall),
+        ],
+        if (regional?['partial'] == true)
+          const Text('Partial property-source coverage'),
+        const SizedBox(height: 16),
+        Text(
+          data['mode'] == 'recommended'
+              ? 'Why ScaledCircle recommends this area'
+              : 'What we found in this area',
+          style: theme.textTheme.titleSmall,
+        ),
+        Text(
+          data['mode'] == 'recommended'
+              ? reason
+              : usable
+              ? 'Mapped ${business ? 'business' : 'residential'} features and local street evidence are available in your boundary.'
+              : 'Mapping evidence is incomplete for this boundary.',
+        ),
+        if (serviceFit) const Text('Inside your saved service area.'),
+        const SizedBox(height: 12),
+        Text(
+          'Execution route not yet verified',
+          style: theme.textTheme.bodySmall,
+        ),
         if (data['status'] == 'unavailable')
           for (final reason in data['limitations'] as List? ?? [])
             Text(reason.toString()),
@@ -117,6 +160,17 @@ class ZoneIntelligenceSummary extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  for (final reason in data['reasons'] as List? ?? [])
+                    Text('• $reason'),
+                  if (comparisonReason != null) Text(comparisonReason!),
+                  if (mix != null)
+                    Text(
+                      'Detailed mapped classification: ${mix['classifiedCount']} of $count; ${mix['unknownCount']} unspecified.',
+                    ),
+                  if (workload?['supportedTargetCount'] is num)
+                    Text(
+                      'Workload uses ${workload!['supportedTargetCount']} street-supported mapped targets.',
+                    ),
                   const Text(
                     'Mapped features are not verified households, entrances, delivery stops or a material quantity.',
                   ),
@@ -163,6 +217,19 @@ class ZoneIntelligenceSummary extends StatelessWidget {
     );
   }
 }
+
+const lowerFitReason =
+    'This different eligible section has a lower Property Intelligence fit on the disclosed signals.';
+const equalFitReason =
+    'This is a different eligible section with the same supported Property Intelligence fit; the available signals do not distinguish a stronger fit.';
+
+String propertyTypeLabel(String label) => switch (label) {
+  'Detached' => 'Detached homes',
+  'Attached/semi-detached' => 'Attached / semi-detached homes',
+  'Multifamily/shared residential' => 'Multifamily / shared residential',
+  'House (attachment unknown)' => 'Houses (type unspecified)',
+  _ => label,
+};
 
 typedef ZoneEvidenceLoader =
     Future<Map<String, dynamic>> Function(Map<String, dynamic> input);

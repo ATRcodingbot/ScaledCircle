@@ -5,7 +5,7 @@ const CONTEXT=Symbol('authoritativeBusinessWorkspace');
 const ACTIONS=Object.freeze({
  reviewPausedWorkV1:'payments',
  getPostcardWorkspaceV1:'campaigns',createPostcardCampaignV1:'campaigns',updatePostcardMailingV1:'campaigns',requestPostcardQuoteV1:'authorizeCampaigns',createPostcardCheckoutV1:'payments',reconcilePostcardPaymentV1:'payments',requestPostcardCancellationV1:'payments',downloadPostcardArtifactV1:'campaigns',
- getCampaignZoneIntelligence:'campaigns',getSmartZonePlan:'campaigns',applySmartZonePlan:'campaigns',analyzeCampaignZone:'campaigns',deleteDraftCampaign:'campaigns',
+ confirmCampaignZoneIntelligence:'campaigns',getCampaignZoneIntelligence:'campaigns',getSmartZonePlan:'campaigns',applySmartZonePlan:'campaigns',analyzeCampaignZone:'campaigns',deleteDraftCampaign:'campaigns',
  createCampaignLocation:'campaigns',deleteCampaignLocation:'campaigns',updateCampaignMaterialLogistics:'campaigns',proposeMaterialLogisticsChange:'campaigns',configureJobCoordination:'campaigns',
  publishFundedCampaign:'authorizeCampaigns',assignScalerToZone:'authorizeCampaigns',assignScalerToCampaignLocations:'authorizeCampaigns',configureZoneGroupAssignment:'authorizeCampaigns',rejectCampaignApplication:'authorizeCampaigns',requestZoneRedo:'authorizeCampaigns',dropZoneScaler:'authorizeCampaigns',
  fundCampaign:'payments',quoteCampaignFunding:'payments',createCampaignFundingCheckoutSession:'payments',createCreditCheckoutSession:'payments',finalizeZoneReview:'payments',approveZonePayout:'payments',reviewCampaignCompletion:'payments',settleZoneGroupAssignment:'payments',requestCampaignCancellationRefund:'payments',

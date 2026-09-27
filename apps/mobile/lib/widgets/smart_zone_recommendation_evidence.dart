@@ -32,14 +32,37 @@ class SmartZoneRecommendationEvidence extends StatelessWidget {
         zones[selectedZoneIndex]['zoneIntelligence'] is Map) {
       final selected = zones[selectedZoneIndex];
       final recommendation = plan['recommendationContext'] as Map? ?? {};
+      final comparisons = (recommendation['why'] as List? ?? []).where(
+        (v) => v == lowerFitReason || v == equalFitReason,
+      );
+      final sameSectionFit =
+          selected['intelligence'] is Map &&
+          recommendation['propertyRecommendation'] is Map &&
+          selected['intelligence']['fit'] ==
+              recommendation['propertyRecommendation']['fit'];
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (recommendation['goal'] != null)
-            Text('Looking for: ${recommendation['goal']}'),
           Text(
-            'Selected recommendation: ${zones.length} separate area${zones.length == 1 ? '' : 's'}',
+            'Zone ${selectedZoneIndex + 1}',
+            style: Theme.of(context).textTheme.titleLarge,
           ),
+          ZoneIntelligenceSummary(
+            data: Map<String, dynamic>.from(
+              selected['zoneIntelligence'] as Map,
+            ),
+            geometry: selected['geometry'],
+            comparisonReason: sameSectionFit && comparisons.isNotEmpty
+                ? comparisons.first.toString()
+                : null,
+          ),
+          const SizedBox(height: 12),
+          if (recommendation['goal'] != null)
+            Text('Campaign goal: ${recommendation['goal']}'),
+          if (plan['campaignWorkload'] is Map)
+            Text(
+              'Required Zones: ${plan['campaignWorkload']['requiredZoneCount']} · Recommended: ${zones.length}',
+            ),
           if (recommendation['supportedMinutes'] is num)
             Text(
               'Combined advisory workload for these areas: ${advisoryWorkload(recommendation['supportedMinutes'] as num)}',
@@ -55,16 +78,6 @@ class SmartZoneRecommendationEvidence extends StatelessWidget {
             'Limited/Beta — review each boundary and local access before use.',
           ),
           const SizedBox(height: 12),
-          Text(
-            'Area ${selectedZoneIndex + 1}',
-            style: Theme.of(context).textTheme.titleLarge,
-          ),
-          ZoneIntelligenceSummary(
-            data: Map<String, dynamic>.from(
-              selected['zoneIntelligence'] as Map,
-            ),
-            geometry: selected['geometry'],
-          ),
         ],
       );
     }

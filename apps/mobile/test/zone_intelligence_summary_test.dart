@@ -90,14 +90,11 @@ void main() {
       );
       expect(find.text('What we found in this area'), findsOneWidget);
       expect(find.text('11 mapped residential targets'), findsOneWidget);
-      expect(find.text('Detached: 7'), findsOneWidget);
-      expect(find.textContaining('7 of 11'), findsOneWidget);
-      expect(
-        find.textContaining('(regional property context)'),
-        findsOneWidget,
-      );
-      expect(find.textContaining('~620 m / 0.39 mi'), findsOneWidget);
-      expect(find.text('Estimated field workload: ~32 min'), findsOneWidget);
+      expect(find.text('7 detached homes'), findsOneWidget);
+      expect(find.textContaining('4 unspecified'), findsOneWidget);
+      expect(find.textContaining('Regional property context'), findsOneWidget);
+      expect(find.textContaining('620 m supporting streets'), findsOneWidget);
+      expect(find.text('~32 min'), findsOneWidget);
       expect(find.text('One-Scaler planning estimate'), findsOneWidget);
       expect(find.text('Execution route not yet verified'), findsOneWidget);
       expect(find.text('View property evidence'), findsOneWidget);
@@ -114,15 +111,9 @@ void main() {
         page(ZoneIntelligenceSummary(data: data, geometry: area)),
       );
       expect(find.text('11 mapped business targets'), findsOneWidget);
-      expect(
-        find.text('Detailed property characteristics unavailable.'),
-        findsOneWidget,
-      );
+      expect(find.text('Property type unavailable'), findsOneWidget);
       expect(find.textContaining('1940'), findsNothing);
-      expect(
-        find.text('Estimated field workload: not established'),
-        findsOneWidget,
-      );
+      expect(find.text('Not established'), findsOneWidget);
     },
   );
   testWidgets(
@@ -173,7 +164,7 @@ void main() {
       );
       expect(find.text('11 mapped residential targets'), findsNothing);
       expect(find.text('18 mapped residential targets'), findsOneWidget);
-      expect(find.text('Area 2'), findsOneWidget);
+      expect(find.text('Zone 2'), findsOneWidget);
     },
   );
   testWidgets('stale geometry does not display old observations', (t) async {

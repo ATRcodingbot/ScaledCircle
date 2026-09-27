@@ -44,6 +44,8 @@ void main() {
       (tester) async {
         var calls = 0;
         var manual = 0;
+        double? savedWorkload;
+        var allowSave = true;
         await fixtures.surface(
           tester,
           Scaffold(
@@ -54,6 +56,10 @@ void main() {
                 savedAreaName: '',
                 initialSelection: fixtures.glenBurnie,
                 recommendationEnabled: false,
+                onSaveWorkload: (hours) async {
+                  savedWorkload = hours;
+                  return allowSave;
+                },
                 onPlan: (_, _, _) async {
                   calls++;
                 },
@@ -66,7 +72,7 @@ void main() {
           ),
         );
         expect(find.text('Recommend an Area'), findsNothing);
-        expect(find.text('Requested field workload (hours)'), findsNothing);
+        expect(find.text('Requested field workload (hours)'), findsOneWidget);
         expect(
           find.text(
             'Intelligent area recommendations are included with Scale.',
@@ -79,7 +85,29 @@ void main() {
               .enabled,
           true,
         );
+        await tester.enterText(
+          find.widgetWithText(
+            TextFormField,
+            'Requested field workload (hours)',
+          ),
+          '0.49',
+        );
         await fixtures.choose(tester, 'Draw My Area');
+        expect(manual, 0);
+        expect(savedWorkload, isNull);
+        await tester.enterText(
+          find.widgetWithText(
+            TextFormField,
+            'Requested field workload (hours)',
+          ),
+          '9',
+        );
+        allowSave = false;
+        await fixtures.choose(tester, 'Draw My Area');
+        expect(manual, 0);
+        allowSave = true;
+        await fixtures.choose(tester, 'Draw My Area');
+        expect(savedWorkload, 9);
         expect(manual, 1);
         expect(calls, 0);
         await tester.pumpWidget(const SizedBox());

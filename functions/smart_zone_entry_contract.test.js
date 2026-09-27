@@ -58,7 +58,7 @@ test('ZIP and place results without a boundary cannot become an address square',
 
 test('workload request preserves the maintained half-hour to 192-hour range and useful errors',()=>{
  for(const n of [.5,1,5,192])assert.equal(contract.workloadHours(n),n);
- for(const n of [0,.49,193,NaN,Infinity])assert.throws(()=>contract.workloadHours(n),/campaign_workload_invalid/);
+ for(const n of [0,.49,193,NaN,Infinity])assert.throws(()=>contract.workloadHours(n),/Minimum campaign workload|cannot exceed/);
  assert.match(contract.planningFailure(Error('campaign_workload_invalid')).message,/30 minutes/);
  assert.match(contract.planningFailure(Error('selected_area_cannot_fit_workload_boundary')).message,/saved area is unchanged/);
 });

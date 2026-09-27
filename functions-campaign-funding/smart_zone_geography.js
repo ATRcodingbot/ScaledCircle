@@ -1,0 +1,355 @@
+"use strict";
+
+const smartZonePlanning = require("./smart_zone_planning");
+const crypto = require('node:crypto');
+
+const MAX_QUERY_AREA_SQUARE_METERS = smartZonePlanning.MAX_GEOGRAPHIC_QUERY_SQUARE_METERS;
+const QUERY_TIMEOUT_MILLISECONDS = 12000;
+
+// Optional observation only: no raw URL, query, provider payload, feature IDs or
+// exception text escapes through this callback. An observer cannot change the
+// snapshot|null result or turn a provider failure into trusted geography.
+async function fetchSnapshot({selectedBoundary, endpoint, fetchImpl = fetch, onDiagnostic}) {
+  const started = Date.now();
+  const diagnostic = {schemaVersion: 1, startedAt: new Date(started).toISOString(),
+    vertexCount: Array.isArray(selectedBoundary) ? selectedBoundary.length : 0,
+    areaSquareMeters: null, bounds: null, queryDigest: null, httpStatus: null, contentType: null,
+    rawElementCount: null, rawElementTypes: null, classifiedTargetCounts: null,
+    targetFeatureCount: null, routeWayCount: null, roadCountsByClass: null,
+    landFeatureCount: null, landCountsByKind: null,
+    exclusionPolygonCount: null, barrierWayCount: null, unresolvedLandFeatureCount: null,
+    sourceDataTimestamp: null, fetchedAt: null};
+  const finish = (status, stage, reasonCode, snapshot = null) => {
+    const record = {...diagnostic, status, stage, reasonCode,
+      elapsedMs: Math.max(0, Date.now() - started), finishedAt: new Date().toISOString()};
+    try {
+      if (typeof onDiagnostic === 'function') {
+        const observed = onDiagnostic(Object.freeze(record));
+        // Logging is best effort, including an accidentally async observer.
+        if (observed && typeof observed.catch === 'function') observed.catch(() => {});
+      }
+    } catch (_) { /* Diagnostics must never alter planning authority. */ }
+    return snapshot;
+  };
+  const validation = smartZonePlanning.validateGeometry(selectedBoundary);
+  if (!validation.valid) return finish('rejected', 'input', 'invalid_geometry');
+  diagnostic.areaSquareMeters = Math.round(validation.areaSquareMeters * 100) / 100;
+  const latitudes = selectedBoundary.map(p => Number(p.latitude ?? p.lat));
+  const longitudes = selectedBoundary.map(p => Number(p.longitude ?? p.lon));
+  diagnostic.bounds = {south: Math.min(...latitudes), north: Math.max(...latitudes),
+    west: Math.min(...longitudes), east: Math.max(...longitudes)};
+  if (validation.areaSquareMeters > MAX_QUERY_AREA_SQUARE_METERS) {
+    return finish('rejected', 'input', 'area_limit_exceeded');
+  }
+  const polygon = selectedBoundary.map((item) =>
+    `${Number(item.latitude).toFixed(7)} ${Number(item.longitude).toFixed(7)}`).join(" ");
+  const query = `[out:json][timeout:15];(
+    nwr["addr:housenumber"](poly:"${polygon}");
+    nwr["building"~"^(apartments|bungalow|detached|house|residential|semidetached_house|terrace)$"](poly:"${polygon}");
+    nwr["shop"](poly:"${polygon}");
+    nwr["office"](poly:"${polygon}");
+    nwr["building"~"^(commercial|retail|school|college|university|hospital|civic|government|industrial|warehouse)$"](poly:"${polygon}");
+    nwr["amenity"~"^(school|kindergarten|college|university|hospital|prison|community_centre|theatre|place_of_worship|grave_yard|townhall|courthouse|police|fire_station|parking)$"](poly:"${polygon}");
+    nwr["landuse"~"^(education|institutional|industrial|cemetery|commercial|retail)$"](poly:"${polygon}");
+    nwr["access"~"^(private|no|permit)$"](poly:"${polygon}");
+    way["highway"~"^(residential|living_street|service|unclassified|tertiary|pedestrian)$"](poly:"${polygon}");
+    way["highway"~"^(motorway|motorway_link|trunk|trunk_link)$"](poly:"${polygon}");
+    way["railway"~"^(rail|light_rail)$"](poly:"${polygon}");
+    nwr["natural"="water"](poly:"${polygon}");
+    nwr["waterway"="riverbank"](poly:"${polygon}");
+    nwr["leisure"~"^(park|nature_reserve|stadium|sports_centre)$"](poly:"${polygon}");
+    relation["boundary"="place"]["place"~"^(neighbourhood|neighborhood|quarter|suburb)$"](poly:"${polygon}");
+  );out meta center geom;`;
+  diagnostic.queryDigest = crypto.createHash('sha256').update(query).digest('hex');
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), QUERY_TIMEOUT_MILLISECONDS);
+  let stage = 'request';
+  try {
+    const response = await fetchImpl(endpoint, {method: "POST",
+      headers: {"Content-Type": "application/x-www-form-urlencoded",
+        "User-Agent": "ScaledCircle-SmartZone/1.0 (support@scaledcircle.com)"},
+      body: new URLSearchParams({data: query}).toString(), signal: controller.signal});
+    stage = 'response';
+    diagnostic.httpStatus = Number.isInteger(response.status) && response.status >= 100 && response.status <= 599 ? response.status : null;
+    const mediaType = String(response.headers?.get?.('content-type') || '').split(';')[0].trim().toLowerCase();
+    diagnostic.contentType = !mediaType ? null : /^[a-z0-9.+-]{1,40}\/[a-z0-9.+-]{1,40}$/.test(mediaType) ? mediaType : 'other';
+    if (!response.ok) return finish('unavailable', stage, 'http_error');
+    stage = 'parse';
+    const payload = await response.json();
+    if (Array.isArray(payload?.elements)) diagnostic.rawElementCount = payload.elements.length;
+    const sourceTimestamp = payload?.osm3s?.timestamp_osm_base;
+    if (typeof sourceTimestamp === 'string' && /^\d{4}-\d{2}-\d{2}T/.test(sourceTimestamp) && Number.isFinite(Date.parse(sourceTimestamp))) {
+      diagnostic.sourceDataTimestamp = new Date(sourceTimestamp).toISOString();
+    }
+    // Overpass can return HTTP 200 with partial elements and a timeout/error.
+    // Partial target data without all exclusion branches cannot support a plan.
+    if (payload?.remark) return finish('unavailable', stage, 'provider_partial_response');
+    if (!Array.isArray(payload?.elements)) return finish('unavailable', stage, 'invalid_payload');
+    if (payload.elements.length > 20000) return finish('unavailable', stage, 'element_limit_exceeded');
+    diagnostic.rawElementTypes = {node: 0, way: 0, relation: 0, other: 0};
+    for (const element of payload.elements) {
+      const kind = ['node', 'way', 'relation'].includes(element?.type) ? element.type : 'other';
+      diagnostic.rawElementTypes[kind]++;
+    }
+    stage = 'classify';
+    const snapshot = snapshotFromElements(selectedBoundary, payload.elements, {
+      dataTimestamp: payload.osm3s?.timestamp_osm_base || null,
+      fetchedAt: new Date().toISOString()});
+    diagnostic.classifiedTargetCounts = {residential: 0, business: 0, event: 0, unclassified_address: 0};
+    for (const feature of snapshot.targetFeatures) diagnostic.classifiedTargetCounts[feature.kind]++;
+    Object.assign(diagnostic, {targetFeatureCount: snapshot.targetFeatures.length,
+      routeWayCount: snapshot.routeWays.length, landFeatureCount: snapshot.landFeatures.length,
+      exclusionPolygonCount: snapshot.exclusionPolygons.length, barrierWayCount: snapshot.barrierWays.length,
+      unresolvedLandFeatureCount: snapshot.unresolvedLandFeatures.length, fetchedAt: snapshot.fetchedAt});
+    diagnostic.roadCountsByClass = {};
+    for (const way of snapshot.routeWays) {
+      const kind = way.highway || 'unclassified';
+      diagnostic.roadCountsByClass[kind] = (diagnostic.roadCountsByClass[kind] || 0) + 1;
+    }
+    diagnostic.landCountsByKind = {};
+    for (const feature of snapshot.landFeatures) {
+      diagnostic.landCountsByKind[feature.kind] = (diagnostic.landCountsByKind[feature.kind] || 0) + 1;
+    }
+    return finish('success', 'complete', payload.elements.length ? 'snapshot_ready' : 'empty_response', snapshot);
+  } catch (error) {
+    const reason = controller.signal.aborted || error?.name === 'AbortError' ? 'timeout' :
+      stage === 'parse' ? 'invalid_json' : stage === 'classify' ? 'classification_error' : 'network_error';
+    return finish('unavailable', stage, reason);
+  } finally { clearTimeout(timeout); }
+}
+
+function simpleRing(polygon) {
+  const ring = polygon.slice(0, -1);
+  if (ring.length < 3 || ring.length > 1000 || new Set(ring.map(p => `${p.latitude},${p.longitude}`)).size !== ring.length) return false;
+  const cross = (a, b, c) => (b.longitude - a.longitude) * (c.latitude - a.latitude) -
+    (b.latitude - a.latitude) * (c.longitude - a.longitude);
+  const on = (a, b, p) => Math.abs(cross(a, b, p)) < 1e-14 &&
+    p.latitude >= Math.min(a.latitude, b.latitude) && p.latitude <= Math.max(a.latitude, b.latitude) &&
+    p.longitude >= Math.min(a.longitude, b.longitude) && p.longitude <= Math.max(a.longitude, b.longitude);
+  for (let i = 0; i < ring.length; i++) for (let j = i + 1; j < ring.length; j++) {
+    if (j === i + 1 || (i === 0 && j === ring.length - 1)) continue;
+    const a = ring[i], b = ring[(i + 1) % ring.length], c = ring[j], d = ring[(j + 1) % ring.length];
+    if ((cross(a, b, c) * cross(a, b, d) < 0 && cross(c, d, a) * cross(c, d, b) < 0) ||
+        on(a, b, c) || on(a, b, d) || on(c, d, a) || on(c, d, b)) return false;
+  }
+  return true;
+}
+function validSourceFootprint(polygon) {
+  // A mapped house can be smaller than the minimum useful campaign Zone.
+  // Do not reuse the economic/Zone geometry minimum for source observations.
+  return polygon.every(p => Number.isFinite(p.latitude) && Number.isFinite(p.longitude) &&
+    Math.abs(p.latitude) <= 85 && Math.abs(p.longitude) <= 180) && simpleRing(polygon) &&
+    smartZonePlanning.polygonAreaSquareMeters(polygon) >= 1;
+}
+function elementFootprints(element) {
+  return require('./smart_zone_osm_geometry').assemble(element, {
+    valid: validSourceFootprint, contains: smartZonePlanning.pointInsidePolygon});
+}
+function elementPolygons(element) {
+  const parsed = elementFootprints(element);
+  return Object.assign(parsed.footprints.map(f => f.polygon), {incomplete: parsed.incomplete});
+}
+
+// These are conservative planning avoidance distances, NOT invented OSM
+// footprints or verified campus extents. They remain explicit in diagnostics.
+const UNCERTAINTY_POLICY = 'SmartZoneLocalUncertaintyV1';
+const POINT_GUARD_METERS = 500, PARKING_GUARD_METERS = 150, ACCESS_GUARD_METERS = 30;
+function guardAround(points, meters) {
+  if (!points.length || points.some(p => !Number.isFinite(p.latitude) || !Number.isFinite(p.longitude) || Math.abs(p.latitude)>85 || Math.abs(p.longitude)>180)) return null;
+  const south = Math.min(...points.map(p => p.latitude)), north = Math.max(...points.map(p => p.latitude));
+  const west = Math.min(...points.map(p => p.longitude)), east = Math.max(...points.map(p => p.longitude));
+  const lat = meters / 111320, lon = lat / Math.cos(Math.max(Math.abs(south), Math.abs(north)) * Math.PI / 180);
+  return [{latitude:south-lat,longitude:west-lon},{latitude:south-lat,longitude:east+lon},
+    {latitude:north+lat,longitude:east+lon},{latitude:north+lat,longitude:west-lon},{latitude:south-lat,longitude:west-lon}];
+}
+function uncertainFeature(element, kind, parsed) {
+  const tags = element.tags || {}, node = element.type === 'node';
+  const line = (element.geometry || []).map(p => ({latitude:p.lat,longitude:p.lon}));
+  const center = node ? {lat:element.lat,lon:element.lon} : element.center || null;
+  const record = {id:String(element.id),sourceId:`${element.type || 'feature'}/${element.id}`,kind,center,
+    reasons:parsed.reasons.length ? parsed.reasons : ['point_only_no_footprint'],policy:UNCERTAINTY_POLICY,
+    guard:null,guardMeters:null,disposition:'unbounded_manual_review'};
+  // Explicit gate/entrance geometry is an access obstacle, not a land parcel.
+  const accessObstacle = kind === 'restricted' && (/^(gate|lift_gate|swing_gate|kissing_gate|cycle_barrier|bollard|block|stile|fence|wall|hedge|chain)$/.test(tags.barrier||'') ||
+    /^(yes|main|service|home|emergency)$/.test(tags.entrance||''));
+  if (node && Number.isFinite(center.lat) && Number.isFinite(center.lon)) {
+    record.guardMeters = accessObstacle ? ACCESS_GUARD_METERS : kind === 'parking' ? PARKING_GUARD_METERS : POINT_GUARD_METERS;
+    record.guard = guardAround([{latitude:center.lat,longitude:center.lon}],record.guardMeters);
+    record.disposition = accessObstacle ? 'local_access_guard' : 'local_point_uncertainty_guard';
+  } else if (accessObstacle && element.type === 'way' && line.length >= 2) {
+    record.guardMeters = ACCESS_GUARD_METERS;record.guard=guardAround(line,record.guardMeters);
+    record.disposition='local_access_guard';
+  } else {
+    // A complete closed but invalid ring has a known coordinate envelope.
+    // Open fragments/missing members do not establish the missing extent.
+    const closed = line.length >= 4 && line[0].latitude === line.at(-1).latitude && line[0].longitude === line.at(-1).longitude;
+    const bounds = element.bounds;
+    const sourceBounds = bounds && [bounds.minlat,bounds.minlon,bounds.maxlat,bounds.maxlon].every(Number.isFinite) && bounds.minlat < bounds.maxlat && bounds.minlon < bounds.maxlon ?
+      [{latitude:bounds.minlat,longitude:bounds.minlon},{latitude:bounds.maxlat,longitude:bounds.maxlon}] : null;
+    const allPoints = [...line,...(element.members||[]).flatMap(m=>(m.geometry||[]).map(p=>({latitude:p.lat,longitude:p.lon})))];
+    const covers = sourceBounds && allPoints.every(p => p.latitude>=bounds.minlat && p.latitude<=bounds.maxlat && p.longitude>=bounds.minlon && p.longitude<=bounds.maxlon);
+    // A site relation is a collection, not a multipolygon. If every member
+    // is a complete valid footprint, avoid the whole known collection envelope
+    // plus the point-land policy margin; do not pretend the envelope is a campus.
+    const siteMembers = element.tags?.type === 'site' && element.members?.length &&
+      element.members.every(m=>m.type==='way' && Array.isArray(m.geometry) &&
+        m.geometry.length>=4 && m.geometry[0].lat===m.geometry.at(-1).lat && m.geometry[0].lon===m.geometry.at(-1).lon &&
+        validSourceFootprint(m.geometry.map(p=>({latitude:p.lat,longitude:p.lon}))));
+    if (siteMembers) {
+      record.guardMeters=POINT_GUARD_METERS;record.guard=guardAround(allPoints,record.guardMeters);
+      record.disposition='local_complete_site_members_guard';
+    } else if (closed || covers) {
+      record.guardMeters = ACCESS_GUARD_METERS;record.guard=guardAround(covers ? sourceBounds : line,record.guardMeters);
+      record.disposition = covers ? 'local_source_bounds_guard' : 'local_invalid_ring_guard';
+    }
+  }
+  if (!record.guard) record.disposition='unbounded_manual_review';
+  return record;
+}
+function landKind(tags) {
+  if (tags.natural === 'water' || tags.waterway === 'riverbank') return 'water';
+  if (['private', 'no', 'permit'].includes(tags.access) || ['private', 'no'].includes(tags.foot)) return 'restricted';
+  if (['school', 'kindergarten', 'college', 'university'].includes(tags.amenity) ||
+      ['school', 'college', 'university'].includes(tags.building) || tags.landuse === 'education') return 'school';
+  if (['hospital', 'prison', 'place_of_worship', 'community_centre', 'theatre', 'townhall', 'courthouse', 'police', 'fire_station'].includes(tags.amenity) ||
+      ['hospital', 'civic', 'government'].includes(tags.building) || tags.landuse === 'institutional' || tags.office === 'government') return 'institution';
+  if (tags.landuse === 'cemetery' || tags.amenity === 'grave_yard') return 'cemetery';
+  if (tags.landuse === 'industrial' || ['industrial', 'warehouse'].includes(tags.building)) return 'industrial';
+  if (tags.amenity === 'parking') return 'parking';
+  if (['park', 'nature_reserve', 'stadium', 'sports_centre'].includes(tags.leisure)) return 'park';
+  if (['commercial', 'retail'].includes(tags.landuse) || ['commercial', 'retail'].includes(tags.building)) return 'commercial';
+  return null;
+}
+function targetKind(tags) {
+  if (['private', 'no', 'permit'].includes(tags.access)) return null;
+  const land = landKind(tags);
+  if (['school', 'institution', 'park'].includes(land) || tags.amenity === 'theatre') return 'event';
+  if (land && land !== 'commercial') return null;
+  if (tags.shop || tags.office || ['commercial', 'retail'].includes(tags.building)) return 'business';
+  if (/^(apartments|bungalow|detached|house|residential|semidetached_house|terrace)$/.test(tags.building || '') ||
+      /^(residential|apartments|house)$/.test(tags['building:use'] || '')) return 'residential';
+  // An unclassified street address does not establish residential eligibility.
+  return tags['addr:housenumber'] ? 'unclassified_address' : null;
+}
+function representativePoint(polygon) {
+  if (!polygon || !simpleRing(polygon)) return null;
+  const origin = polygon[0]; let twiceArea = 0, latitude = 0, longitude = 0;
+  for (let i = 1; i < polygon.length; i++) {
+    const a = {x: polygon[i - 1].longitude - origin.longitude, y: polygon[i - 1].latitude - origin.latitude};
+    const b = {x: polygon[i].longitude - origin.longitude, y: polygon[i].latitude - origin.latitude};
+    const cross = a.x * b.y - b.x * a.y;
+    twiceArea += cross; longitude += (a.x + b.x) * cross; latitude += (a.y + b.y) * cross;
+  }
+  const centroid = {latitude: origin.latitude + latitude / (3 * twiceArea),
+    longitude: origin.longitude + longitude / (3 * twiceArea)};
+  if (smartZonePlanning.pointInsidePolygon(centroid, polygon)) return {lat: centroid.latitude, lon: centroid.longitude};
+  // A concave footprint's centroid can lie outside it. Use a midpoint of an
+  // actual interior scanline interval, never an unverified bounding-box center.
+  const latitudes = [...new Set(polygon.map(p => p.latitude))].sort((a, b) => a - b);
+  for (let i = 1; i < latitudes.length; i++) {
+    const lat = (latitudes[i - 1] + latitudes[i]) / 2, intersections = [];
+    for (let j = 1; j < polygon.length; j++) {
+      const a = polygon[j - 1], b = polygon[j];
+      if ((a.latitude > lat) !== (b.latitude > lat)) intersections.push(a.longitude +
+        (b.longitude - a.longitude) * (lat - a.latitude) / (b.latitude - a.latitude));
+    }
+    intersections.sort((a, b) => a - b);
+    for (let j = 1; j < intersections.length; j += 2) {
+      const candidate = {latitude: lat, longitude: (intersections[j - 1] + intersections[j]) / 2};
+      if (smartZonePlanning.pointInsidePolygon(candidate, polygon)) return {lat, lon: candidate.longitude};
+    }
+  }
+  return null;
+}
+function snapshotFromElements(selectedBoundary, rawElements, provenance = {}) {
+  const serviceablePoints = []; const exclusionPolygons = []; const mappedBoundaries = [];
+  const routeWays = []; const targetFeatures = []; const landFeatures = []; const barrierWays = [];
+  const unresolvedLandFeatures = [];
+  let waterFeatureCount = 0; let parkFeatureCount = 0; let barrierFeatureCount = 0;
+  for (const element of Array.isArray(rawElements) ? rawElements : []) {
+    const tags = element.tags || {}; const geometry = Array.isArray(element.geometry) ?
+      element.geometry.map((item) => ({latitude: item.lat, longitude: item.lon})) : [];
+    const kind = landKind(tags);
+    const isWater = kind === 'water';
+    const isPark = kind === 'park';
+    const isMappedPlace = tags.boundary === "place" &&
+      /^(neighbourhood|neighborhood|quarter|suburb)$/.test(tags.place || "");
+    const isBarrier = /^(motorway|motorway_link|trunk|trunk_link)$/.test(tags.highway || "") ||
+      /^(rail|light_rail)$/.test(tags.railway || "");
+    if (kind) {
+      if (isWater) waterFeatureCount += 1;
+      if (isPark) parkFeatureCount += 1;
+      const parsed = elementFootprints(element), polygons = parsed.footprints.map(f => f.polygon);
+      landFeatures.push(...parsed.footprints.map(f => ({id:String(element.id),sourceId:`${element.type || 'feature'}/${element.id}`,kind,...f,complete:!parsed.incomplete})));
+      // Keep the legacy route snapshot exclusions unchanged: campaign-aware
+      // planning uses landFeatures; frozen completion contracts are unaffected.
+      if (isWater || isPark) exclusionPolygons.push(...polygons);
+      if ((!polygons.length || parsed.incomplete) && !tags.highway) unresolvedLandFeatures.push(uncertainFeature(element,kind,parsed));
+    }
+    if (isMappedPlace) {
+      if (geometry.length >= 3 && smartZonePlanning.validateGeometry(geometry).valid) {
+        mappedBoundaries.push(geometry);
+      }
+      continue;
+    }
+    if (isBarrier) { barrierFeatureCount += 1; barrierWays.push({id: String(element.id), geometry}); continue; }
+    if (tags.highway && geometry.length) {
+      // Preserve the provider's actual ordered linework. Building centroids and
+      // an unordered cloud of component points cannot establish a walkable route.
+      routeWays.push({id: String(element.id), geometry,
+        access: tags.access || null, foot: tags.foot || null,
+        highway: tags.highway, service: tags.service || null,
+        bridge: tags.bridge || null, tunnel: tags.tunnel || null,
+        layer: tags.layer || null});
+      for (const item of geometry) serviceablePoints.push({...item,
+        componentId: `road-${element.id}`, kind: "local_road"});
+      continue;
+    }
+    const footprint = /^(way|relation)$/.test(element.type || '') ? elementPolygons(element)[0] || null : null;
+    let center = element.center || (Number.isFinite(element.lat) ? element : null);
+    if (footprint && (!center || !smartZonePlanning.pointInsidePolygon({latitude: center.lat, longitude: center.lon}, footprint))) {
+      center = representativePoint(footprint);
+    }
+    if (center && Number.isFinite(center.lat) && Number.isFinite(center.lon)) {
+      const target = targetKind(tags);
+      // Keep only public classification facts used by Property Intelligence.
+      // Names, contact/owner details, free text and full address tags are not
+      // copied into the scoring evidence.
+      const observedTags = Object.fromEntries(['building', 'building:levels', 'building:material',
+        'roof:shape', 'roof:material', 'shop', 'office', 'amenity', 'craft', 'landuse']
+        .filter(key => typeof tags[key] === 'string' && /^[a-zA-Z0-9_:; ./-]{1,80}$/.test(tags[key]))
+        .map(key => [key, tags[key].toLowerCase()]));
+      if (target) targetFeatures.push({id: `${element.type || 'feature'}/${element.id}`,
+        latitude: center.lat, longitude: center.lon, kind: target, timestamp: element.timestamp || null,
+        observedTags,
+        addressKey: tags['addr:housenumber'] && tags['addr:street'] ?
+          `${tags['addr:street']}|${tags['addr:housenumber']}`.toLowerCase() : null,
+        footprint});
+      serviceablePoints.push({latitude: center.lat, longitude: center.lon,
+        componentId: `property-${element.id}`, kind: "property"});
+    }
+  }
+  // A same-kind POI marker within a complete mapped footprint is already
+  // excluded by that footprint. Keep the source association for the audit.
+  for (const f of unresolvedLandFeatures) if (f.reasons.length === 1 && f.reasons[0] === 'point_only_no_footprint' && f.center) {
+    const point = {latitude:f.center.lat,longitude:f.center.lon};
+    const owners = landFeatures.filter(p => p.complete && p.kind===f.kind && smartZonePlanning.pointInsidePolygon(point,p.polygon) &&
+      !(p.holes||[]).some(h=>smartZonePlanning.pointInsidePolygon(point,h)));
+    if (owners.length) {f.disposition='covered_by_mapped_footprint';f.coveredBy=owners.map(p=>p.sourceId);f.guard=null;f.guardMeters=null;}
+  }
+  const territoryCenter = {latitude: selectedBoundary.reduce((sum, item) =>
+    sum + Number(item.latitude), 0) / selectedBoundary.length,
+  longitude: selectedBoundary.reduce((sum, item) =>
+    sum + Number(item.longitude), 0) / selectedBoundary.length};
+  const serviceableBoundary = mappedBoundaries.find((boundary) =>
+    smartZonePlanning.pointInsidePolygon(territoryCenter, boundary)) || null;
+  return {source: "openstreetmap_bounded_snapshot_v1", serviceablePoints,
+    routeWays, targetFeatures, landFeatures, barrierWays, unresolvedLandFeatures,
+    dataTimestamp: provenance.dataTimestamp || null, fetchedAt: provenance.fetchedAt || null,
+    exclusionPolygons, waterFeatureCount, parkFeatureCount, barrierFeatureCount,
+    serviceableBoundary, serviceableBoundaryType: serviceableBoundary ?
+      "mapped_place_boundary" : null};
+}
+
+module.exports = {MAX_QUERY_AREA_SQUARE_METERS, QUERY_TIMEOUT_MILLISECONDS,
+  fetchSnapshot, snapshotFromElements, targetKind, landKind, elementPolygons, elementFootprints, representativePoint, simpleRing, UNCERTAINTY_POLICY, POINT_GUARD_METERS};

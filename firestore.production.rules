@@ -1400,6 +1400,8 @@ service cloud.firestore {
     function financialCampaignFields() {
       return [
         'executionMode', 'planningSchemaVersion', 'planningVersion', 'planningStage', 'materialsAreaDigest',
+        'campaignWorkload', 'workloadVersion', 'workloadUpdatedBy', 'workloadUpdatedAt',
+        'smartZoneSelectionIds', 'smartZoneObjective',
         'scheduleItemId', 'scheduledStartAt', 'scheduledEndAt', 'materialPlan', 'materialReturnLocation',
         'ownTeamCompletedAt', 'ownTeamCompletedBy', 'marketingCompletedAt', 'marketingCompletionSource',
         'fundingStatus', 'fundingPaymentId', 'fundingVersion', 'fundedAt',

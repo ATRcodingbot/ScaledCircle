@@ -4,8 +4,9 @@ const {polygon}=require('./campaign_map_record');
 const {shape,containedParts}=require('./marketing_history_geometry');
 const {executionMode,planningDigest,assertPlanningReview}=require('./shared/campaign_execution_authority');
 const {assertOwnTeamClean}=require('./own_team_authority');
+const workload=require('./shared/campaign_workload_authority');
 const TYPES=['neighborhoodCanvassing','flyer_distribution','door_hanger_distribution','business_card_distribution'];
-const OPS=['createCampaignPlan','campaignPlanningContext','saveCampaignPlanningArea','saveCampaignMaterials','scheduleOwnTeamCampaign'];
+const OPS=['createCampaignPlan','campaignPlanningContext','campaignWorkloadContext','saveCampaignWorkload','saveCampaignPlanningArea','saveCampaignMaterials','scheduleOwnTeamCampaign'];
 function boundary(value){const points=polygon(value);shape([{points}]);return points;}
 function date(value){if(!Number.isSafeInteger(value)||value<Date.UTC(2000,0,1)||value>Date.UTC(2100,0,1))m.fail('invalid-argument','Choose a valid campaign date.');return value;}
 function dates(input){const start=date(input.scheduledStartAt),end=date(input.scheduledEndAt);if(end<=start)m.fail('invalid-argument','The end must follow the start.');return {start,end};}
@@ -62,6 +63,31 @@ function createPlanner({db,FieldValue,authority,now=Date.now}){
  function context(c,zones){const hasArea=c.serviceArea?.length>=3||zones.some(z=>z.serviceArea?.length>=3),campaign={...c};for(const key of ['materialHandoffScheduledAt','materialHandoffWindowEndAt'])if(typeof c[key]?.toDate==='function')campaign[key]=c[key].toDate().toISOString();return {campaign,zones,areaDigest:hasArea?planningDigest(c,zones):null,areaIntelligence:intelligence(zones),editable:editable(c),planningVersion:c.planningVersion};}
  async function execute(request){
   const op=request.data.operation,input=request.data.input||{};await access(request,null);
+  if(['campaignWorkloadContext','saveCampaignWorkload'].includes(op)){
+   m.strict(input,op==='saveCampaignWorkload'?['campaignId','requestedHours','expectedWorkloadVersion']:['campaignId']);
+   return db.runTransaction(async tx=>{
+    const a=await access(request,tx,op==='saveCampaignWorkload'),{c,zones}=await read(tx,a,input.campaignId);
+    if(op==='campaignWorkloadContext'){
+      const run=/^[a-f0-9]{64}$/.test(c.smartZoneRecommendationRunId||'')?
+        (await tx.get(db.doc(`propertyRecommendationWorkspaces/${a.businessId}/mappingRuns/${c.smartZoneRecommendationRunId}`))).data():null;
+      return {...workload.summary(c,zones),workloadVersion:c.workloadVersion||0,
+        recommendationReviewAvailable:run?.businessId===a.businessId&&run?.campaignId===c.id&&
+          run?.actorUid===a.actorUid&&run?.status==='complete'&&run.expiresAtMs>now()&&
+          Array.isArray(c.smartZoneSelectionIds)&&c.smartZoneSelectionIds.length===zones.length};
+    }
+    if(c.status!=='draft')m.fail('failed-precondition','Only an unfunded draft can change requested workload.');
+    await clean(tx,c,zones);
+    if(input.expectedWorkloadVersion!==(c.workloadVersion||0))m.fail('aborted','The requested workload changed. Refresh before saving.');
+    const value=workload.requirement(input.requestedHours),version=(c.workloadVersion||0)+1;
+    tx.update(db.doc('campaigns/'+c.id),{campaignWorkload:value,workloadVersion:version,
+      workloadUpdatedBy:a.actorUid,workloadUpdatedAt:FieldValue.serverTimestamp(),
+      materialsAreaDigest:FieldValue.delete(),updatedAt:FieldValue.serverTimestamp()});
+    tx.create(db.doc(`campaigns/${c.id}/planningAudit/workload_${version}`),
+      {type:'workload_changed',actorUid:a.actorUid,businessId:a.businessId,previous:c.campaignWorkload||null,
+        campaignWorkload:value,at:FieldValue.serverTimestamp(),financialEffect:false});
+    return {...workload.summary({...c,campaignWorkload:value},zones),workloadVersion:version};
+   });
+  }
   if(op==='campaignPlanningContext'){m.strict(input,['campaignId']);return db.runTransaction(async tx=>{const a=await access(request,tx);const {c,zones}=await read(tx,a,input.campaignId);return context(c,zones);});}
   if(op==='createCampaignPlan'){
    m.strict(input,['requestId','name','description','campaignType','executionMode','initialServiceArea','serviceAreaName','propertyIntelligenceAnalysisId']);
@@ -90,6 +116,7 @@ function createPlanner({db,FieldValue,authority,now=Date.now}){
     if(c.serviceArea?.length&&mappedZones.length&&!containedParts(mappedZones.map(z=>({points:z.serviceArea})),[{points:c.serviceArea}]))m.fail('failed-precondition','Saved Zones fall outside the selected territory. Review and redraw those Zones or restore the intended territory before confirming materials.');
     const digest=planningDigest(c,zones);if(input.areaDigest!==digest)m.fail('aborted','The saved area changed. Review materials for its current geography.');
     if(op==='saveCampaignMaterials'){
+     if(executionMode(c)==='marketplace')workload.assertComplete(c,zones);
      if(!Number.isSafeInteger(input.materialQuantity)||input.materialQuantity<0||input.materialQuantity>10000000)m.fail('invalid-argument','Enter a valid whole material quantity.');
      if(input.materialType!==c.campaignType)m.fail('invalid-argument','Choose materials for this campaign type.');
      const time=dates(input),handoff=logistics(input.materialLogistics||{},input.materialQuantity);

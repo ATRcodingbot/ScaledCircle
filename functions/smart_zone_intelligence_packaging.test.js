@@ -8,7 +8,7 @@ function nodes(source){const map=new Map();for(const n of parser.parse(source).p
 const main=read('functions/index.js'),discovery=read('functions-discovery/index.js');
 test('deployment endpoint/projection AST parity and PI/crypto/cache bindings are retained',()=>{
  const a=nodes(main),b=nodes(discovery),p=nodes(read('functions-business-profile/index.js'));
- for(const name of ['smartZoneRecommendationContext','smartZoneCampaign','smartZonePlanArguments','generateSmartZonePlan','exports.getSmartZonePlan','exports.applySmartZonePlan','exports.getCampaignZoneIntelligence'])assert.equal(b.get(name),a.get(name),name);
+ for(const name of ['smartZoneRecommendationContext','smartZoneCampaign','smartZonePlanArguments','generateSmartZonePlan','exports.getSmartZonePlan','exports.applySmartZonePlan','exports.getCampaignZoneIntelligence','exports.confirmCampaignZoneIntelligence'])assert.equal(b.get(name),a.get(name),name);
  assert.equal(p.get('exports.getBusinessWorkspaceContext'),a.get('exports.getBusinessWorkspaceContext'));
  let checked=0;traverse(parser.parse(discovery),{ReferencedIdentifier(p){if(['CENSUS_API_KEY','FieldValue','crypto','getStorage'].includes(p.node.name)){
    assert.ok(p.scope.getBinding(p.node.name),p.node.name);checked++;}}});assert.ok(checked>=5);

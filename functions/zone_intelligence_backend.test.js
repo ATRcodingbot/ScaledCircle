@@ -3,10 +3,38 @@ if(!/^(127\.0\.0\.1|localhost):\d+$/.test(process.env.FIRESTORE_EMULATOR_HOST||'
 const {test,after}=require('node:test'),assert=require('node:assert/strict');
 const {initializeApp,deleteApp}=require('firebase-admin/app'),{getFirestore,FieldValue}=require('firebase-admin/firestore');
 const {preview}=require('./zone_intelligence_runtime'),access=require('./workspace_access'),workspace=require('./business_workspace');
+const {confirm}=require('./zone_intelligence_runtime');
 const fixture=require('./fixtures/21061-corkran-osm-public.json'),geo=require('./smart_zone_geography');
 const app=initializeApp({projectId:'demo-zone-evidence'},'zone-evidence'),db=getFirestore(app);
 after(async()=>{await db.terminate();await deleteApp(app);});
 let counter=0;
+test('manual evidence confirmation is server sourced, exact geometry bound, and never creates financial work',async()=>{
+ const s=await setup(),input={...s.input,FieldValue,data:{campaignId:s.campaignId,zoneId:s.zoneId,
+   geometry:[],zoneIntelligence:{mappedTargetCount:99999}}};
+ const result=await confirm(input);
+ assert.ok(result.mappedTargetCount>0&&result.mappedTargetCount<99999);
+ const saved=(await db.doc('campaignZones/'+s.zoneId).get()).data();
+ assert.deepEqual(saved.zoneIntelligence,result);assert.deepEqual(saved.serviceArea,s.zone.serviceArea);
+ assert.deepEqual((await db.doc('campaigns/'+s.campaignId).get()).data(),s.campaign);
+ for(const patch of [{status:'funded'},{status:'draft',businessId:'other'}]){
+  await db.doc('campaigns/'+s.campaignId).set({...s.campaign,...patch});
+  await assert.rejects(confirm(input));
+ }
+ await db.doc('campaigns/'+s.campaignId).set(s.campaign);
+ await db.doc('campaignPayments/'+s.campaignId).set({campaignId:s.campaignId,status:'pending'});
+ await assert.rejects(confirm(input),{code:'failed-precondition'});
+});
+test('boundary edit or membership revocation during acquisition prevents evidence persistence',async()=>{
+ const s=await setup(),ref=db.doc('campaignZones/'+s.zoneId);
+ await assert.rejects(confirm({...s.input,FieldValue,data:{campaignId:s.campaignId,zoneId:s.zoneId},
+  fetchSnapshot:async input=>{const v=await s.input.fetchSnapshot(input);await ref.update({
+    serviceArea:fixture.selectedBoundary.map(p=>({...p,longitude:p.longitude+.001}))});return v;}}),{code:'aborted'});
+ assert.equal((await ref.get()).data().zoneIntelligence,undefined);
+ await ref.set(s.zone);
+ await assert.rejects(confirm({...s.input,FieldValue,data:{campaignId:s.campaignId,zoneId:s.zoneId},
+  reauthorize:async()=>{throw Object.assign(Error('revoked'),{code:'permission-denied'});}}),{code:'permission-denied'});
+ assert.equal((await ref.get()).data().zoneIntelligence,undefined);
+});
 async function setup(){
  const uid='zone_'+Date.now()+'_'+(++counter),campaignId=uid+'_campaign',zoneId=uid+'_zone';
  const campaign={businessId:uid,campaignType:'flyer_distribution',status:'draft'},zone={businessId:uid,campaignId,serviceArea:fixture.selectedBoundary};

@@ -7,7 +7,7 @@ const names = ['smartZoneAnchor','smartZoneSelectedArea','smartZoneRecommendatio
 const ast = parser.parse(source).program.body;
 const declarations = ast.filter(n => n.type === 'FunctionDeclaration' && names.includes(n.id.name));
 if (declarations.length !== names.length) throw Error('missing_smart_zone_endpoint_declaration');
-const exportNames = ['getSmartZonePlan','applySmartZonePlan','getCampaignZoneIntelligence'];
+const exportNames = ['getSmartZonePlan','applySmartZonePlan','getCampaignZoneIntelligence','confirmCampaignZoneIntelligence'];
 const assignments = ast.filter(n => n.type === 'ExpressionStatement' && n.expression.type === 'AssignmentExpression' &&
   n.expression.left.object?.name === 'exports' && exportNames.includes(n.expression.left.property?.name));
 class HttpsError extends Error {constructor(code,message){super(message);this.code=code;}}

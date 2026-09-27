@@ -83,9 +83,7 @@ function isExplicitStreetAddress(query, match = {}) {
 }
 
 function workloadHours(value = 5) {
-  const hours = Number(value);
-  if (!Number.isFinite(hours) || hours < 0.5 || hours > 192) throw Error('campaign_workload_invalid');
-  return hours;
+  return require('./campaign_workload_authority').hours(value);
 }
 function planningFailure(error) {
   if (error?.message === 'manual_zone_review_required') return {code: 'failed-precondition',

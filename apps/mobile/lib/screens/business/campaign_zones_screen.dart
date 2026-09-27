@@ -1,4 +1,7 @@
 import 'campaign_map_record_screen.dart';
+import '../../widgets/campaign_workload_summary.dart';
+import '../../widgets/zone_intelligence_summary.dart';
+import '../../services/business_operations_service.dart';
 import 'package:flutter_app/navigation/authenticated_app_bar.dart';
 import '../../config/app_environment.dart';
 
@@ -36,12 +39,18 @@ Map<String, dynamic> smartZoneRecommendationRequest({
   String objective = '',
   int alternativeIndex = 0,
   String? recommendationRunId,
+  List<String>? selectionIds,
+  int? replaceZoneIndex,
+  bool resumeSavedPlan = false,
 }) => {
   'campaignId': campaignId,
   'desiredHours': desiredHours,
   if (objective.trim().isNotEmpty) 'objective': objective.trim(),
   if (alternativeIndex > 0) 'alternativeIndex': alternativeIndex,
   'recommendationRunId': ?recommendationRunId,
+  'selectionIds': ?selectionIds,
+  'replaceZoneIndex': ?replaceZoneIndex,
+  if (resumeSavedPlan) 'resumeSavedPlan': true,
   if (analysisBoundary != null)
     'analysisBoundary': analysisBoundary
         .map((point) => Map<String, double>.from(point))
@@ -94,6 +103,8 @@ class CampaignZoneAreaEntry extends StatefulWidget {
     this.searchAddresses,
     this.recommendationEnabled = false,
     this.initialObjective = '',
+    this.onSaveWorkload,
+    this.initialHours = 5,
   });
 
   final bool locked;
@@ -107,6 +118,8 @@ class CampaignZoneAreaEntry extends StatefulWidget {
   onPlan;
   final bool recommendationEnabled;
   final String initialObjective;
+  final double initialHours;
+  final Future<bool> Function(double)? onSaveWorkload;
   final ValueChanged<AddressSuggestion?> onAdvancedEdit;
   final VoidCallback? onUseAnalyzedArea;
   final AddressSuggestion? initialSelection;
@@ -119,7 +132,9 @@ class CampaignZoneAreaEntry extends StatefulWidget {
 
 class _SmartZoneEntryState extends State<CampaignZoneAreaEntry> {
   final _areaController = TextEditingController();
-  final _hoursController = TextEditingController(text: '5');
+  late final _hoursController = TextEditingController(
+    text: widget.initialHours.toString(),
+  );
   late final _objectiveController = TextEditingController(
     text: widget.initialObjective,
   );
@@ -144,11 +159,13 @@ class _SmartZoneEntryState extends State<CampaignZoneAreaEntry> {
   Future<void> _plan({required bool useSavedArea}) async {
     if (!widget.recommendationEnabled) return;
     final hours = double.tryParse(_hoursController.text.trim());
-    if (hours == null || hours < 0.5 || hours > 192) {
+    if (hours == null || !hours.isFinite || hours < 0.5 || hours > 192) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
+        SnackBar(
           content: Text(
-            'Enter estimated work from 30 minutes (0.5 hours) to 192 hours.',
+            hours != null && hours > 192
+                ? 'Campaign workload cannot exceed 192 hours.'
+                : 'Minimum campaign workload is 30 minutes.',
           ),
         ),
       );
@@ -164,6 +181,10 @@ class _SmartZoneEntryState extends State<CampaignZoneAreaEntry> {
     }
     setState(() => _planning = true);
     try {
+      if (widget.onSaveWorkload != null &&
+          !await widget.onSaveWorkload!(hours)) {
+        return;
+      }
       await widget.onPlan(
         useSavedArea ? null : _selectedArea,
         hours,
@@ -171,6 +192,30 @@ class _SmartZoneEntryState extends State<CampaignZoneAreaEntry> {
       );
     } finally {
       if (mounted) setState(() => _planning = false);
+    }
+  }
+
+  Future<void> _draw(AddressSuggestion? area, {VoidCallback? onReady}) async {
+    final hours = double.tryParse(_hoursController.text.trim());
+    if (hours == null || !hours.isFinite || hours < .5 || hours > 192) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Minimum campaign workload is 30 minutes. Maximum is 192 hours.',
+          ),
+        ),
+      );
+      return;
+    }
+    if (widget.onSaveWorkload != null && !await widget.onSaveWorkload!(hours)) {
+      return;
+    }
+    if (mounted) {
+      if (onReady != null) {
+        onReady();
+      } else {
+        widget.onAdvancedEdit(area);
+      }
     }
   }
 
@@ -225,26 +270,25 @@ class _SmartZoneEntryState extends State<CampaignZoneAreaEntry> {
               ),
             ),
             const SizedBox(height: 12),
-            TextFormField(
-              controller: _hoursController,
-              enabled: !widget.locked && !_planning,
-              keyboardType: const TextInputType.numberWithOptions(
-                decimal: true,
-              ),
-              decoration: const InputDecoration(
-                labelText: 'Requested field workload (hours)',
-                helperText:
-                    'An advisory target. Available evidence may support less work.',
-                border: OutlineInputBorder(),
-              ),
-            ),
           ],
+          TextFormField(
+            controller: _hoursController,
+            enabled: !widget.locked && !_planning,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            decoration: const InputDecoration(
+              labelText: 'Requested field workload (hours)',
+              helperText:
+                  'An advisory target. Available evidence may support less work.',
+              border: OutlineInputBorder(),
+            ),
+          ),
           const SizedBox(height: 16),
           if (widget.onUseAnalyzedArea != null) ...[
             OutlinedButton.icon(
               onPressed: widget.locked || _planning
                   ? null
-                  : widget.onUseAnalyzedArea,
+                  : () =>
+                        _draw(_selectedArea, onReady: widget.onUseAnalyzedArea),
               icon: const Icon(Icons.insights_outlined),
               label: const Text('Use Analyzed Area'),
             ),
@@ -274,9 +318,7 @@ class _SmartZoneEntryState extends State<CampaignZoneAreaEntry> {
           if (widget.hasSavedArea) ...[
             const SizedBox(height: 8),
             OutlinedButton.icon(
-              onPressed: widget.locked || _planning
-                  ? null
-                  : () => widget.onAdvancedEdit(null),
+              onPressed: widget.locked || _planning ? null : () => _draw(null),
               icon: const Icon(Icons.business_outlined),
               label: const Text('Use My Service Area'),
             ),
@@ -288,7 +330,7 @@ class _SmartZoneEntryState extends State<CampaignZoneAreaEntry> {
           TextButton.icon(
             onPressed: widget.locked || _planning
                 ? null
-                : () => widget.onAdvancedEdit(_selectedArea),
+                : () => _draw(_selectedArea),
             icon: const Icon(Icons.gesture),
             label: const Text('Draw My Area'),
           ),
@@ -306,6 +348,29 @@ bool campaignCanAddZone(
   int persistedZoneCount, {
   int maximumZones = productionMaximumZonesPerCampaign,
 }) => persistedZoneCount < maximumZones;
+
+// This is display gating only. Continue always rechecks the server authority.
+bool campaignZoneWorkloadCanReview(
+  List<Map<String, dynamic>> zones,
+  Map? state,
+) {
+  if (state?['ready'] != true || state?['requiredZoneCount'] != zones.length) {
+    return false;
+  }
+  return zones.every((zone) {
+    final evidence = zone['zoneIntelligence'] as Map?;
+    final workload = evidence?['workload'] as Map?;
+    final minutes = workload?['minutes'];
+    return zoneEvidenceMatches(evidence, zone['serviceArea']) &&
+        ['available', 'partial'].contains(evidence?['status']) &&
+        minutes is num &&
+        minutes > 0 &&
+        minutes <= 360 &&
+        workload?['oneScaler'] == true &&
+        (zone['assignedScalerId'] == null || zone['assignedScalerId'] == '') &&
+        zone['mapLocked'] != true;
+  });
+}
 
 class CampaignZonesScreen extends StatefulWidget {
   final DocumentSnapshot campaign;
@@ -326,7 +391,126 @@ class CampaignZonesScreen extends StatefulWidget {
 }
 
 class _CampaignZonesScreenState extends State<CampaignZonesScreen> {
-  DocumentSnapshot get campaign => widget.campaign;
+  DocumentSnapshot? _currentCampaign;
+  DocumentSnapshot get campaign => _currentCampaign ?? widget.campaign;
+  Map<String, dynamic>? _workloadState;
+  double get _requestedHours =>
+      (_workloadState?['requestedHours'] as num?)?.toDouble() ?? 5;
+
+  Future<bool> _refreshWorkload() async {
+    try {
+      final fresh = await widget.campaign.reference.get();
+      final data = fresh.data() as Map<String, dynamic>;
+      final result = await BusinessOperationsService().call(
+        data['businessId'] as String,
+        'campaignWorkloadContext',
+        {'campaignId': fresh.id},
+      );
+      if (mounted) {
+        setState(() {
+          _currentCampaign = fresh;
+          _workloadState = result;
+        });
+      }
+      return result['ready'] == true;
+    } catch (_) {
+      if (mounted) {
+        setState(
+          () => _workloadState = {
+            'ready': false,
+            'reason':
+                'Workload authority is unavailable. Refresh before review.',
+          },
+        );
+      }
+      return false;
+    }
+  }
+
+  Future<bool> _saveWorkload(double hours) async {
+    await _refreshWorkload();
+    if (!mounted) return false;
+    try {
+      final result = await BusinessOperationsService().call(
+        (campaign.data() as Map)['businessId'] as String,
+        'saveCampaignWorkload',
+        {
+          'campaignId': campaign.id,
+          'requestedHours': hours,
+          'expectedWorkloadVersion': _workloadState?['workloadVersion'] ?? 0,
+        },
+      );
+      if (mounted) {
+        setState(() => _workloadState = result);
+      }
+      await _refreshWorkload();
+      return true;
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              error is FirebaseFunctionsException
+                  ? error.message ?? 'Unable to save workload.'
+                  : 'Unable to save workload.',
+            ),
+          ),
+        );
+      }
+      return false;
+    }
+  }
+
+  Future<void> _editWorkload() async {
+    final controller = TextEditingController(
+      text: _workloadState?['requestedHours']?.toString() ?? '',
+    );
+    String? error;
+    final hours = await showDialog<double>(
+      context: context,
+      builder: (c) => StatefulBuilder(
+        builder: (c, update) => AlertDialog(
+          title: const Text('Requested campaign workload'),
+          content: TextField(
+            controller: controller,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            decoration: InputDecoration(
+              labelText: 'Hours',
+              helperText: '30 minutes (0.5 hours) to 192 hours',
+              errorText: error,
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(c),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () {
+                final value = double.tryParse(controller.text);
+                if (value != null &&
+                    value.isFinite &&
+                    value >= .5 &&
+                    value <= 192) {
+                  Navigator.pop(c, value);
+                } else {
+                  update(
+                    () => error = value != null && value > 192
+                        ? 'Campaign workload cannot exceed 192 hours.'
+                        : 'Minimum campaign workload is 30 minutes.',
+                  );
+                }
+              },
+              child: const Text('Save workload'),
+            ),
+          ],
+        ),
+      ),
+    );
+    controller.dispose();
+    if (hours != null && mounted) await _saveWorkload(hours);
+  }
+
   bool get startWithAreaBuilder => widget.startWithAreaBuilder;
   bool get planningFlow => widget.planningFlow;
   late final CampaignMapContext _mapContext =
@@ -338,9 +522,12 @@ class _CampaignZonesScreenState extends State<CampaignZonesScreen> {
   void initState() {
     super.initState();
     _recommendationObjective =
-        (campaign.data() as Map<String, dynamic>?)?['objective']?.toString() ??
+        ((campaign.data() as Map<String, dynamic>?)?['smartZoneObjective'] ??
+                (campaign.data() as Map<String, dynamic>?)?['objective'])
+            ?.toString() ??
         '';
     _loadRecommendationAccess();
+    _refreshWorkload();
   }
 
   Future<void> _loadRecommendationAccess() async {
@@ -420,6 +607,25 @@ class _CampaignZonesScreenState extends State<CampaignZonesScreen> {
     return (data?['materialQuantity'] as num?)?.toInt();
   }
 
+  Future<void> _confirmZoneEvidence(String zoneId) async {
+    try {
+      await FirebaseFunctions.instanceFor(region: 'us-east1')
+          .httpsCallable('confirmCampaignZoneIntelligence')
+          .call({'campaignId': campaign.id, 'zoneId': zoneId});
+      await _refreshWorkload();
+    } on FirebaseFunctionsException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            error.message ??
+                'Area evidence is unavailable. Review this Zone before continuing.',
+          ),
+        ),
+      );
+    }
+  }
+
   Future<void> _retryZoneAnalysis(
     BuildContext context,
     DocumentSnapshot<Map<String, dynamic>> zone,
@@ -430,6 +636,10 @@ class _CampaignZonesScreenState extends State<CampaignZonesScreen> {
         region: 'us-east1',
       ).httpsCallable('analyzeCampaignZone');
       final result = await callable.call({'zoneId': zone.id});
+      await FirebaseFunctions.instanceFor(region: 'us-east1')
+          .httpsCallable('confirmCampaignZoneIntelligence')
+          .call({'campaignId': campaign.id, 'zoneId': zone.id});
+      await _refreshWorkload();
       if (!context.mounted) return;
       await reviewProductionRouteAnalysis(context, result.data);
       messenger.showSnackBar(
@@ -454,6 +664,9 @@ class _CampaignZonesScreenState extends State<CampaignZonesScreen> {
     String? objective,
     int alternativeIndex = 0,
     String? recommendationRunId,
+    List<String>? selectionIds,
+    int? replaceZoneIndex,
+    bool resumeSavedPlan = false,
   }) async {
     if (!_recommendationEnabled) return null;
     final messenger = ScaffoldMessenger.of(context);
@@ -467,6 +680,9 @@ class _CampaignZonesScreenState extends State<CampaignZonesScreen> {
         objective: objective ?? _recommendationObjective,
         alternativeIndex: alternativeIndex,
         recommendationRunId: recommendationRunId,
+        selectionIds: selectionIds,
+        replaceZoneIndex: replaceZoneIndex,
+        resumeSavedPlan: resumeSavedPlan,
       );
       final response = await functions
           .httpsCallable(
@@ -487,7 +703,7 @@ class _CampaignZonesScreenState extends State<CampaignZonesScreen> {
       );
       final canApply = smartZonePlanCanApply(plan);
       if (!context.mounted || !_recommendationEnabled) return null;
-      var selectedZoneIndex = 0;
+      var selectedZoneIndex = replaceZoneIndex ?? 0;
       var useRecommendedPay = false;
       var routeReviewed = false;
       final requiresRouteReview = plan['routeReviewDigest'] is String;
@@ -712,7 +928,9 @@ class _CampaignZonesScreenState extends State<CampaignZonesScreen> {
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(dialogContext, 'adjust'),
-                child: const Text('Adjust Area'),
+                child: Text(
+                  resumeSavedPlan ? 'Edit selected saved Zone' : 'Adjust Area',
+                ),
               ),
               SmartZoneAlternativeAction(
                 onAvailable: recommendationContext['hasAlternative'] == true
@@ -721,7 +939,11 @@ class _CampaignZonesScreenState extends State<CampaignZonesScreen> {
               ),
               TextButton(
                 onPressed: () => Navigator.pop(dialogContext, 'draw'),
-                child: const Text('Draw My Own Area'),
+                child: Text(
+                  resumeSavedPlan
+                      ? 'Redraw selected saved Zone'
+                      : 'Draw My Own Area',
+                ),
               ),
               ElevatedButton(
                 onPressed: !canApply || (requiresRouteReview && !routeReviewed)
@@ -743,11 +965,29 @@ class _CampaignZonesScreenState extends State<CampaignZonesScreen> {
           analysisBoundary: analysisBoundary,
           objective: objective ?? _recommendationObjective,
           recommendationRunId: plan['recommendationRunId']?.toString(),
-          alternativeIndex:
-              ((recommendationContext['alternativeIndex'] as num?)?.toInt() ??
-                  alternativeIndex) +
-              1,
+          selectionIds: (plan['selectionIds'] as List).cast<String>(),
+          replaceZoneIndex: selectedZoneIndex,
+          resumeSavedPlan: resumeSavedPlan,
         );
+      }
+      if (resumeSavedPlan && (accepted == 'draw' || accepted == 'adjust')) {
+        final rows = await _campaignZonesQuery.get();
+        final ids =
+            ((campaign.data() as Map)['smartZoneSelectionIds'] as List?) ?? [];
+        if (!context.mounted || selectedZoneIndex >= ids.length) return null;
+        final selected = rows.docs.where(
+          (d) => d.data()['smartZoneCandidateId'] == ids[selectedZoneIndex],
+        );
+        if (selected.length != 1) {
+          messenger.showSnackBar(
+            const SnackBar(
+              content: Text('The saved Zone changed. Reopen its boundary.'),
+            ),
+          );
+          return null;
+        }
+        await _editZoneArea(context, selected.single);
+        return null;
       }
       if (accepted == 'draw') {
         if (analysisBoundary != null) {
@@ -807,6 +1047,7 @@ class _CampaignZonesScreenState extends State<CampaignZonesScreen> {
             if (requiresRouteReview && routeReviewed)
               'routeReviewDigest': plan['routeReviewDigest'],
           });
+      await _refreshWorkload();
       messenger.showSnackBar(
         SnackBar(
           content: Text(
@@ -830,6 +1071,116 @@ class _CampaignZonesScreenState extends State<CampaignZonesScreen> {
       );
     }
     return null;
+  }
+
+  Future<void> _reviewSavedAreas() async {
+    final snapshot = await _campaignZonesQuery.get();
+    if (!mounted) return;
+    final docs = snapshot.docs;
+    final rows = docs
+        .map((d) => <String, dynamic>{...d.data(), 'id': d.id})
+        .toList();
+    final identities = resolveZoneDisplayIdentities(rows);
+    var selected = 0;
+    if (rows.isEmpty) return;
+    final action = await showDialog<String>(
+      context: context,
+      builder: (c) => StatefulBuilder(
+        builder: (c, update) => AlertDialog(
+          title: const Text('Saved campaign Zones'),
+          content: SizedBox(
+            width: 820,
+            child: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  SmartZoneGeometryMap(
+                    zones: rows,
+                    selectedZoneIndex: selected,
+                    onZoneSelected: (i) => update(() => selected = i),
+                    planningPreview: true,
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    identities[selected].label,
+                    style: Theme.of(c).textTheme.titleLarge,
+                  ),
+                  ZoneIntelligencePreview(
+                    geometry: rows[selected]['serviceArea'],
+                    campaignId: campaign.id,
+                    zoneId: rows[selected]['id'] as String,
+                  ),
+                  const Text(
+                    'These are the current saved boundaries. Reviewing them does not replace them.',
+                  ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(c, 'edit'),
+              child: const Text('Edit selected Zone'),
+            ),
+            if (_recommendationEnabled &&
+                _workloadState?['recommendationReviewAvailable'] == true)
+              TextButton(
+                onPressed: () => Navigator.pop(c, 'alternate'),
+                child: const Text('Try another area for selected Zone'),
+              ),
+            if (_recommendationEnabled)
+              TextButton(
+                onPressed: () => Navigator.pop(c, 'refresh'),
+                child: const Text('Refresh campaign recommendations'),
+              ),
+            TextButton(
+              onPressed: () => Navigator.pop(c),
+              child: const Text('Close'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (!mounted) return;
+    if (action == 'edit') {
+      await _editZoneArea(context, docs[selected]);
+      return;
+    }
+    if (action == 'alternate') {
+      final data = campaign.data() as Map;
+      await _reviewSmartZonePlan(
+        context,
+        desiredHours: _requestedHours,
+        resumeSavedPlan: true,
+        selectionIds: (data['smartZoneSelectionIds'] as List).cast<String>(),
+        replaceZoneIndex: identities[selected].ordinal - 1,
+      );
+      return;
+    }
+    if (action == 'refresh') {
+      final data = campaign.data() as Map;
+      final region = data['smartZoneSearchRegion'] is Map
+          ? data['smartZoneSearchRegion']['geometry']
+          : null;
+      if (region is List && region.length >= 3) {
+        await _reviewSmartZonePlan(
+          context,
+          desiredHours: _requestedHours,
+          analysisBoundary: region
+              .whereType<Map>()
+              .map(
+                (p) => <String, double>{
+                  'latitude': (p['latitude'] as num).toDouble(),
+                  'longitude': (p['longitude'] as num).toDouble(),
+                },
+              )
+              .toList(),
+        );
+      } else {
+        await _reviewSmartZonePlan(context, desiredHours: _requestedHours);
+      }
+    }
   }
 
   Future<String?> _askForZoneName(
@@ -901,6 +1252,25 @@ class _CampaignZonesScreenState extends State<CampaignZonesScreen> {
     String? recommendationObjective,
   }) async {
     final campaignData = campaign.data() as Map<String, dynamic>;
+    if (!_ownTeam) {
+      await _refreshWorkload();
+      if (!context.mounted) return;
+      if (_workloadState?['requiredZoneCount'] == null) await _editWorkload();
+      if (!context.mounted || _workloadState?['requiredZoneCount'] == null) {
+        return;
+      }
+      if ((_workloadState?['zoneCount'] as num? ?? 0) >=
+          (_workloadState!['requiredZoneCount'] as num)) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Review the existing Zones or change requested workload before adding another.',
+            ),
+          ),
+        );
+        return;
+      }
+    }
 
     final businessId = campaignData['businessId']?.toString();
 
@@ -992,6 +1362,7 @@ class _CampaignZonesScreenState extends State<CampaignZonesScreen> {
         await zoneReference.update({'updatedAt': FieldValue.serverTimestamp()});
 
         await _refreshCampaignTotals();
+        await _refreshWorkload();
 
         if (!context.mounted) {
           return;
@@ -1238,6 +1609,7 @@ class _CampaignZonesScreenState extends State<CampaignZonesScreen> {
       if (!_ownTeam) 'assignedScalerCount': assignedZones,
       'zonesUpdatedAt': FieldValue.serverTimestamp(),
     });
+    await _refreshWorkload();
   }
 
   Future<void> _approveZonePayout(
@@ -1958,32 +2330,59 @@ class _CampaignZonesScreenState extends State<CampaignZonesScreen> {
           : StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
               stream: _campaignZonesQuery.snapshots(),
               builder: (context, snapshot) {
+                final currentZones = (snapshot.data?.docs ?? const [])
+                    .map((doc) => doc.data())
+                    .toList();
                 final canContinue =
                     !snapshot.hasError &&
                     campaignZonesCanContinue(
                       (snapshot.data?.docs ?? const []).map(
                         (doc) => doc.data(),
                       ),
-                    );
+                    ) &&
+                    (_ownTeam ||
+                        campaignZoneWorkloadCanReview(
+                          currentZones,
+                          _workloadState,
+                        ));
                 return SafeArea(
                   minimum: const EdgeInsets.fromLTRB(20, 8, 20, 16),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       if (!canContinue)
-                        const Padding(
-                          padding: EdgeInsets.only(bottom: 8),
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 8),
                           child: Text(
-                            'Add at least one campaign area before continuing.',
+                            _workloadState?['reason']?.toString() ??
+                                'Set the workload and review the required campaign Zones before continuing.',
                             textAlign: TextAlign.center,
                           ),
                         ),
-                      SizedBox(
-                        width: double.infinity,
-                        height: 58,
+                      ConstrainedBox(
+                        constraints: const BoxConstraints(
+                          minHeight: 58,
+                          minWidth: double.infinity,
+                        ),
                         child: ElevatedButton.icon(
                           onPressed: canContinue
-                              ? () => Navigator.pop(context, true)
+                              ? () async {
+                                  if (_ownTeam || await _refreshWorkload()) {
+                                    if (context.mounted) {
+                                      Navigator.pop(context, true);
+                                    }
+                                  } else if (context.mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text(
+                                          _workloadState?['reason']
+                                                  ?.toString() ??
+                                              'Review every required Zone.',
+                                        ),
+                                      ),
+                                    );
+                                  }
+                                }
                               : null,
                           icon: const Icon(Icons.arrow_forward),
                           label: Text(
@@ -2092,6 +2491,11 @@ class _CampaignZonesScreenState extends State<CampaignZonesScreen> {
             return ListView(
               padding: const EdgeInsets.fromLTRB(20, 20, 20, 120),
               children: [
+                if (!_ownTeam)
+                  CampaignWorkloadSummary(
+                    state: _workloadState,
+                    onEdit: _campaignLocked ? null : _editWorkload,
+                  ),
                 Text(
                   zones.isEmpty
                       ? 'Choose where this campaign will run'
@@ -2246,9 +2650,7 @@ class _CampaignZonesScreenState extends State<CampaignZonesScreen> {
                         'Review supported planning options before changing the saved territory. Regional housing estimates do not establish a route or worker count.',
                       ),
                       trailing: TextButton(
-                        onPressed: _serviceAreaBoundary.length < 3
-                            ? null
-                            : () => _reviewSmartZonePlan(context),
+                        onPressed: _reviewSavedAreas,
                         child: const Text('Review area options'),
                       ),
                     ),
@@ -2258,6 +2660,8 @@ class _CampaignZonesScreenState extends State<CampaignZonesScreen> {
                   CampaignZoneAreaEntry(
                     recommendationEnabled: _recommendationEnabled,
                     initialObjective: _recommendationObjective,
+                    initialHours: _requestedHours,
+                    onSaveWorkload: _saveWorkload,
                     locked: _campaignLocked,
                     hasSavedArea: _serviceAreaBoundary.length >= 3,
                     savedAreaName: _serviceAreaName,
@@ -2287,6 +2691,17 @@ class _CampaignZonesScreenState extends State<CampaignZonesScreen> {
                         : null,
                   ),
 
+                if (!_campaignLocked &&
+                    zones.isNotEmpty &&
+                    (_ownTeam ||
+                        (zones.length <
+                            (_workloadState?['requiredZoneCount'] as num? ??
+                                0))))
+                  OutlinedButton.icon(
+                    onPressed: () => _createZone(context, skipNamePrompt: true),
+                    icon: const Icon(Icons.add_location_alt_outlined),
+                    label: const Text('Add next Zone'),
+                  ),
                 ...zones.asMap().entries.map((entry) {
                   final zone = entry.value;
                   final data = zone.data();
@@ -2320,6 +2735,17 @@ class _CampaignZonesScreenState extends State<CampaignZonesScreen> {
                                 _editZoneArea(context, zone);
                               },
                       ),
+
+                      if (!_campaignLocked &&
+                          !zoneEvidenceMatches(
+                            data['zoneIntelligence'] as Map?,
+                            data['serviceArea'],
+                          ))
+                        OutlinedButton.icon(
+                          onPressed: () => _confirmZoneEvidence(zone.id),
+                          icon: const Icon(Icons.fact_check_outlined),
+                          label: const Text('Analyze current area evidence'),
+                        ),
 
                       if (data['coverageAuthority']?['state'] ==
                               'review_required' ||

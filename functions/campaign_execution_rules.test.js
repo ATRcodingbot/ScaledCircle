@@ -41,12 +41,17 @@ for (const flavor of ["production", "staging", "legacy"]) test(`${flavor}: mode 
     await assertSucceeds(getDoc(doc(db("scaler"), "campaignZones/marketplace")));
     await assertSucceeds(getDoc(doc(db("scaler"), "campaignZones/legacy")));
     for (const id of ["own_team", "marketplace", "legacy"]) {
-      for (const patch of [{executionMode: "marketplace"}, {executionMode: "own_team"}, {executionMode: deleteField()}, {planningSchemaVersion: 1}, {planningStage: "review"}, {planningVersion: 9}, {materialsAreaDigest: "forged"}, {fundingStatus: "funded"}, {scheduleItemId: "forged"}, {status: "open"}]) {
+      for (const patch of [{executionMode: "marketplace"}, {executionMode: "own_team"}, {executionMode: deleteField()}, {planningSchemaVersion: 1}, {planningStage: "review"}, {planningVersion: 9}, {materialsAreaDigest: "forged"}, {campaignWorkload: {requestedHours: 10, requiredZoneCount: 1}}, {workloadVersion: 20}, {smartZoneSelectionIds:["forged"]}, {fundingStatus: "funded"}, {scheduleItemId: "forged"}, {status: "open"}]) {
         // Equal-value writes are harmless and have no changed field to reject.
         if (patch.executionMode === id) continue;
         if (id === "legacy" && patch.executionMode?.isEqual?.(deleteField())) continue;
         await assertFails(updateDoc(doc(db("owner"), `campaigns/${id}`), patch));
       }
+    }
+    for(const id of ['own_team','marketplace','legacy']) {
+      await assertFails(updateDoc(doc(db('owner'),`campaignZones/${id}`),{
+        zoneIntelligence:{version:'ZoneIntelligenceV1',status:'available',workload:{minutes:30,oneScaler:true}}}));
+      await assertFails(updateDoc(doc(db('owner'),`campaignZones/${id}`),{smartZoneCandidateId:'forged',zoneNumber:1}));
     }
     await assertFails(setDoc(doc(db("owner"), "campaigns/client_mode"), {businessId: "owner", status: "draft", createdAt: serverTimestamp(), executionMode: "own_team"}));
     await assertSucceeds(updateDoc(doc(db("owner"), "campaigns/own_team"), {campaignName: "Editable draft"}));
