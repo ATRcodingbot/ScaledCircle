@@ -108,13 +108,14 @@ test('opt-in sends one sanitized initial page and distinct SPA routes', () => {
   assert.equal(site.events()[2][2].page_location, 'https://scaledcircle.com/pricing?utm_source=facebook');
 });
 
-test('revoking consent clears GA cookies and reloads without further events', () => {
+test('revoking consent disables collection and preserves the current page', () => {
   const site = harness({ storedChoice: 'granted', cookieText: '_ga=visitor; _ga_9VY50190LG=session; session=needed' });
   assert.equal(site.scriptLoads(), 1);
   site.elements.get('sc-analytics-settings').click();
   site.elements.get('sc-analytics-choice').querySelector('.sc-decline').click();
   assert.equal(site.store.get(choiceKey), 'denied');
-  assert.equal(site.reloads(), 1);
+  assert.equal(site.reloads(), 0);
+  assert.equal(site.context['ga-disable-G-9VY50190LG'], true);
   assert.ok(site.cookies.some((entry) => entry.startsWith('_ga=; Max-Age=0;')));
   assert.ok(site.cookies.some((entry) => entry.startsWith('_ga_9VY50190LG=; Max-Age=0;')));
   assert.ok(!site.cookies.some((entry) => entry.startsWith('session=')));
@@ -123,6 +124,29 @@ test('revoking consent clears GA cookies and reloads without further events', ()
   assert.equal(site.events().length, 1);
   const subsequentLoad = harness({ storedChoice: 'denied' });
   assert.equal(subsequentLoad.scriptLoads(), 0);
+});
+
+test('consent can be restored without loading a second tag or refreshing', () => {
+  const site = harness({ storedChoice: 'granted' });
+  const panel = site.elements.get('sc-analytics-choice');
+  site.elements.get('sc-analytics-settings').click();
+  panel.querySelector('.sc-decline').click();
+  site.elements.get('sc-analytics-settings').click();
+  panel.querySelector('.sc-allow').click();
+  assert.equal(site.context['ga-disable-G-9VY50190LG'], false);
+  assert.equal(site.scriptLoads(), 1);
+  assert.equal(site.reloads(), 0);
+  assert.equal(site.events().length, 2);
+});
+
+test('revocation in another tab disables collection without interrupting work', () => {
+  const site = harness({ storedChoice: 'granted' });
+  site.listeners.get('storage')({ key: choiceKey, newValue: 'denied' });
+  site.context.history.pushState(null, '', '#/pricing');
+  site.flush();
+  assert.equal(site.context['ga-disable-G-9VY50190LG'], true);
+  assert.equal(site.events().length, 1);
+  assert.equal(site.reloads(), 0);
 });
 
 test('staging and alternate hosting origins do not load analytics UI or tag', () => {

@@ -10,6 +10,7 @@
   // The production web stream from firebase_options.dart. Confirm it matches
   // the intended GA4 property before deploying this candidate.
   const measurementId = "G-9VY50190LG";
+  const disableKey = "ga-disable-" + measurementId;
   const choiceKey = "scaledcircle.analytics.choice.v1";
   const publicTitles = {
     "/": "Home", "/i": "Explore", "/businesses": "For businesses",
@@ -23,6 +24,8 @@
   const campaignKeys = ["utm_source", "utm_medium", "utm_campaign", "utm_content", "utm_term"];
   let choice;
   try { choice = localStorage.getItem(choiceKey); } catch (_) { choice = null; }
+  let choiceOpen = choice !== "granted" && choice !== "denied";
+  window[disableKey] = choice !== "granted";
   let tagStarted = false;
   let lastPath = null;
   let lastLocation = null;
@@ -122,16 +125,27 @@
     }
   }
 
-  function setChoice(value) {
-    const wasStarted = tagStarted;
+  function setChoice(value, persist = true) {
+    const wasGranted = choice === "granted";
     choice = value;
-    try { localStorage.setItem(choiceKey, value); } catch (_) { /* session-only choice */ }
-    if (value === "granted") startTag();
-    else if (wasStarted) {
-      gtag("consent", "update", { analytics_storage: "denied" });
+    choiceOpen = value !== "granted" && value !== "denied";
+    if (persist) {
+      try { localStorage.setItem(choiceKey, value); } catch (_) { /* session-only choice */ }
+    }
+    window[disableKey] = value !== "granted";
+    if (value === "granted") {
+      if (!tagStarted) startTag();
+      else if (!wasGranted) {
+        gtag("consent", "update", { analytics_storage: "granted" });
+        pageView();
+      }
+    } else {
+      // Google's disable flag stops collection, including automatically
+      // generated events, without reloading or losing the visitor's work.
+      if (tagStarted) gtag("consent", "update", { analytics_storage: "denied" });
       clearAnalyticsCookies();
-      location.reload(); // Remove the loaded tag before any further navigation.
-      return;
+      lastPath = null;
+      lastLocation = null;
     }
     renderChoice();
   }
@@ -140,7 +154,7 @@
     const panel = document.getElementById("sc-analytics-choice");
     const settings = document.getElementById("sc-analytics-settings");
     if (!panel || !settings) return;
-    panel.hidden = choice === "granted" || choice === "denied";
+    panel.hidden = !choiceOpen;
     settings.hidden = !panel.hidden;
     settings.setAttribute("aria-label", "Analytics settings; currently " +
       (choice === "granted" ? "allowed" : choice === "denied" ? "declined" : "unset"));
@@ -151,9 +165,8 @@
     panel.id = "sc-analytics-choice";
     panel.setAttribute("aria-label", "Optional website analytics");
     panel.innerHTML = '<strong>Optional website analytics</strong>' +
-      '<p>Allow Google Analytics to help us understand visits and which links bring people here. ' +
-      'We do not send account details, form entries, or work locations. ' +
-      'You can change your choice any time. <a href="/#/privacy">Privacy Policy</a></p>' +
+      '<p>Analytics cookies help us count visits and understand where visitors come from. ' +
+      '<a href="/#/privacy">Privacy Policy</a></p>' +
       '<div class="sc-actions"><button type="button" class="sc-allow">Allow analytics</button>' +
       '<button type="button" class="sc-decline">Decline</button></div>';
     const settings = document.createElement("button");
@@ -164,7 +177,7 @@
     document.body.appendChild(settings);
     panel.querySelector(".sc-allow").addEventListener("click", function () { setChoice("granted"); });
     panel.querySelector(".sc-decline").addEventListener("click", function () { setChoice("denied"); });
-    settings.addEventListener("click", function () { choice = null; renderChoice(); });
+    settings.addEventListener("click", function () { choiceOpen = true; renderChoice(); });
     renderChoice();
     if (choice === "granted") startTag();
 
@@ -179,9 +192,8 @@
       };
     }
     window.addEventListener("storage", function (event) {
-      if (event.key !== choiceKey) return;
-      if (tagStarted && event.newValue !== "granted") location.reload();
-      else { choice = event.newValue; renderChoice(); if (choice === "granted") startTag(); }
+      if (event.key !== choiceKey && event.key !== null) return;
+      setChoice(event.key === null ? null : event.newValue, false);
     });
   }
 

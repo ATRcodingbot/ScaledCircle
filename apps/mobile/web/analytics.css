@@ -11,8 +11,10 @@
   left: 16px;
   right: 16px;
   bottom: 16px;
-  max-width: 630px;
-  padding: 18px 20px;
+  max-width: 460px;
+  max-height: calc(100dvh - 32px);
+  overflow: auto;
+  padding: 14px 16px;
   border: 1px solid #427d96;
   border-radius: 14px;
   background: #092739;
