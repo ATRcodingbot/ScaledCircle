@@ -4,12 +4,16 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import '../models/campaign_area_geometry.dart';
 import '../services/business_workspace_service.dart';
-import 'smart_zone_recommendation_evidence.dart';
 
 bool zoneEvidenceMatches(Map? data, dynamic geometry) =>
     data?['version'] == 'ZoneIntelligenceV1' &&
     data?['geometryDigest'] != null &&
     data?['geometryDigest'] == CampaignAreaGeometry.savedDigest(geometry);
+
+String _fieldWorkload(num minutes) {
+  final total = minutes.round();
+  return total >= 60 ? '${total ~/ 60} hr ${total % 60} min' : '$total min';
+}
 
 class ZoneIntelligenceSummary extends StatelessWidget {
   const ZoneIntelligenceSummary({
@@ -49,8 +53,8 @@ class ZoneIntelligenceSummary extends StatelessWidget {
       children: [
         Text(
           data['mode'] == 'recommended'
-              ? 'Why ScaledCircle recommended this area'
-              : 'What we found inside your area',
+              ? 'Why ScaledCircle recommends this area'
+              : 'What we found in this area',
           style: Theme.of(context).textTheme.titleMedium,
         ),
         const SizedBox(height: 8),
@@ -84,7 +88,7 @@ class ZoneIntelligenceSummary extends StatelessWidget {
         ),
         Text(
           workload?['minutes'] is num
-              ? 'Estimated field workload: ~${advisoryWorkload(workload!['minutes'] as num)}'
+              ? 'Estimated field workload: ~${_fieldWorkload(workload!['minutes'] as num)}'
               : 'Estimated field workload: not established',
         ),
         if (workload != null)

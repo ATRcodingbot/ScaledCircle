@@ -39,8 +39,8 @@ is unavailable, not zero. No new PI ranking/AI system is created.
   evidence is revalidated rather than assumed permanently fresh.
 - `View property evidence` expands source dates, uncertainty, contextual facts
   and assumptions. Primary UI has no JSON/provider error dump.
-- Recommended heading: “Why ScaledCircle recommended this area.” Manual heading:
-  “What we found inside your area.” Both keep “Execution route not yet verified.”
+- Recommended heading: “Why ScaledCircle recommends this area.” Manual heading:
+  “What we found in this area.” Both keep “Execution route not yet verified.”
 - New `getCampaignZoneIntelligence` callable uses maintained workspace/campaign
   authorization, requiring Business campaign permission. No Scale, Intelligence,
   funding, assignment or payment permission is required for factual preview.

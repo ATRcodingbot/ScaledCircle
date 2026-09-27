@@ -88,7 +88,7 @@ void main() {
       await t.pumpWidget(
         page(ZoneIntelligenceSummary(data: evidence(), geometry: area)),
       );
-      expect(find.text('What we found inside your area'), findsOneWidget);
+      expect(find.text('What we found in this area'), findsOneWidget);
       expect(find.text('11 mapped residential targets'), findsOneWidget);
       expect(find.text('Detached: 7'), findsOneWidget);
       expect(find.textContaining('7 of 11'), findsOneWidget);
@@ -97,7 +97,7 @@ void main() {
         findsOneWidget,
       );
       expect(find.textContaining('~620 m / 0.39 mi'), findsOneWidget);
-      expect(find.text('Estimated field workload: ~32m'), findsOneWidget);
+      expect(find.text('Estimated field workload: ~32 min'), findsOneWidget);
       expect(find.text('One-Scaler planning estimate'), findsOneWidget);
       expect(find.text('Execution route not yet verified'), findsOneWidget);
       expect(find.text('View property evidence'), findsOneWidget);
@@ -165,7 +165,7 @@ void main() {
       await t.pumpWidget(page(SmartZoneRecommendationEvidence(plan: plan)));
       expect(find.text('11 mapped residential targets'), findsOneWidget);
       expect(
-        find.text('Why ScaledCircle recommended this area'),
+        find.text('Why ScaledCircle recommends this area'),
         findsOneWidget,
       );
       await t.pumpWidget(
@@ -289,7 +289,7 @@ void main() {
       await t.pumpWidget(
         page(ZoneIntelligenceSummary(data: data, geometry: area)),
       );
-      expect(find.textContaining('~7h 0m'), findsOneWidget);
+      expect(find.textContaining('~7 hr 0 min'), findsOneWidget);
       expect(find.textContaining('Exceeds the six-hour'), findsOneWidget);
       expect(find.text('Execution route not yet verified'), findsOneWidget);
     },
