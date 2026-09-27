@@ -1,8 +1,10 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -12,6 +14,39 @@ import 'package:flutter_app/models/campaign_area_geometry.dart';
 import 'package:flutter_app/theme/app_theme.dart';
 import 'package:flutter_app/screens/business/campaign_area_screen.dart';
 import 'campaign_mapping_interaction_test.dart' as h;
+
+// Test-only saved snapshot; no Firebase connection or production writes.
+// ignore: subtype_of_sealed_class
+class _ZoneSnapshot extends Fake
+    implements DocumentSnapshot<Map<String, dynamic>> {
+  _ZoneSnapshot(this.value);
+  final Map<String, dynamic> value;
+  @override
+  bool get exists => true;
+  @override
+  Map<String, dynamic> data() => jsonDecode(jsonEncode(value));
+}
+
+// Actual saved-Zone load path. All calls except its read fail via the existing
+// persistence sentinel; no mocked update can quietly make this test pass.
+// ignore: subtype_of_sealed_class, must_be_immutable
+class _ExistingZone extends h.DraftReference {
+  int reads = 0;
+  final value = <String, dynamic>{
+    'zoneName': 'Saved fixture Zone',
+    'campaignId': 'fixture-campaign',
+    'serviceAreaType': 'polygon',
+    'serviceArea': h.glenBurnie.geometry,
+    'status': 'unassigned',
+  };
+  @override
+  Future<DocumentSnapshot<Map<String, dynamic>>> get([
+    GetOptions? options,
+  ]) async {
+    reads++;
+    return _ZoneSnapshot(value);
+  }
+}
 
 bool usable(WidgetTester t) =>
     t
@@ -78,6 +113,158 @@ void main() {
       await loader.load();
     }
   });
+  for (final narrow in [false, true]) {
+    for (final undoFirst in [false, true]) {
+      testWidgets(
+        'saved Zone Clear ${undoFirst ? 'Undo Clear ' : ''}-> reachable Draw Area '
+        '-> replacement -> Cancel/reopen (${narrow ? '390px 2x' : 'desktop'})',
+        (t) async {
+          final size = narrow ? const Size(390, 844) : const Size(1100, 900);
+          await t.binding.setSurfaceSize(size);
+          addTearDown(() => t.binding.setSurfaceSize(null));
+          final reference = _ExistingZone();
+          final savedBefore = jsonEncode(reference.value);
+          final requested = <Map<String, dynamic>>[];
+          final responses = <Completer<Map<String, dynamic>>>[];
+          Map<String, dynamic> evidence(int i, int count) => {
+            'version': 'ZoneIntelligenceV1',
+            'geometryDigest': CampaignAreaGeometry.savedDigest(
+              requested[i]['geometry'],
+            ),
+            'status': 'available',
+            'mappedTargetCount': count,
+            'supportingStreetMeters': count * 10,
+            'workload': {'minutes': count == 7 ? 18 : 24, 'oneScaler': true},
+          };
+          await t.pumpWidget(
+            MaterialApp(
+              theme: AppTheme.darkTheme,
+              builder: (context, child) => MediaQuery(
+                data: MediaQuery.of(
+                  context,
+                ).copyWith(textScaler: TextScaler.linear(narrow ? 2 : 1)),
+                child: child!,
+              ),
+              home: Builder(
+                builder: (context) => Scaffold(
+                  body: TextButton(
+                    onPressed: () => Navigator.push(
+                      context,
+                      MaterialPageRoute<void>(
+                        builder: (_) => CampaignAreaScreen(
+                          campaignReference: reference,
+                          tileProvider: h.MapTiles(),
+                          zoneEvidenceIdentity: () => 'fixture-owner',
+                          zoneEvidenceLoader: (input) {
+                            requested.add(Map<String, dynamic>.from(input));
+                            final response = Completer<Map<String, dynamic>>();
+                            responses.add(response);
+                            return response.future;
+                          },
+                        ),
+                      ),
+                    ),
+                    child: const Text('Open saved fixture'),
+                  ),
+                ),
+              ),
+            ),
+          );
+          await h.choose(t, 'Open saved fixture');
+          await t.pump(const Duration(milliseconds: 600));
+          responses.last.complete(evidence(0, 10));
+          await t.pump();
+          final editor = t.state(find.byType(CampaignAreaScreen));
+          final original = List<LatLng>.of(h.boundary(t));
+          final originalDigest = CampaignAreaGeometry.savedDigest(
+            h.glenBurnie.geometry,
+          );
+          expect(find.text('10 mapped residential targets'), findsOneWidget);
+          await h.choose(t, 'Clear');
+          if (undoFirst) {
+            await h.choose(t, 'Undo');
+            expect(h.boundary(t), original);
+            await t.pump(const Duration(milliseconds: 600));
+            // Leave this original-boundary request outstanding through redraw.
+            await h.choose(t, 'Clear');
+          }
+          expect(
+            t.widget<PolygonLayer>(find.byType(PolygonLayer)).polygons,
+            isEmpty,
+          );
+          expect(find.text('10 mapped residential targets'), findsNothing);
+          expect(usable(t), false);
+          // Deliberately no ensureVisible/scroll-to-toolbar before this assertion
+          // or tap: that helper masked the production empty-state lockout.
+          expect(find.text('Draw Area').hitTestable(), findsOneWidget);
+          expect(
+            t
+                .widget<FilledButton>(
+                  find.widgetWithText(FilledButton, 'Draw Area'),
+                )
+                .onPressed,
+            isNotNull,
+          );
+          await t.tap(find.text('Draw Area'));
+          await t.pump();
+          await t.pump(const Duration(milliseconds: 50));
+          expect(find.text('Cancel drawing').hitTestable(), findsOneWidget);
+          expect(find.text('Replace Saved fixture Zone'), findsNothing);
+          final map = t.getRect(find.byType(FlutterMap));
+          final attribution = t.getRect(
+            find.byKey(const Key('osm-copyright-link')),
+          );
+          expect(map.top, greaterThanOrEqualTo(0));
+          expect(map.bottom, lessThanOrEqualTo(attribution.top));
+          expect(
+            find.byKey(const Key('osm-copyright-link')).hitTestable(),
+            findsOneWidget,
+          );
+          await h.trace(t, valid(map.center));
+          await t.pump(const Duration(milliseconds: 600));
+          expect(t.state(find.byType(CampaignAreaScreen)), same(editor));
+          expect(usable(t), true);
+          expect(find.text('Use This Area').hitTestable(), findsOneWidget);
+          expect(find.text('Edit Boundary').hitTestable(), findsOneWidget);
+          expect(h.boundary(t), isNot(original));
+          expect(
+            CampaignAreaGeometry.savedDigest(requested.last['geometry']),
+            isNot(originalDigest),
+          );
+          expect(find.text('10 mapped residential targets'), findsNothing);
+          if (undoFirst) {
+            responses[1].complete(evidence(1, 99));
+            await t.pump();
+            expect(find.text('99 mapped residential targets'), findsNothing);
+          }
+          responses.last.complete(evidence(responses.length - 1, 7));
+          await t.pump();
+          expect(find.text('7 mapped residential targets'), findsOneWidget);
+          expect(find.text('~18 min'), findsOneWidget);
+          expect(reference.calls, 0);
+          expect(jsonEncode(reference.value), savedBefore);
+          await h.choose(t, 'Cancel');
+          await t.pump(const Duration(milliseconds: 400));
+          await h.choose(t, 'Open saved fixture');
+          await t.pump(const Duration(milliseconds: 600));
+          expect(
+            CampaignAreaGeometry.savedDigest(requested.last['geometry']),
+            originalDigest,
+          );
+          responses.last.complete(evidence(responses.length - 1, 10));
+          await t.pump();
+          expect(h.boundary(t), original);
+          expect(find.text('10 mapped residential targets'), findsOneWidget);
+          expect(find.text('~24 min'), findsOneWidget);
+          expect(reference.reads, 2);
+          expect(reference.calls, 0);
+          expect(jsonEncode(reference.value), savedBefore);
+          expect(t.takeException(), isNull);
+          await t.pumpWidget(const SizedBox());
+        },
+      );
+    }
+  }
   for (final kind in [ui.PointerDeviceKind.mouse, ui.PointerDeviceKind.touch]) {
     testWidgets(
       '$kind repeated rejection -> visible Draw Again -> valid stroke, no writes',
@@ -345,12 +532,18 @@ void main() {
               ).copyWith(textScaler: TextScaler.linear(2)),
               child: child!,
             ),
-            home: h.draft(reference),
+            home: h.draft(reference, initialArea: h.glenBurnie.geometry),
           ),
         ),
       );
       await t.pump();
-      await h.choose(t, 'Draw Area');
+      await h.choose(t, 'Clear');
+      expect(find.text('Draw Area').hitTestable(), findsOneWidget);
+      expect(usable(t), false);
+      await render(t, key, 'freehand-clear-draw-area-narrow-2x');
+      await t.tap(find.text('Draw Area'));
+      await t.pump();
+      await t.pump(const Duration(milliseconds: 50));
       await h.trace(
         t,
         crossing(h.mapCenter(t)),

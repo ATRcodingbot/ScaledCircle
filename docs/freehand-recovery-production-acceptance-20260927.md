@@ -27,6 +27,14 @@ Both Zones are unassigned. Two saved geometry parts remain. There are no campaig
 
 ## Browser observations
 
+**Subsequent Founder observation: Clear → new drawing: FAIL.** After Clear,
+the map instruction pointed to Draw Area while that action remained above the
+usable viewport. This does not invalidate the separately observed Clear → Undo
+success, and that success does not close this defect. The correction is documented
+in [the empty-boundary review candidate](freehand-empty-boundary-review-20260927.md)
+and is held for web deployment approval. No new physical retest is requested
+until the corrected production client is available.
+
 The existing production tab was refreshed without clearing authentication/session/local data. Its loaded script element points to the verified public `main.dart.js`. The reviewed client is demonstrably active: **Clear leaves Undo enabled**, whereas the previous implementation disabled Undo on an empty local preview. Clear removed the local boundary and facts, and Undo restored the original boundary and matching 10-target / 403 m / 24-minute facts. Cancel left the editor; reopening Zone 1 restored the same boundary and facts.
 
 These were browser actions against the production client. They do not prove valid-redraw intelligence invalidation: the only tool-driven straight drag produced no observable stroke or validation event. It must not be recorded as a rejected drawing, a successful recovery, a replay of the Founder's unretained stroke, or physical-device evidence.
@@ -39,6 +47,7 @@ Production browser captures: [local Clear](qa-artifacts/freehand-production-clea
 | --- | --- |
 | Served package and updated browser client | Verified |
 | Local Clear → Undo | Verified in browser |
+| Clear → begin a replacement drawing | Founder-observed FAIL; correction pending deployment approval |
 | Cancel/reopen original boundary and facts after local Clear/Undo | Verified in browser |
 | Saved campaign/Zone/payment/compensation preservation | Full document comparison unchanged |
 | Repairable overlap/overshoot → corrected unsaved preview | Founder physical observation pending |

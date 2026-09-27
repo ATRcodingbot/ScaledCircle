@@ -91,6 +91,7 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
   late final MapController _mapController =
       widget.mapController ?? MapController();
   final GlobalKey _mapViewportKey = GlobalKey();
+  final GlobalKey _mapFrameKey = GlobalKey();
 
   final List<LatLng> _inputPoints = [];
 
@@ -713,7 +714,7 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
       _loadingPropertyIntelligence = false;
     });
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      final mapContext = _mapViewportKey.currentContext;
+      final mapContext = _mapFrameKey.currentContext;
       if (mounted && _drawingFreehand && mapContext != null) {
         Scrollable.ensureVisible(mapContext, alignment: .1);
       }
@@ -1483,6 +1484,84 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
     }
   }
 
+  Widget _areaActions() {
+    final label = _drawingFreehand
+        ? 'Cancel drawing'
+        : _freehandError != null
+        ? 'Draw Again'
+        : _generatedArea.isEmpty
+        ? 'Draw Area'
+        : 'Edit Boundary';
+    final busy = _saving || _recommending || _loadingExistingArea;
+    return SafeArea(
+      top: false,
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (_freehandError != null && !_drawingFreehand) ...[
+              Semantics(liveRegion: true, child: Text(_freehandError!)),
+              const SizedBox(height: 8),
+            ],
+            Wrap(
+              spacing: 12,
+              runSpacing: 8,
+              alignment: WrapAlignment.center,
+              children: [
+                FilledButton.icon(
+                  key: _freehandError != null && !_drawingFreehand
+                      ? const Key('freehand-draw-again')
+                      : const Key('freehand-boundary-action'),
+                  onPressed: busy || _mappingLocked
+                      ? null
+                      : _drawingFreehand
+                      ? _cancelFreehand
+                      : () => _beginFreehand(retry: _freehandError != null),
+                  icon: Icon(
+                    _drawingFreehand ? Icons.close : Icons.draw_outlined,
+                  ),
+                  label: Text(label),
+                ),
+                TextButton(
+                  key: const Key('freehand-recovery-cancel'),
+                  onPressed: busy ? null : () => Navigator.pop(context, false),
+                  child: const Text('Cancel'),
+                ),
+                ConstrainedBox(
+                  constraints: const BoxConstraints(minHeight: 55),
+                  child: ElevatedButton.icon(
+                    onPressed:
+                        busy ||
+                            _mappingLocked ||
+                            _drawingFreehand ||
+                            !_isAreaValid()
+                        ? null
+                        : _saveArea,
+                    icon: _saving
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.save),
+                    label: Text(
+                      _saving
+                          ? 'Saving Target...'
+                          : _advancedDrawing
+                          ? 'Save Zone'
+                          : 'Use This Area',
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   String _instructionText() {
     if (!_advancedDrawing) {
       if (_drawingFreehand) {
@@ -1635,66 +1714,26 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
     final metrics = _calculateZoneMetrics();
 
     return Scaffold(
-      // Recovery remains reachable even when entering Draw mode scrolled the
-      // toolbar above the map. Wrap and intrinsic height preserve large text.
-      bottomNavigationBar: _freehandError != null && !_drawingFreehand
-          ? SafeArea(
-              child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Semantics(liveRegion: true, child: Text(_freehandError!)),
-                    const SizedBox(height: 8),
-                    Wrap(
-                      spacing: 12,
-                      runSpacing: 8,
-                      children: [
-                        FilledButton.icon(
-                          key: const Key('freehand-draw-again'),
-                          onPressed: _saving || _mappingLocked
-                              ? null
-                              : () => _beginFreehand(retry: true),
-                          icon: const Icon(Icons.draw_outlined),
-                          label: const Text('Draw Again'),
-                        ),
-                        TextButton(
-                          key: const Key('freehand-recovery-cancel'),
-                          onPressed: _saving
-                              ? null
-                              : () => Navigator.pop(context, false),
-                          child: const Text('Cancel'),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            )
-          : null,
+      // One persistent action surface serves every boundary state. Clear must
+      // never leave its Draw action in an offscreen toolbar. Scaffold reserves
+      // space for this footer; it does not overlay the map or its attribution.
+      bottomNavigationBar: _areaActions(),
       appBar: AuthenticatedAppBar(
         title: Text(_mappingLocked ? 'Campaign Area (Locked)' : 'Choose area'),
         centerTitle: true,
-        bottom: _drawingFreehand
-            ? PreferredSize(
-                preferredSize: const Size.fromHeight(56),
-                child: SizedBox(
-                  height: 56,
-                  child: TextButton.icon(
-                    onPressed: _cancelFreehand,
-                    icon: const Icon(Icons.close),
-                    label: const Text('Cancel drawing'),
-                  ),
-                ),
-              )
-            : null,
       ),
       body: LayoutBuilder(
         builder: (context, viewport) {
           final desktop = viewport.maxWidth >= 760;
-          final mapHeight = desktop
+          final preferredMapHeight = desktop
               ? (viewport.maxHeight * 0.64).clamp(520.0, 760.0)
               : (viewport.maxHeight * 0.56).clamp(360.0, 560.0);
+          // Large-text controls consume their real height. Fit the map frame,
+          // including its attribution, in the remaining scroll viewport.
+          final mapHeight = math.min(
+            preferredMapHeight,
+            math.max(160.0, viewport.maxHeight - 16),
+          );
           return SingleChildScrollView(
             key: const Key('campaign-area-scroll'),
             physics: _drawingFreehand
@@ -1730,17 +1769,6 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
                         ),
                         label: Text(
                           _drawingFreehand ? 'Draw mode' : 'Browse Map',
-                        ),
-                      ),
-                      FilledButton.icon(
-                        onPressed: _mappingLocked || _saving || _drawingFreehand
-                            ? null
-                            : _beginFreehand,
-                        icon: const Icon(Icons.draw_outlined),
-                        label: Text(
-                          _generatedArea.isEmpty
-                              ? 'Draw Area'
-                              : 'Edit Boundary',
                         ),
                       ),
                     ],
@@ -1903,6 +1931,7 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
                   key: const Key('campaign-zone-map-workspace'),
                   height: mapHeight,
                   child: MapAttributionFrame(
+                    key: _mapFrameKey,
                     child: Listener(
                       key: const Key('freehand-map-input'),
                       onPointerDown: (event) =>
@@ -2114,16 +2143,6 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
                         const SizedBox(height: 10),
                       ],
 
-                      SizedBox(
-                        width: double.infinity,
-                        child: TextButton(
-                          onPressed: _saving || _recommending
-                              ? null
-                              : () => Navigator.pop(context, false),
-                          child: const Text('Cancel'),
-                        ),
-                      ),
-
                       if (_advancedDrawing)
                         Text(
                           '${_shapeLabel(_selectedShape)} • '
@@ -2132,37 +2151,6 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
                         ),
 
                       const SizedBox(height: 10),
-
-                      Container(
-                        width: double.infinity,
-                        constraints: const BoxConstraints(minHeight: 55),
-                        child: ElevatedButton.icon(
-                          onPressed:
-                              _saving ||
-                                  _recommending ||
-                                  _mappingLocked ||
-                                  _drawingFreehand ||
-                                  !_isAreaValid()
-                              ? null
-                              : _saveArea,
-                          icon: _saving
-                              ? const SizedBox(
-                                  width: 20,
-                                  height: 20,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                  ),
-                                )
-                              : const Icon(Icons.save),
-                          label: Text(
-                            _saving
-                                ? 'Saving Target...'
-                                : _advancedDrawing
-                                ? 'Save Zone'
-                                : 'Use This Area',
-                          ),
-                        ),
-                      ),
                     ],
                   ),
                 ),

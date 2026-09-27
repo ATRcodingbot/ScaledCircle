@@ -355,7 +355,10 @@ void main() {
       await choose(t, 'Draw Area');
       expect(find.text('Cancel drawing').hitTestable(), findsOneWidget);
       final map = t.getRect(find.byType(FlutterMap));
-      expect(map.top, greaterThanOrEqualTo(112));
+      expect(
+        map.top,
+        greaterThanOrEqualTo(t.getRect(find.byType(AppBar)).bottom),
+      );
       expect(map.bottom, lessThanOrEqualTo(844));
       final center = map.center;
       await trace(t, [
@@ -455,7 +458,7 @@ void main() {
       await t.pump();
       expect(find.textContaining('one finger at a time'), findsOneWidget);
       expect(boundary(t), original);
-      await choose(t, 'Edit Boundary');
+      await choose(t, 'Draw Again');
       center = mapCenter(t);
       final outside = await t.startGesture(center);
       await outside.moveTo(
@@ -645,7 +648,7 @@ void main() {
       ]);
       expect(find.textContaining('make a clear area'), findsOneWidget);
       expect(boundary(t), before);
-      await choose(t, 'Edit Boundary');
+      await choose(t, 'Draw Again');
       final gesture = await t.startGesture(mapCenter(t));
       await gesture.moveBy(const Offset(50, 30));
       await gesture.cancel();
