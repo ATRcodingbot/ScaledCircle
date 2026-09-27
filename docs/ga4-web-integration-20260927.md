@@ -1,5 +1,10 @@
 # ScaledCircle GA4 web integration candidate — September 27, 2026
 
+**Deployment update:** Integrated onto the newer production web branch and released
+to Hosting on September 27, 2026. Actual GA4 Realtime receipt and live opt-out
+verification passed. See [production deployment evidence](ga4-production-deployment-20260927.md).
+The candidate notes below retain the original implementation and predeployment context.
+
 ## Scope and evidence
 
 - Production Firebase web options contain measurement ID `G-9VY50190LG`.
