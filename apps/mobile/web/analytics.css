@@ -1,56 +1,26 @@
-#sc-analytics-choice,
-#sc-analytics-settings {
-  box-sizing: border-box;
-  font: 14px/1.5 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  color: #f4f9fc;
+:root {
+  color-scheme: light;
+  font: 16px/1.6 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  color: #24384b;
+  background: #f7fafc;
 }
-
-#sc-analytics-choice {
-  position: fixed;
-  z-index: 2147483646;
-  left: 16px;
-  right: 16px;
-  bottom: 16px;
-  max-width: 460px;
-  max-height: calc(100dvh - 32px);
-  overflow: auto;
-  padding: 14px 16px;
-  border: 1px solid #427d96;
-  border-radius: 14px;
-  background: #092739;
-  box-shadow: 0 12px 36px #00101888;
-}
-
-#sc-analytics-choice strong { font-size: 16px; }
-#sc-analytics-choice p { margin: 8px 0 14px; }
-#sc-analytics-choice a { color: #a9eada; }
-#sc-analytics-choice .sc-actions { display: flex; flex-wrap: wrap; gap: 10px; }
-#sc-analytics-choice button,
-#sc-analytics-settings {
+* { box-sizing: border-box; }
+body { margin: 0; }
+main { max-width: 680px; margin: 0 auto; padding: 40px 24px; }
+h1 { color: #092739; line-height: 1.2; font-size: 2rem; margin: 32px 0 20px; }
+a { color: #0a58ca; }
+.brand { color: #092739; font-weight: 800; font-size: 1.3rem; text-decoration: none; }
+.sc-actions { display: flex; flex-wrap: wrap; gap: 12px; margin: 20px 0; }
+button {
   cursor: pointer;
-  border: 1px solid #9ed9d2;
-  border-radius: 8px;
-  padding: 9px 14px;
-  background: transparent;
-  color: #f4f9fc;
+  font: inherit;
   font-weight: 600;
+  border: 1px solid #427d96;
+  border-radius: 8px;
+  padding: 10px 16px;
+  background: #fff;
+  color: #092739;
 }
-#sc-analytics-choice button.sc-allow { background: #a9eada; color: #092739; }
-#sc-analytics-choice button:focus-visible,
-#sc-analytics-settings:focus-visible,
-#sc-analytics-choice a:focus-visible { outline: 3px solid #fff; outline-offset: 3px; }
-
-#sc-analytics-settings {
-  position: fixed;
-  z-index: 2147483645;
-  left: 12px;
-  bottom: 12px;
-  padding: 6px 10px;
-  border-color: #427d96;
-  background: #092739;
-  font-size: 12px;
-}
-
-@media (max-width: 480px) {
-  #sc-analytics-choice { left: 8px; right: 8px; bottom: 8px; padding: 14px; }
-}
+button:disabled { cursor: default; opacity: 0.55; }
+button:focus-visible, a:focus-visible { outline: 3px solid #0a58ca; outline-offset: 4px; }
+#sc-analytics-status { padding: 16px; border-radius: 8px; background: #e7f1f5; }
