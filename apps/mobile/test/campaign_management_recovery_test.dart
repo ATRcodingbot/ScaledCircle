@@ -14,6 +14,7 @@ void main() {
   late CampaignRefreshFirebase backend;
   late AppRouterDelegate router;
   Future<Object?> Function(Map<String, dynamic>)? mutate;
+  FirebaseException? loadError;
   setUp(() async {
     backend = CampaignRefreshFirebase();
     await backend.install();
@@ -31,6 +32,7 @@ void main() {
       'bonus': 0,
     };
     mutate = null;
+    loadError = null;
     backend.onCall = (name, data) async {
       if (name == 'businessOperationsV1') {
         expect(data['businessId'], 'workspace');
@@ -69,8 +71,9 @@ void main() {
             workspaceId: 'workspace',
             isAdmin: false,
             fallbackRoute: '/business',
-            load: () =>
-                FirebaseFirestore.instance.doc('campaigns/fixture').get(),
+            load: () => loadError == null
+                ? FirebaseFirestore.instance.doc('campaigns/fixture').get()
+                : Future.error(loadError!),
             builder: (doc) => CampaignDetailsScreen(campaign: doc),
           );
         },
@@ -218,4 +221,26 @@ void main() {
     expect(backend.calls, isEmpty);
     await tester.pumpWidget(const SizedBox());
   });
+  for (final code in ['permission-denied', 'not-found', 'unavailable']) {
+    testWidgets('read $code recovers without exposing another workspace', (
+      tester,
+    ) async {
+      loadError = FirebaseException(plugin: 'cloud_firestore', code: code);
+      await open(tester);
+      expect(
+        find.text(
+          code == 'unavailable'
+              ? 'Campaign temporarily unavailable'
+              : 'Campaign no longer available',
+        ),
+        findsOneWidget,
+      );
+      await tester.tap(find.text('Return to Campaigns'));
+      await tester.pumpAndSettle();
+      expect(find.text('Workspace campaign list'), findsOneWidget);
+      expect(backend.writes, isEmpty);
+      expect(backend.calls, isEmpty);
+      await tester.pumpWidget(const SizedBox());
+    });
+  }
 }

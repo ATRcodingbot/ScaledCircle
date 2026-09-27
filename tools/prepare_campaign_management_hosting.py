@@ -3,14 +3,14 @@ import argparse
 import urllib.request
 import prepare_mapping_21061_hosting as base
 
-base.STATE = base.ROOT / '.firebase/campaign-management/hosting-final'
-base.BASE_STATE = base.ROOT / '.firebase/ga4-hosting-20260927'
+base.STATE = base.ROOT / '.firebase/campaign-management/hosting-recovery'
+base.BASE_STATE = base.ROOT / '.firebase/campaign-management/hosting-final'
 base.BASE = base.BASE_STATE / 'public'
 base.PUBLIC = base.STATE / 'public'
-base.CONFIG = base.ROOT / 'firebase.campaign-management-final.private.json'
-base.MAINTAINED = base.BASE_STATE / 'firebase.hosting.private.json'
+base.CONFIG = base.ROOT / 'firebase.campaign-management-recovery.private.json'
+base.MAINTAINED = base.ROOT / 'firebase.campaign-management-final.private.json'
 base.MANIFEST = base.STATE / 'manifest.private.json'
-base.EXPECTED_LIVE = 'sites/scaled-circle/versions/f70910ac1cd42499'
+base.EXPECTED_LIVE = 'sites/scaled-circle/versions/847456b2c6896787'
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
