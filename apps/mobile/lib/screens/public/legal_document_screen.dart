@@ -100,7 +100,7 @@ class LegalDocumentScreen extends StatelessWidget {
                         if (kind != LegalDocumentKind.hub &&
                             kind != LegalDocumentKind.support)
                           Text(
-                            'Last updated: ${kind == LegalDocumentKind.privacy ? 'September 19, 2026' : lastUpdated}',
+                            'Last updated: ${kind == LegalDocumentKind.privacy ? 'September 27, 2026' : lastUpdated}',
                             style: const TextStyle(color: Color(0xFF60758A)),
                           ),
                         const SizedBox(height: 28),
@@ -302,6 +302,20 @@ _Document _document(LegalDocumentKind kind) => switch (kind) {
       _Section('Payments and providers', [
         'Stripe processes Business payment and refund activity and may support later worker-transfer workflows. ScaledCircle stores operational payment identifiers and reconciled payment, refund, earning, and transfer-status records; it does not expose payment-method secrets in the app. Other providers may support email, storage, maps, analytics, hosting, or campaign services.',
       ]),
+      _Section(
+        'Website traffic statistics',
+        [
+          'On scaledcircle.com, we use Google Analytics 4 to understand visitor counts, pages visited, referral sources, campaign links, and approximate geographic areas. Analytics runs during normal browsing unless you turn it off or your browser sends a Global Privacy Control or Do Not Track signal. Analytics cookies help distinguish visits. Advertising personalization and Google signals are disabled by this integration.',
+          'We limit the page addresses sent to Google to named public pages or a general App category. We include only bounded campaign tags from links; we do not intentionally send account identifiers, form entries, checkout tokens, Gmail content, or work locations in analytics events. Google receives browser and device information and your IP address when your browser contacts its service. This website analytics integration does not record your screen, camera, or microphone.',
+          'You can turn website analytics off using Website privacy settings below without losing access to ScaledCircle. The preference is saved in your browser and is separate from account agreements and marketing email. Website analytics are not enabled for local or staging environments by this integration.',
+        ],
+        links: [
+          (
+            'Website privacy settings',
+            'https://scaledcircle.com/analytics-settings.html',
+          ),
+        ],
+      ),
       _Section('Connected Google Business Email', [
         'Owners may explicitly authorize future Inbox monitoring, selected-label intake, or existing-conversation monitoring. Inbox monitoring excludes archived-only mail, Sent, Spam, Trash and attachments. No automatic historical Inbox backfill occurs. Bounded non-model screening skips automated or unrelated mail and retains relevant inquiry/conversation context rather than a general mailbox copy. Monitoring does not authorize sending, external-model processing or appointment booking. Existing narrower coverage remains unchanged until the owner authorizes a change.',
         'When you connect Google Business Email, ScaledCircle uses your Google account identifier and email address to identify the authorized mailbox. With Read permission, we read relevant conversations, including participants, subjects, message text, dates, and message identifiers, to show inquiries and replies, review historical contact context and opt-out requests, and reconcile approved outreach. Relevant conversation excerpts, replies, contact records, and campaign records are stored in your Business workspace.',

@@ -1,0 +1,26 @@
+:root {
+  color-scheme: light;
+  font: 16px/1.6 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  color: #24384b;
+  background: #f7fafc;
+}
+* { box-sizing: border-box; }
+body { margin: 0; }
+main { max-width: 680px; margin: 0 auto; padding: 40px 24px; }
+h1 { color: #092739; line-height: 1.2; font-size: 2rem; margin: 32px 0 20px; }
+a { color: #0a58ca; }
+.brand { color: #092739; font-weight: 800; font-size: 1.3rem; text-decoration: none; }
+.sc-actions { display: flex; flex-wrap: wrap; gap: 12px; margin: 20px 0; }
+button {
+  cursor: pointer;
+  font: inherit;
+  font-weight: 600;
+  border: 1px solid #427d96;
+  border-radius: 8px;
+  padding: 10px 16px;
+  background: #fff;
+  color: #092739;
+}
+button:disabled { cursor: default; opacity: 0.55; }
+button:focus-visible, a:focus-visible { outline: 3px solid #0a58ca; outline-offset: 4px; }
+#sc-analytics-status { padding: 16px; border-radius: 8px; background: #e7f1f5; }
