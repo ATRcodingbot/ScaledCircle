@@ -20,7 +20,7 @@ for (const e of manifest.entries) test(e.name+' exact package retains deployed f
   if(e.name==='businessOperationsV1') {
     const original=fs.readFileSync(path.join(e.baseline.base,'service.js'),'utf8');
     const next=fs.readFileSync(path.join(e.output,'service.js'),'utf8');
-    assert.equal(next.replace(/^.*if\(\['campaignListActions','changeCampaignListState'\].*\n/m,''),original);
+    assert.equal(next.replace(/^.*if\(\['campaignListActions','changeCampaignListState'\].*\r?\n/m,''),original);
   }
 });
 for(const name of ['stripeWebhook','cancelUnassignedFundedCampaign']) test(name+' actual deployed transition keeps financial reconciliation and closed/completed identity',async()=>{
