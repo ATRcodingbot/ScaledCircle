@@ -74,4 +74,20 @@ function assertComplete(campaign, zones, ErrorType) {
   }
   return result;
 }
-module.exports = {VERSION, hours, requirement, validEvidence, summary, assertComplete};
+// Historical readback is informational only. It never creates workload authority
+// or changes the saved hours, polygons, assignments or approval state.
+function legacySummary(campaign, zones, run) {
+  if (campaign.campaignWorkload || run?.businessId !== campaign.businessId ||
+      run?.campaignId !== campaign.id || run?.status !== 'complete') return summary(campaign, zones);
+  let required;
+  try { required = requirement(run.searchEvidence?.requestedHours); }
+  catch (_) { return summary(campaign, zones); }
+  const facts = summary({...campaign, campaignWorkload: required}, zones);
+  return {...facts, ready: false, legacyAdjustmentRequired: true,
+    requestedWorkloadSource: 'saved_recommendation',
+    reason: `This saved ${required.requestedHours}-hour recommendation has ${zones.length} areas. ` +
+      `The current plan requires ${required.requiredZoneCount} Scaler Zone${required.requiredZoneCount === 1 ? '' : 's'}. ` +
+      (zones.length > required.requiredZoneCount ? 'Choose which area to keep or explicitly revise the requested workload. ' : '') +
+      'Confirm the requested workload before review. Your saved areas remain unchanged.'};
+}
+module.exports = {VERSION, hours, requirement, validEvidence, summary, assertComplete, legacySummary};

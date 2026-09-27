@@ -4913,6 +4913,12 @@ exports.applySmartZonePlan = onCall(
       if (!protectedContracts.empty || !protectedPayments.empty) throw new HttpsError('failed-precondition',
         'A campaign with payment or compensation records cannot replace its planning Zones.');
       const replacingOne = request.data?.replaceZoneIndex != null;
+      if ((currentCampaign.executionMode || 'marketplace') === 'marketplace' &&
+          !currentCampaign.campaignWorkload && existing.size > plan.campaignWorkload.requiredZoneCount) {
+        throw new HttpsError('failed-precondition',
+          `This saved draft has ${existing.size} areas, but ${input.desiredHours} hours requires ${plan.campaignWorkload.requiredZoneCount} Scaler Zone(s). Confirm the requested workload and choose which areas to keep before replacing this plan. Saved areas are unchanged.`,
+          {reason:'LEGACY_ZONE_ADJUSTMENT_REQUIRED'});
+      }
       if(replacingOne && currentCampaign.smartZonePlanId===plan.planId &&
           existing.docs.length===plan.zones.length &&
           plan.selectionIds.every((id,index)=>existing.docs.some(doc=>

@@ -19,7 +19,7 @@ class CampaignWorkloadSummary extends StatelessWidget {
           const SizedBox(height: 8),
           Text(
             state?['requestedHours'] is num
-                ? 'Requested: ${state!['requestedHours']} hours'
+                ? '${state?['requestedWorkloadSource'] == 'saved_recommendation' ? 'Saved recommendation request' : 'Requested'}: ${state!['requestedHours']} hours'
                 : 'Requested workload not set',
           ),
           Text('Required Zones: ${state?['requiredZoneCount'] ?? 'Not set'}'),

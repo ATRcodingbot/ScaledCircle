@@ -41,8 +41,16 @@ function planningDigest(campaign, zones = []) {
 }
 
 function assertPlanningReview(campaign, zones, ErrorType) {
+  // These funding/assignment fields are server-owned. Exemption from a NEW
+  // planning rule is not payment authority: the retained financial handlers
+  // still reconcile the actual payment, allocation and worker obligations.
+  const committed = (typeof campaign.fundingPaymentId === 'string' && campaign.fundingPaymentId.length > 0 &&
+      ['funded', 'refund_pending', 'refund_review_required', 'disputed', 'refunded'].includes(campaign.fundingStatus)) ||
+    zones.some(zone => zone.campaignId && (!campaign.id || zone.campaignId === campaign.id) && zone.businessId === campaign.businessId &&
+      zone.assignedScalerId && ['assigned', 'in_progress', 'completed', 'awaiting_review'].includes(zone.status));
   if (executionMode(campaign) === 'marketplace' && (campaign.status === 'draft' || campaign.campaignWorkload) &&
-      campaign.configurationMode !== 'exact_locations') {
+      campaign.configurationMode !== 'exact_locations' && !committed &&
+      ['', 'draft'].includes(campaign.status || '')) {
     require('./campaign_workload_authority').assertComplete(campaign, zones, ErrorType);
   }
   if (!Object.hasOwn(campaign, "planningSchemaVersion")) return;

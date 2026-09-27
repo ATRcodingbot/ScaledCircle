@@ -12,6 +12,17 @@ const call=(b,operation,input={},uid=b)=>service.execute({auth:uid?{uid}:null,da
 const creation=(extra={})=>({requestId:crypto.randomUUID(),name:'Fixture marketing plan',description:'Synthetic planning only',campaignType:'flyer_distribution',executionMode:'own_team',...extra});
 const create=async(b,extra={})=>(await call(b,'createCampaignPlan',creation(extra))).campaignId;
 const context=(b,c)=>call(b,'campaignPlanningContext',{campaignId:c});
+
+test('legacy multipart context reads saved request with specific adjustment and no draft write',async()=>{
+ const b=await owner(),c=await create(b,{executionMode:'marketplace'}),run='a'.repeat(64);
+ await db.doc('campaigns/'+c).update({smartZoneRecommendationRunId:run,geometryEncoding:'map-parts-v1',geometryParts:[{points:area},{points:area.map(p=>({...p,latitude:p.latitude+.02}))}]});
+ await db.doc(`propertyRecommendationWorkspaces/${b}/mappingRuns/${run}`).set({businessId:b,campaignId:c,status:'complete',actorUid:b,expiresAtMs:now-1,searchEvidence:{requestedHours:5}});
+ for(const i of [1,2])await db.doc(`campaignZones/${c}_${i}`).set({businessId:b,campaignId:c,status:'unassigned',serviceArea:area});
+ const before=(await db.doc('campaigns/'+c).get()).data(),r=await call(b,'campaignWorkloadContext',{campaignId:c});
+ assert.equal(r.ready,false);assert.equal(r.requestedHours,5);assert.equal(r.requiredZoneCount,1);assert.equal(r.zoneCount,2);
+ assert.equal(r.recommendationReviewAvailable,false);assert.match(r.reason,/Choose which area to keep/);
+ assert.deepEqual((await db.doc('campaigns/'+c).get()).data(),before);
+});
 test('Starter/manual workload is server-authoritative, audited and atomically versioned without Scale access',async()=>{
  const b=await owner(),c=await create(b,{executionMode:'marketplace'}),other=await owner();
  const save=(hours,version=0,actor=b)=>call(b,'saveCampaignWorkload',{campaignId:c,requestedHours:hours,expectedWorkloadVersion:version},actor);

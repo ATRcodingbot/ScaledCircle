@@ -70,7 +70,7 @@ function createPlanner({db,FieldValue,authority,now=Date.now}){
     if(op==='campaignWorkloadContext'){
       const run=/^[a-f0-9]{64}$/.test(c.smartZoneRecommendationRunId||'')?
         (await tx.get(db.doc(`propertyRecommendationWorkspaces/${a.businessId}/mappingRuns/${c.smartZoneRecommendationRunId}`))).data():null;
-      return {...workload.summary(c,zones),workloadVersion:c.workloadVersion||0,
+      return {...workload.legacySummary(c,zones,run),workloadVersion:c.workloadVersion||0,
         recommendationReviewAvailable:run?.businessId===a.businessId&&run?.campaignId===c.id&&
           run?.actorUid===a.actorUid&&run?.status==='complete'&&run.expiresAtMs>now()&&
           Array.isArray(c.smartZoneSelectionIds)&&c.smartZoneSelectionIds.length===zones.length};

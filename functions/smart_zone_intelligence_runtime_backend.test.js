@@ -171,3 +171,13 @@ test('Starter and Growth fail before any PI, recommendation cache or live provid
   assert.equal((await db.collection(`propertyRecommendationWorkspaces/${s.businessId}/mappingRuns`).get()).size,0);
  }
 });
+
+test('older client cannot silently replace two legacy areas with a new one-Zone plan',async()=>{
+ const s=await setup();await db.doc('campaigns/'+s.campaignId).update({executionMode:'marketplace'});
+ const plan=await s.api.getSmartZonePlan({data:s.data});
+ for(const id of ['first','second'])await db.doc('campaignZones/'+s.campaignId+'_'+id).set({campaignId:s.campaignId,businessId:s.businessId,status:'unassigned',serviceArea:fixture.selectedBoundary});
+ const before=(await db.doc('campaigns/'+s.campaignId).get()).data();
+ await assert.rejects(s.api.applySmartZonePlan({data:{...s.data,planId:plan.planId}}),e=>e.details?.reason==='LEGACY_ZONE_ADJUSTMENT_REQUIRED');
+ assert.deepEqual((await db.doc('campaigns/'+s.campaignId).get()).data(),before);
+ assert.equal((await db.collection('campaignZones').where('campaignId','==',s.campaignId).get()).size,2);
+});

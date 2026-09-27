@@ -85,3 +85,15 @@ test("funding deployment replacement retains review/mode guards and shared copie
     assert.equal(fs.readFileSync(path.join(__dirname, file), "utf8"), canonical);
   }
 });
+
+test('new workload planning does not repartition paid/accepted history; financial and area-review gates remain independent',()=>{
+ const draft={id:'c',businessId:'b',status:'draft'},zones=[{id:'a',campaignId:'c',businessId:'b'},{id:'b',campaignId:'c',businessId:'b'}];
+ assert.throws(()=>authority.assertPlanningReview(draft,zones),/requested campaign workload/);
+ assert.throws(()=>authority.assertPlanningReview({...draft,fundingStatus:'funded'},zones));
+ const paid={...draft,fundingStatus:'funded',fundingPaymentId:'server-payment'};
+ assert.doesNotThrow(()=>authority.assertPlanningReview(paid,zones));
+ assert.doesNotThrow(()=>authority.assertPlanningReview(draft,[{...zones[0],assignedScalerId:'worker',status:'assigned'},zones[1]]));
+ assert.throws(()=>authority.assertPlanningReview(draft,[{...zones[0],campaignId:'foreign',assignedScalerId:'worker',status:'assigned'}]));
+ assert.throws(()=>authority.assertPlanningReview({...paid,planningSchemaVersion:1,planningStage:'materials'},zones),/current mapped area/);
+ for(const status of ['open','in_progress','completed'])assert.doesNotThrow(()=>authority.assertPlanningReview({...draft,status,campaignWorkload:{version:'historical'}},zones));
+});

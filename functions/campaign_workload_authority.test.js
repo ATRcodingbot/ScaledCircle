@@ -84,3 +84,23 @@ test('explicit closing point is valid without changing the saved evidence digest
  z.zoneIntelligence.geometryDigest=zoneGeometryDigest(z.serviceArea);
  assert.equal(w.validEvidence(z),true);
 });
+
+test('legacy five-hour multipart readback explains one-Zone adjustment without granting authority or mutating history',()=>{
+ const c={id:'c',businessId:'b',status:'draft'},zs=[zone('a',0,24),zone('b',.01,21)];
+ const run={businessId:'b',campaignId:'c',status:'complete',searchEvidence:{requestedHours:5}};
+ const before=JSON.stringify([c,zs,run]),r=w.legacySummary(c,zs,run);
+ assert.equal(r.requestedHours,5);assert.equal(r.requiredZoneCount,1);assert.equal(r.zoneCount,2);
+ assert.equal(r.supportedMinutes,45);assert.equal(r.ready,false);
+ assert.match(r.reason,/Choose which area to keep/);assert.match(r.reason,/remain unchanged/);
+ assert.equal(JSON.stringify([c,zs,run]),before);assert.throws(()=>w.assertComplete(c,zs));
+ assert.equal(w.legacySummary(c,zs,{...run,businessId:'foreign'}).requiredZoneCount,null);
+});
+
+test('representable values immediately around six-hour boundaries are never rounded across them',()=>{
+ for(const boundary of [6,12,18,24,30,186]){
+  const step=boundary*Number.EPSILON;
+  assert.equal(w.requirement(boundary-step).requiredZoneCount,boundary/6);
+  assert.equal(w.requirement(boundary).requiredZoneCount,boundary/6);
+  assert.equal(w.requirement(boundary+step).requiredZoneCount,boundary/6+1);
+ }
+});

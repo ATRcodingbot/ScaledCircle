@@ -10,7 +10,7 @@ if (declarations.length !== names.length) throw Error('missing_smart_zone_endpoi
 const exportNames = ['getSmartZonePlan','applySmartZonePlan','getCampaignZoneIntelligence','confirmCampaignZoneIntelligence'];
 const assignments = ast.filter(n => n.type === 'ExpressionStatement' && n.expression.type === 'AssignmentExpression' &&
   n.expression.left.object?.name === 'exports' && exportNames.includes(n.expression.left.property?.name));
-class HttpsError extends Error {constructor(code,message){super(message);this.code=code;}}
+class HttpsError extends Error {constructor(code,message,details){super(message);this.code=code;this.details=details;}}
 function endpointHarness({db,context,resolution,fetchSnapshot,FieldValue,analyzeProperty}={}) {
   const calls={resolver:0,provider:0,property:0,cache:0},events=[];
   const localRequire=name=>name==='./smart_zone_public_cache_runtime'?{createAcquirer:({liveFetch})=>async options=>{calls.cache++;return liveFetch(options);}}:name==='./property_service_area_runtime'?{createAnalyzer:()=>async geometry=>{calls.property++;if(!analyzeProperty)throw Error('test_property_provider_missing');return analyzeProperty(geometry);}}:require(name);
