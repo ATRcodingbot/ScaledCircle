@@ -83,3 +83,18 @@ Browser evidence and any remaining acceptance are recorded after the bounded rea
 Current list contains the preserved `test` draft; Columbia appears under Archived. Production `campaignListActions` returned Delete draft for the unfinished draft, with its name in confirmation. Confirmation was canceled, never submitted. Columbia's menu returned only Manage work and the explicit historical-review hold, with no Restore. Business Home shows zero active campaigns and zero Zones awaiting review. Opening an empty Flyer planner displays the canonical shared header and step subtitle. At a settled 390-pixel browser viewport, the logo returned to Business Home without required fields or a saved draft. These are browser-tool observations, not Founder physical-device results. The temporary viewport will be reset.
 
 A read-only nonexistent campaign deep link exposed a precise copy issue: under existing workspace-isolation rules, an absent document can return permission denied rather than an empty snapshot. The initial recovery remained usable but called this temporarily unavailable. The final client classifies `permission-denied`/`not-found` as “Campaign no longer available” without revealing another workspace's record; genuine `unavailable` errors retain the temporary-error wording. Three new negative/positive recovery cases passed, and the combined recovery/refresh suite passed all 11 tests. No rules, permissions, financial services or saved records change in this final correction.
+
+### Final served readback
+
+Final web source: `9f9279edae34cd8a56b3300998574630915220cc`. Hosting version: `sites/scaled-circle/versions/9e587c21aaac4ce7`, released `2026-09-27T19:53:02.290Z`. Served `main.dart.js` SHA-256: `7cd9e37394d6656e63eaa119454be167ef8105e0d76a24f4545648af18d640b4`. Index, analytics, public pages and unchanged Hosting configuration matched. This Hosting-only follow-up supersedes `847456b2c6896787`; server revisions and rules above remain unchanged.
+
+After reloading the actual deployed client, the read-only nonexistent ID displayed **Campaign no longer available**; Return to Campaigns opened Attractive Remodel's current list with its untouched `test` draft. No record was created for this missing-link check, and it is not falsely identified as the originally deleted campaign. A pointer click on the overflow in a settled 390-pixel viewport opened the authoritative menu without navigating the card; Cancel closed it. The earlier desktop tool-coordinate mismatch was resolved by using a settled explicit viewport, not by altering product input behavior. Keyboard menu and confirmation Cancel were independently observed. The browser viewport was reset and the tab was left on Current Campaigns.
+
+Private visual evidence (retained under `.firebase/campaign-management/`):
+- `hosting-final/columbia-archived.png` (JPEG bytes; captured archived history).
+- `hosting-final/planner-narrow.jpg` (390-pixel shared planner header).
+- `hosting-final/business-home-retired.jpg` (zero active campaigns/awaiting-review Zones).
+- `hosting-recovery/missing-campaign-recovery.jpg` (final missing-link recovery).
+- `hosting-recovery/live-list-menu.jpg` (final authoritative menu).
+
+No remaining deployment blocker. Founder physical post-delete navigation is not claimed: no second destructive production deletion was performed. Exact successful deletion/navigation, uncertain retries, both modes/all four steps, account switching, concurrency and 2x text remain covered by automated tests; the browser checks above cover the actual served non-destructive paths. No new Founder deletion is requested. The previously completed freehand physical PASS remains unchanged.
