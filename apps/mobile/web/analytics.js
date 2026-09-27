@@ -1,5 +1,5 @@
-/* Optional GA4 page measurement for the production web origin only.
- * No Google tag, analytics request, or analytics cookie is created before opt-in.
+/* Basic GA4 page measurement for the production web origin only.
+ * No prompts or overlays. Honor saved opt-outs and browser privacy signals.
  * Keep this separate from Firebase's operational and legal consent authorities.
  */
 (function () {
@@ -12,6 +12,9 @@
   const measurementId = "G-9VY50190LG";
   const disableKey = "ga-disable-" + measurementId;
   const choiceKey = "scaledcircle.analytics.choice.v1";
+  const settingsPage = location.pathname === "/analytics-settings.html";
+  const browserOptOut = navigator.globalPrivacyControl === true ||
+    navigator.doNotTrack === "1" || navigator.doNotTrack === "yes" || window.doNotTrack === "1";
   const publicTitles = {
     "/": "Home", "/i": "Explore", "/businesses": "For businesses",
     "/scalers": "For Scalers", "/pricing": "Pricing",
@@ -24,8 +27,9 @@
   const campaignKeys = ["utm_source", "utm_medium", "utm_campaign", "utm_content", "utm_term"];
   let choice;
   try { choice = localStorage.getItem(choiceKey); } catch (_) { choice = null; }
-  let choiceOpen = choice !== "granted" && choice !== "denied";
-  window[disableKey] = choice !== "granted";
+  let allowed = choice !== "denied" && !browserOptOut;
+  let preferenceSaved = true;
+  window[disableKey] = !allowed;
   let tagStarted = false;
   let lastPath = null;
   let lastLocation = null;
@@ -59,15 +63,19 @@
     return url.href;
   }
 
-  function pageView() {
-    if (choice !== "granted" || !tagStarted) return;
-    const path = route();
-    if (path === lastPath) return;
-    const pageLocation = safeLocation(path);
-    const referrer = lastLocation || (function () {
+  function safeReferrer() {
+    return lastLocation || (function () {
       try { return document.referrer ? new URL(document.referrer).origin : ""; }
       catch (_) { return ""; }
     })();
+  }
+
+  function pageView() {
+    if (!allowed || !tagStarted || settingsPage) return;
+    const path = route();
+    if (path === lastPath) return;
+    const pageLocation = safeLocation(path);
+    const referrer = safeReferrer();
     // Override defaults before the event so background engagement measurement
     // uses the same bounded location. The GA4 stream must also disable its
     // automatic history page views to avoid duplicate SPA page views.
@@ -92,12 +100,14 @@
   }
 
   function startTag() {
-    if (tagStarted || choice !== "granted") return;
+    // The standalone preferences page never loads Google, including when
+    // someone enables analytics there for their next website visit.
+    if (tagStarted || !allowed || settingsPage) return;
     tagStarted = true;
     window.dataLayer = window.dataLayer || [];
     window.gtag = function () { window.dataLayer.push(arguments); };
     gtag("consent", "default", {
-      analytics_storage: "granted", ad_storage: "denied",
+      ad_storage: "denied",
       ad_user_data: "denied", ad_personalization: "denied"
     });
     gtag("js", new Date());
@@ -106,7 +116,9 @@
       send_page_view: false,
       allow_google_signals: false,
       allow_ad_personalization_signals: false,
-      page_location: safeLocation(route())
+      page_location: safeLocation(route()),
+      page_title: "ScaledCircle — " + (publicTitles[route()] || "App"),
+      page_referrer: safeReferrer()
     });
     const script = document.createElement("script");
     script.async = true;
@@ -126,60 +138,54 @@
   }
 
   function setChoice(value, persist = true) {
-    const wasGranted = choice === "granted";
+    const wasAllowed = allowed;
     choice = value;
-    choiceOpen = value !== "granted" && value !== "denied";
     if (persist) {
-      try { localStorage.setItem(choiceKey, value); } catch (_) { /* session-only choice */ }
+      try {
+        localStorage.setItem(choiceKey, value);
+        preferenceSaved = true;
+      } catch (_) { preferenceSaved = false; }
     }
-    window[disableKey] = value !== "granted";
-    if (value === "granted") {
+    allowed = choice !== "denied" && !browserOptOut;
+    window[disableKey] = !allowed;
+    if (allowed) {
       if (!tagStarted) startTag();
-      else if (!wasGranted) {
-        gtag("consent", "update", { analytics_storage: "granted" });
-        pageView();
-      }
+      else if (!wasAllowed) pageView();
     } else {
       // Google's disable flag stops collection, including automatically
       // generated events, without reloading or losing the visitor's work.
-      if (tagStarted) gtag("consent", "update", { analytics_storage: "denied" });
       clearAnalyticsCookies();
       lastPath = null;
       lastLocation = null;
     }
-    renderChoice();
+    renderPreferences();
   }
 
-  function renderChoice() {
-    const panel = document.getElementById("sc-analytics-choice");
-    const settings = document.getElementById("sc-analytics-settings");
-    if (!panel || !settings) return;
-    panel.hidden = !choiceOpen;
-    settings.hidden = !panel.hidden;
-    settings.setAttribute("aria-label", "Analytics settings; currently " +
-      (choice === "granted" ? "allowed" : choice === "denied" ? "declined" : "unset"));
+  function renderPreferences() {
+    const status = document.getElementById("sc-analytics-status");
+    const enable = document.getElementById("sc-analytics-enable");
+    const disable = document.getElementById("sc-analytics-disable");
+    if (!status || !enable || !disable) return;
+    status.textContent = browserOptOut
+      ? "Your browser's privacy setting keeps website analytics off."
+      : "Website analytics are " + (allowed ? "on" : "off") + " for this browser.";
+    if (!preferenceSaved) {
+      status.textContent = "Your browser blocked saving this preference. Use your browser's Do Not Track or Global Privacy Control setting to keep analytics off across pages.";
+    }
+    enable.disabled = browserOptOut || allowed;
+    disable.disabled = !allowed;
   }
 
   function init() {
-    const panel = document.createElement("aside");
-    panel.id = "sc-analytics-choice";
-    panel.setAttribute("aria-label", "Optional website analytics");
-    panel.innerHTML = '<strong>Optional website analytics</strong>' +
-      '<p>Analytics cookies help us count visits and understand where visitors come from. ' +
-      '<a href="/#/privacy">Privacy Policy</a></p>' +
-      '<div class="sc-actions"><button type="button" class="sc-allow">Allow analytics</button>' +
-      '<button type="button" class="sc-decline">Decline</button></div>';
-    const settings = document.createElement("button");
-    settings.id = "sc-analytics-settings";
-    settings.type = "button";
-    settings.textContent = "Analytics settings";
-    document.body.appendChild(panel);
-    document.body.appendChild(settings);
-    panel.querySelector(".sc-allow").addEventListener("click", function () { setChoice("granted"); });
-    panel.querySelector(".sc-decline").addEventListener("click", function () { setChoice("denied"); });
-    settings.addEventListener("click", function () { choiceOpen = true; renderChoice(); });
-    renderChoice();
-    if (choice === "granted") startTag();
+    // Controls exist only on the page linked from the Privacy Policy.
+    // Normal website visits never receive analytics UI.
+    const enable = document.getElementById("sc-analytics-enable");
+    const disable = document.getElementById("sc-analytics-disable");
+    if (enable) enable.addEventListener("click", function () { setChoice("granted"); });
+    if (disable) disable.addEventListener("click", function () { setChoice("denied"); });
+    renderPreferences();
+    if (allowed) startTag();
+    else clearAnalyticsCookies();
 
     window.addEventListener("hashchange", schedulePageView);
     window.addEventListener("popstate", schedulePageView);
