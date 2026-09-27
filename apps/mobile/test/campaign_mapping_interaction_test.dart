@@ -426,7 +426,7 @@ void main() {
         await tapMap(t, point);
       }
       expect(ready(t), false);
-      expect(find.textContaining('crosses or loops'), findsOneWidget);
+      expect(find.textContaining('make a clear area'), findsOneWidget);
       await choose(t, 'Undo');
       expect(ready(t), true);
       await t.pumpWidget(const SizedBox());
@@ -643,7 +643,7 @@ void main() {
         center + const Offset(-80, 80),
         center + const Offset(80, -80),
       ]);
-      expect(find.textContaining('crosses or loops'), findsOneWidget);
+      expect(find.textContaining('make a clear area'), findsOneWidget);
       expect(boundary(t), before);
       await choose(t, 'Edit Boundary');
       final gesture = await t.startGesture(mapCenter(t));

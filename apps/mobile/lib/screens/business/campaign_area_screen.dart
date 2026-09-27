@@ -118,6 +118,9 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
   Offset? _advancedTapStart;
   final List<LatLng> _freehandStroke = [];
   String? _freehandError;
+  String? _freehandNotice;
+  List<LatLng> _originalRepairStroke = [];
+  bool _compareRepairStroke = false;
   bool _traceInvalid = false;
   _AreaDrawingSnapshot? _beforeFreehand;
   _AreaDrawingSnapshot? _freehandUndo;
@@ -338,6 +341,10 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
       _advancedTapPointer = null;
       _freehandStroke.clear();
       _freehandError = null;
+      _freehandNotice = null;
+      _originalRepairStroke = [];
+      _compareRepairStroke = false;
+      _traceInvalid = false;
       _selectedShape = shape;
 
       _inputPoints.clear();
@@ -352,27 +359,31 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
     if (!_hasLoadedExistingArea) return true;
     if (_replacementPromptOpen) return false;
     _replacementPromptOpen = true;
-    final replace = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: Text('$_zoneName already has an area'),
-        content: const Text(
-          'A Zone is one practical Scaler work area. Replace the current '
-          'boundary to redraw this Zone.',
+    bool? replace;
+    try {
+      replace = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: Text('$_zoneName already has an area'),
+          content: const Text(
+            'A Zone is one practical Scaler work area. Replace the current '
+            'boundary to redraw this Zone.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: Text('Replace $_zoneName'),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(dialogContext, true),
-            child: Text('Replace $_zoneName'),
-          ),
-        ],
-      ),
-    );
-    _replacementPromptOpen = false;
+      );
+    } finally {
+      _replacementPromptOpen = false;
+    }
     if (replace != true || !mounted) return false;
     if (clear) {
       _beginReplacement();
@@ -542,6 +553,10 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
         _drawingPointer = null;
         _freehandStroke.clear();
         _freehandError = null;
+        _freehandNotice = null;
+        _originalRepairStroke = [];
+        _compareRepairStroke = false;
+        _traceInvalid = false;
         _geometryChanged();
       });
       return;
@@ -584,6 +599,7 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
 
   void _clearArea() {
     setState(() {
+      if (_generatedArea.isNotEmpty) _freehandUndo = _captureDrawing();
       _inputPoints.clear();
       _generatedArea = [];
 
@@ -592,6 +608,12 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
       _drawingPointer = null;
       _freehandStroke.clear();
       _freehandError = null;
+      _freehandNotice = null;
+      _originalRepairStroke = [];
+      _compareRepairStroke = false;
+      _traceInvalid = false;
+      _advancedTapPointer = null;
+      _beforeFreehand = null;
       _geometryChanged();
     });
   }
@@ -636,7 +658,10 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
       if (revision != _geometryRevision) return;
       final adjusted = _parsePoints(result?.adjustedBoundary);
       if (adjusted.length < 3 ||
-          !CampaignFreehandGeometry.finish(adjusted).isValid) {
+          !CampaignFreehandGeometry.finish(
+            adjusted,
+            repairMinorDefects: false,
+          ).isValid) {
         return;
       }
       final previous = _captureDrawing();
@@ -650,6 +675,9 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
         _generatedArea = List.of(adjusted);
         _hasLoadedExistingArea = false;
         _freehandError = null;
+        _freehandNotice = null;
+        _originalRepairStroke = [];
+        _compareRepairStroke = false;
         _geometryChanged();
       });
     } finally {
@@ -657,9 +685,10 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
     }
   }
 
-  Future<void> _beginFreehand() async {
+  Future<void> _beginFreehand({bool retry = false}) async {
     final before = _captureDrawing();
-    if (_hasLoadedExistingArea &&
+    if (!retry &&
+        _hasLoadedExistingArea &&
         !await _confirmReplaceExistingArea(clear: false)) {
       return;
     }
@@ -671,6 +700,9 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
       _drawingPointer = null;
       _freehandStroke.clear();
       _freehandError = null;
+      _freehandNotice = null;
+      _originalRepairStroke = [];
+      _compareRepairStroke = false;
       _traceInvalid = false;
       _circlePreviewEdge = null;
       // Editing starts a new geometry request generation. An analysis started
@@ -694,6 +726,12 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
       _drawingFreehand = false;
       _drawingPointer = null;
       _freehandStroke.clear();
+      _freehandError = null;
+      _freehandNotice = null;
+      _originalRepairStroke = [];
+      _compareRepairStroke = false;
+      _traceInvalid = false;
+      _advancedTapPointer = null;
       _geometryChanged();
     });
   }
@@ -720,6 +758,8 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
     }
     if (!_drawingFreehand || _saving || _mappingLocked) return;
     if (_drawingPointer != null) {
+      // Keep ownership until pointer-up/cancel, but immediately reject the
+      // multi-touch trace. No second pointer may become a new stroke mid-gesture.
       _traceInvalid = true;
       _freehandError = 'Draw with one finger at a time. Try the outline again.';
       return;
@@ -789,34 +829,73 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
       return;
     }
     if (!_drawingFreehand || _drawingPointer != event.pointer) return;
-    if (!_insideMap(event.localPosition)) _traceInvalid = true;
-    if (!_traceInvalid) {
-      final endpoint = _mapController.camera.screenOffsetToLatLng(
-        event.localPosition,
-      );
-      if (_freehandStroke.isNotEmpty &&
-          const Distance().as(
-                LengthUnit.Meter,
-                _freehandStroke.last,
-                endpoint,
-              ) >=
-              .5) {
-        if (_freehandStroke.length >=
-            CampaignFreehandGeometry.maximumRawPoints) {
-          _traceInvalid = true;
-          _freehandError =
-              'This outline has too many points. Draw a shorter, simpler boundary.';
-        } else {
-          _freehandStroke.add(endpoint);
+    FreehandAreaResult? result;
+    try {
+      if (!_insideMap(event.localPosition)) _traceInvalid = true;
+      if (!_traceInvalid) {
+        final endpoint = _mapController.camera.screenOffsetToLatLng(
+          event.localPosition,
+        );
+        if (_freehandStroke.isNotEmpty &&
+            const Distance().as(
+                  LengthUnit.Meter,
+                  _freehandStroke.last,
+                  endpoint,
+                ) >=
+                .5) {
+          if (_freehandStroke.length >=
+              CampaignFreehandGeometry.maximumRawPoints) {
+            _traceInvalid = true;
+            _freehandError =
+                'This outline has too many points. Draw a shorter, simpler boundary.';
+          } else {
+            _freehandStroke.add(endpoint);
+          }
         }
       }
+      result = _traceInvalid
+          ? null
+          : CampaignFreehandGeometry.finish(
+              _freehandStroke,
+              metersPerPixel:
+                  40075016.686 *
+                  math.cos(
+                    _mapController.camera.center.latitude * math.pi / 180,
+                  ) /
+                  (256 * math.pow(2, _mapController.camera.zoom)),
+            );
+    } catch (_) {
+      _freehandError = 'The outline was interrupted. Draw again.';
+    } finally {
+      _completeTrace(result);
     }
-    final result = _traceInvalid
-        ? null
-        : CampaignFreehandGeometry.finish(_freehandStroke);
+  }
+
+  void _traceCancel(PointerCancelEvent event) {
+    _advancedTapPointer = null;
+    _advancedTapStart = null;
+    if (event.pointer != _drawingPointer) return;
+    _freehandError = 'The outline was interrupted. Draw again.';
+    _completeTrace(null);
+  }
+
+  void _guardTrace(VoidCallback action) {
+    try {
+      action();
+    } catch (_) {
+      _freehandError = 'The outline was interrupted. Draw again.';
+      _completeTrace(null);
+    }
+  }
+
+  void _completeTrace(FreehandAreaResult? result) {
+    if (!mounted) return;
     setState(() {
       _drawingFreehand = false;
       _drawingPointer = null;
+      _advancedTapPointer = null;
+      _advancedTapStart = null;
+      _traceInvalid = false;
       if (result?.isValid == true) {
         _freehandUndo = _beforeFreehand;
         _selectedShape = CampaignAreaShape.polygon;
@@ -827,12 +906,23 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
           ..addAll(result.points);
         _hasLoadedExistingArea = false;
         _freehandError = null;
+        _freehandNotice = result.wasRepaired
+            ? 'We cleaned up a small overlap. Review your boundary.'
+            : null;
+        _originalRepairStroke = result.wasRepaired
+            ? List.of(_freehandStroke)
+            : [];
+        _compareRepairStroke = false;
         _geometryChanged();
       } else {
         _freehandError ??=
             result?.error ??
             'The outline was interrupted. Try drawing it again.';
         if (_beforeFreehand != null) _restoreDrawing(_beforeFreehand!);
+        _freehandUndo = _beforeFreehand;
+        _freehandNotice = null;
+        _originalRepairStroke = [];
+        _compareRepairStroke = false;
         _geometryChanged();
       }
       _freehandStroke.clear();
@@ -840,12 +930,16 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
   }
 
   bool _isAreaValid() {
+    if (_freehandError != null) return false;
     switch (_selectedShape) {
       case CampaignAreaShape.polygon:
         return _generatedArea.length >= 3 &&
             (!_advancedDrawing ||
                 _hasLoadedExistingArea ||
-                CampaignFreehandGeometry.finish(_generatedArea).isValid);
+                CampaignFreehandGeometry.finish(
+                  _generatedArea,
+                  repairMinorDefects: false,
+                ).isValid);
 
       case CampaignAreaShape.triangle:
         return _generatedArea.length == 3;
@@ -1401,7 +1495,10 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
     switch (_selectedShape) {
       case CampaignAreaShape.polygon:
         if (_generatedArea.length >= 3) {
-          final validation = CampaignFreehandGeometry.finish(_generatedArea);
+          final validation = CampaignFreehandGeometry.finish(
+            _generatedArea,
+            repairMinorDefects: false,
+          );
           if (!validation.isValid) return validation.error!;
         }
         return 'Click or tap boundary points in order around the area. Add at least 3 points; Undo removes the last point.';
@@ -1538,6 +1635,43 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
     final metrics = _calculateZoneMetrics();
 
     return Scaffold(
+      // Recovery remains reachable even when entering Draw mode scrolled the
+      // toolbar above the map. Wrap and intrinsic height preserve large text.
+      bottomNavigationBar: _freehandError != null && !_drawingFreehand
+          ? SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Semantics(liveRegion: true, child: Text(_freehandError!)),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 12,
+                      runSpacing: 8,
+                      children: [
+                        FilledButton.icon(
+                          key: const Key('freehand-draw-again'),
+                          onPressed: _saving || _mappingLocked
+                              ? null
+                              : () => _beginFreehand(retry: true),
+                          icon: const Icon(Icons.draw_outlined),
+                          label: const Text('Draw Again'),
+                        ),
+                        TextButton(
+                          key: const Key('freehand-recovery-cancel'),
+                          onPressed: _saving
+                              ? null
+                              : () => Navigator.pop(context, false),
+                          child: const Text('Cancel'),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            )
+          : null,
       appBar: AuthenticatedAppBar(
         title: Text(_mappingLocked ? 'Campaign Area (Locked)' : 'Choose area'),
         centerTitle: true,
@@ -1728,12 +1862,26 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
                       ),
                       if (widget.searchContextLabel != null)
                         Text('Map context: ${widget.searchContextLabel}'),
-                      if (_freehandError != null)
+                      if (_freehandNotice != null)
                         Text(
-                          _freehandError!,
-                          style: TextStyle(
-                            color: Theme.of(context).colorScheme.error,
+                          _freehandNotice!,
+                          key: const Key('freehand-repair-notice'),
+                        ),
+                      if (_freehandNotice != null)
+                        TextButton(
+                          key: const Key('freehand-raw-comparison'),
+                          onPressed: () => setState(
+                            () => _compareRepairStroke = !_compareRepairStroke,
                           ),
+                          child: Text(
+                            _compareRepairStroke
+                                ? 'Hide original outline'
+                                : 'Compare original outline',
+                          ),
+                        ),
+                      if (_compareRepairStroke)
+                        const Text(
+                          'Orange: original outline. Blue: corrected boundary.',
                         ),
 
                       SizedBox(
@@ -1757,13 +1905,13 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
                   child: MapAttributionFrame(
                     child: Listener(
                       key: const Key('freehand-map-input'),
-                      onPointerDown: _traceDown,
-                      onPointerMove: _traceMove,
-                      onPointerUp: _traceUp,
-                      onPointerCancel: (event) {
-                        _advancedTapPointer = null;
-                        if (event.pointer == _drawingPointer) _cancelFreehand();
-                      },
+                      onPointerDown: (event) =>
+                          _guardTrace(() => _traceDown(event)),
+                      onPointerMove: (event) =>
+                          _guardTrace(() => _traceMove(event)),
+                      onPointerUp: (event) =>
+                          _guardTrace(() => _traceUp(event)),
+                      onPointerCancel: _traceCancel,
                       child: FlutterMap(
                         key: _mapViewportKey,
                         mapController: _mapController,
@@ -1803,6 +1951,17 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
                           ),
 
                           PolygonLayer(polygons: polygons),
+                          if (_compareRepairStroke &&
+                              _originalRepairStroke.length >= 2)
+                            PolylineLayer(
+                              polylines: [
+                                Polyline(
+                                  points: _originalRepairStroke,
+                                  color: Colors.orange,
+                                  strokeWidth: 2,
+                                ),
+                              ],
+                            ),
                           if (_freehandStroke.length >= 2)
                             PolylineLayer(
                               polylines: [
@@ -1902,7 +2061,8 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
                               onPressed:
                                   _mappingLocked ||
                                       (_inputPoints.isEmpty &&
-                                          _generatedArea.isEmpty)
+                                          _generatedArea.isEmpty &&
+                                          _freehandUndo == null)
                                   ? null
                                   : _undoLastPoint,
                               icon: const Icon(Icons.undo),
@@ -1973,9 +2133,9 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
 
                       const SizedBox(height: 10),
 
-                      SizedBox(
+                      Container(
                         width: double.infinity,
-                        height: 55,
+                        constraints: const BoxConstraints(minHeight: 55),
                         child: ElevatedButton.icon(
                           onPressed:
                               _saving ||

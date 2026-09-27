@@ -10,6 +10,166 @@ LatLng point(double x, double y) => LatLng(
 List<LatLng> polygon(List<(double, double)> values) =>
     values.map((p) => point(p.$1, p.$2)).toList();
 void main() {
+  test('more than eight local defects is bounded and requires redraw', () {
+    final input = <(double, double)>[(0, 0)];
+    for (var i = 1; i <= 9; i++) {
+      input.addAll([(i * 10.0, 0), (i * 10.0 - 2, 0)]);
+    }
+    input.addAll([(100, 100), (0, 100)]);
+    expect(
+      CampaignFreehandGeometry.finish(polygon(input)).error,
+      CampaignFreehandGeometry.unclearOutline,
+    );
+  });
+  test(
+    'small closing overshoot repairs without selecting a large alternate lobe',
+    () {
+      final trace = polygon([
+        (0, 0),
+        (100, 0),
+        (100, 100),
+        (0, 100),
+        (-2, -2),
+        (3, 0),
+      ]);
+      final result = CampaignFreehandGeometry.finish(trace, metersPerPixel: 2);
+      expect(result.isValid, true);
+      expect(result.wasRepaired, true);
+      expect(result.areaSquareMeters, closeTo(10000, 150));
+      expect(result.points.length, lessThanOrEqualTo(6));
+      expect(
+        CampaignFreehandGeometry.finish(
+          result.points,
+          repairMinorDefects: false,
+        ).isValid,
+        true,
+      );
+    },
+  );
+  test('short backtrack is repairable; a long retrace remains ambiguous', () {
+    final result = CampaignFreehandGeometry.finish(
+      polygon([(0, 0), (100, 0), (98, 0), (100, 100), (0, 100)]),
+    );
+    expect(result.isValid, true);
+    expect(result.wasRepaired, true);
+    expect(result.areaSquareMeters, closeTo(9900, 2));
+    expect(
+      CampaignFreehandGeometry.finish(
+        polygon([(0, 0), (100, 0), (70, 0), (100, 100), (0, 100)]),
+      ).isValid,
+      false,
+    );
+  });
+  test(
+    'endpoint gap closes directly without demanding first-pixel reconnection',
+    () {
+      final result = CampaignFreehandGeometry.finish(
+        polygon([(0, 0), (100, 0), (100, 100), (0, 100), (0, 2)]),
+      );
+      expect(result.isValid, true);
+      expect(result.areaSquareMeters, closeTo(10000, 2));
+    },
+  );
+  test('repair tolerance follows scale but never exceeds five metres', () {
+    final trace = polygon([(0, 0), (100, 0), (98, 0), (100, 100), (0, 100)]);
+    expect(
+      CampaignFreehandGeometry.finish(trace, metersPerPixel: .1).isValid,
+      false,
+    );
+    final result = CampaignFreehandGeometry.finish(trace, metersPerPixel: 200);
+    expect(result.isValid, true);
+    expect(result.repairToleranceMeters, 5);
+    expect(
+      CampaignFreehandGeometry.finish(
+        polygon([(0, 0), (100, 0), (90, 0), (100, 100), (0, 100)]),
+        metersPerPixel: 200,
+      ).isValid,
+      false,
+    );
+  });
+  test(
+    'strict validation does not auto-repair an existing or uploaded boundary',
+    () {
+      expect(
+        CampaignFreehandGeometry.finish(
+          polygon([(0, 0), (100, 0), (98, 0), (100, 100), (0, 100)]),
+          repairMinorDefects: false,
+        ).isValid,
+        false,
+      );
+    },
+  );
+  test('unequal figure-eight does not silently keep its largest region', () {
+    final result = CampaignFreehandGeometry.finish(
+      polygon([(0, 0), (300, 300), (0, 300), (70, 0)]),
+    );
+    expect(result.error, CampaignFreehandGeometry.unclearOutline);
+  });
+  test(
+    'separated closed loops cannot become multiple Zones or a connecting hull',
+    () {
+      final result = CampaignFreehandGeometry.finish(
+        polygon([
+          (0, 0),
+          (100, 0),
+          (100, 100),
+          (0, 100),
+          (0, 0),
+          (300, 0),
+          (400, 0),
+          (400, 100),
+          (300, 100),
+          (300, 0),
+        ]),
+      );
+      expect(result.isValid, false);
+      expect(result.points, isEmpty);
+    },
+  );
+  test('barrier-shaped concavity survives repair on a different edge', () {
+    final result = CampaignFreehandGeometry.finish(
+      polygon([
+        (0, 0),
+        (200, 0),
+        (198, 0),
+        (200, 200),
+        (120, 200),
+        (120, 80),
+        (80, 80),
+        (80, 200),
+        (0, 200),
+      ]),
+    );
+    expect(result.isValid, true);
+    for (final corner in [
+      point(120, 200),
+      point(120, 80),
+      point(80, 80),
+      point(80, 200),
+    ]) {
+      expect(result.points, contains(corner));
+    }
+    expect(result.areaSquareMeters, lessThan(36000));
+  });
+  test(
+    'local loop near a tiny area fails its relative region-change budget',
+    () {
+      final result = CampaignFreehandGeometry.finish(
+        polygon([
+          (0, 0),
+          (12, 0),
+          (12, 6),
+          (15, 6),
+          (15, 9),
+          (12, 6),
+          (12, 12),
+          (0, 12),
+        ]),
+        metersPerPixel: 2,
+      );
+      expect(result.isValid, false);
+    },
+  );
   test('implicit closing edge cannot cross an otherwise simple open trace', () {
     final result = CampaignFreehandGeometry.finish(
       polygon([
@@ -22,13 +182,13 @@ void main() {
         (80, 90),
       ]),
     );
-    expect(result.error, contains('crosses'));
+    expect(result.error, CampaignFreehandGeometry.unclearOutline);
   });
   test('closing edge cannot retrace the first edge', () {
     final result = CampaignFreehandGeometry.finish(
       polygon([(0, 0), (100, 0), (100, 100), (0, 100), (50, 0)]),
     );
-    expect(result.error, contains('crosses'));
+    expect(result.error, CampaignFreehandGeometry.unclearOutline);
   });
   test(
     'closes a concave neighborhood trace without angle sorting or a hull',
@@ -86,7 +246,7 @@ void main() {
       CampaignFreehandGeometry.finish(
         polygon([(0, 0), (100, 100), (0, 100), (100, 0)]),
       ).error,
-      contains('crosses'),
+      CampaignFreehandGeometry.unclearOutline,
     );
   });
   test('a repeated edge or nonadjacent duplicate point is rejected', () {
@@ -103,7 +263,7 @@ void main() {
       isFalse,
     );
   });
-  test('accidental small loop larger than jitter is not silently erased', () {
+  test('small loop is repaired into an explicit bounded preview', () {
     final result = CampaignFreehandGeometry.finish(
       polygon([
         (0, 0),
@@ -117,7 +277,9 @@ void main() {
         (0, 100),
       ]),
     );
-    expect(result.isValid, isFalse);
+    expect(result.isValid, isTrue);
+    expect(result.wasRepaired, isTrue);
+    expect(result.areaSquareMeters, closeTo(10000, 20));
   });
   test('small territory and zero-length trace fail closed', () {
     expect(
