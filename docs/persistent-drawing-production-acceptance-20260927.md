@@ -57,20 +57,32 @@ compensation records unchanged (excluding transient query read times).
 and [semantic activation reaches Draw mode](qa-artifacts/persistent-drawing-production-mode-20260927.png).
 The screenshots are browser readback, not physical gesture evidence.
 
-## Acceptance remains open
+## Founder physical web acceptance — PASS
 
 The historical Founder result **Clear → new drawing: FAIL** is retained. Prior
-**Clear → Undo: PASS** is separate and does not close that failure.
+**Clear → Undo: PASS** remains separate. The later observation below closes the
+specific replacement-drawing defect; it does not erase the original failure.
 
-The corrected client is available, and the saved Zone 1 editor is left ready.
-One precise Founder request has been issued:
-**Clear → visible Draw Area → valid replacement → inspect UNSAVED preview →
-Cancel → reopen the original Zone**. Do not Use/Save/Remove/fund anything.
+On September 27, 2026, Founder confirmed the requested physical web sequence:
+**Clear → Draw Area → valid replacement → UNSAVED preview → Cancel → reopen**.
 
-Only actual observation can close replacement drawing, removal of old intelligence
-against a different valid shape, restoration on Cancel/reopen and unchanged Zone
-count. Other untested physical cases remain separately pending, including the
-earlier overlap/figure-eight/interruption checks. No physical touch PASS is inferred.
+| Observed state | Founder-reported result |
+| --- | --- |
+| Replacement drawing | Worked and produced an unsaved preview |
+| Replacement intelligence | 18 mapped residential targets; approximately 46 minutes estimated field time |
+| Cancel and reopen | Original saved boundary restored, with 10 mapped residential targets and approximately 24 minutes estimated field time |
+| Saved Zones | Two, unchanged; replacement boundary was not saved |
+
+**Closed: replacement drawing, geometry-specific intelligence update, and
+Cancel/reopen restoration.** No further repair or repeated test of this sequence
+is requested. This is Founder-observed physical web evidence, not a new automated
+test, screenshot capture or post-session database comparison. No new geometry
+digest or input-device classification is inferred.
+
+Overlap/closing-overshoot, substantial figure-eight/rejection recovery,
+pointer interruption and physical-touch observations remain separately pending.
+This confirmation does not certify those scenarios. Recording this result makes
+no application, deployment, native-build or financial change.
 
 Private package manifests and before/after readbacks are retained, ignored, under
 `.firebase/persistent-drawing-hosting/`.

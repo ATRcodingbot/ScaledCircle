@@ -31,9 +31,11 @@ Both Zones are unassigned. Two saved geometry parts remain. There are no campaig
 the map instruction pointed to Draw Area while that action remained above the
 usable viewport. This does not invalidate the separately observed Clear → Undo
 success, and that success does not close this defect. The correction is documented
-in [the empty-boundary review candidate](freehand-empty-boundary-review-20260927.md)
-and is held for web deployment approval. No new physical retest is requested
-until the corrected production client is available.
+in [the empty-boundary review candidate](freehand-empty-boundary-review-20260927.md).
+It was subsequently deployed at `18a64110c098a5105d0cd6db5c2e7f1fe9363fa5`;
+Founder has now confirmed the specific Clear → replacement → Cancel/reopen
+sequence as PASS. See [the later deployment and acceptance record](persistent-drawing-production-acceptance-20260927.md).
+The observations below retain the original deployment's evidence and limits.
 
 The existing production tab was refreshed without clearing authentication/session/local data. Its loaded script element points to the verified public `main.dart.js`. The reviewed client is demonstrably active: **Clear leaves Undo enabled**, whereas the previous implementation disabled Undo on an empty local preview. Clear removed the local boundary and facts, and Undo restored the original boundary and matching 10-target / 403 m / 24-minute facts. Cancel left the editor; reopening Zone 1 restored the same boundary and facts.
 
@@ -47,16 +49,16 @@ Production browser captures: [local Clear](qa-artifacts/freehand-production-clea
 | --- | --- |
 | Served package and updated browser client | Verified |
 | Local Clear → Undo | Verified in browser |
-| Clear → begin a replacement drawing | Founder-observed FAIL; correction pending deployment approval |
+| Clear → begin a replacement drawing | Historical Founder FAIL; subsequently corrected and Founder physical web PASS at 18a6411; see later acceptance record |
 | Cancel/reopen original boundary and facts after local Clear/Undo | Verified in browser |
 | Saved campaign/Zone/payment/compensation preservation | Full document comparison unchanged |
 | Repairable overlap/overshoot → corrected unsaved preview | Founder physical observation pending |
 | Substantial crossing → Draw Again → valid preview without reopening | Founder physical observation pending |
-| Prior intelligence invalidated against a different valid redraw | Founder physical observation pending; not inferred from Clear or rejection |
+| Prior intelligence invalidated against a different valid redraw | Subsequently Founder physical web PASS: unsaved replacement 18 targets / ~46 min; Cancel/reopen restored original 10 targets / ~24 min and two saved Zones |
 | Recovery controls after actual pointer cancellation/interruption | Automated tests passed; production gesture observation pending |
 | Physical touch | Not tested |
 
-## Focused Founder session
+## Original focused Founder session (historical request)
 
 The tab is left on Zone 1's saved boundary editor. The request identifies the actual baseline and asks for one unsaved session:
 
@@ -64,6 +66,6 @@ The tab is left on Zone 1's saved boundary editor. The request identifies the ac
 2. Edit Boundary again; draw a substantial figure-eight. Observe safe rejection, then use Draw Again and draw a valid outline in the same editor.
 3. Cancel without Use This Area/Save; reopen Zone 1. Observe original boundary/facts and two saved Zones. Report the input device and actual outcomes.
 
-No generic reporting template is acceptance evidence. The earlier template-only Founder message remains explicitly excluded. Physical acceptance is **open** until actual results arrive. No funding, assignment, compensation, paid recommendation/model search or persisted boundary change is part of this session.
+No generic reporting template is acceptance evidence. The earlier template-only Founder message remains explicitly excluded. The later explicit Founder report closes only Clear → valid replacement, intelligence update and Cancel/reopen restoration. No repeat of that sequence is requested. Overlap/figure-eight, interruption and physical-touch observations remain separately pending. No funding, assignment, compensation, paid recommendation/model search or persisted boundary change is part of this session.
 
 Private deployment/package/readback evidence: `.firebase/freehand-recovery-hosting/` (ignored, not a public artifact).
