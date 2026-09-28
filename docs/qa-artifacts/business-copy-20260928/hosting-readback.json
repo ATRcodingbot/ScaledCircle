@@ -1,0 +1,24 @@
+{
+  "sourceSha": "4794a062dfce041be02404f23e4480c588b29e23",
+  "hostingVersion": "sites/scaled-circle/versions/6c14d4cd968f93cc",
+  "releaseTime": "2026-09-28T13:30:18.428Z",
+  "configurationUnchanged": true,
+  "changedFiles": [
+    "businesses/index.html"
+  ],
+  "servedFilesMatched": [
+    "businesses/index.html",
+    "main.dart.js",
+    "index.html",
+    "analytics.js",
+    "flutter_bootstrap.js",
+    "pricing/index.html",
+    "how-it-works/index.html",
+    "scalers/index.html",
+    "referrals/index.html",
+    "social/scaled-circle-social-preview-20260928.png",
+    "assets/assets/brand/wordmark-20260928/scaledcircle-lockup-dark-surface.png"
+  ],
+  "businessPageSha256": "5820d1cf4b8658158aab5ef329c277aa889ed0b14ad91005f6bf083da352ecb0",
+  "mainBundleUnchanged": true
+}
