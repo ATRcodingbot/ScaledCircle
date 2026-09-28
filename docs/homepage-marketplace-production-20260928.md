@@ -28,3 +28,18 @@ The homepage now uses this boundary only as an explicitly illustrative Baltimore
 The 80-file package overlays only `index.html`, `main.dart.js`, and `flutter_bootstrap.js` on the current Hosting files. All five static public pages (including `/businesses/` and pricing), analytics, historical assets, approved wordmarks, and social preview remain byte-for-byte unchanged. Unused raw Business template output from the local build is not included. Main bundle increase: 834 bytes; no new raster assets. Hosting configuration is unchanged apart from its local package path. No Functions, IAM, native worktree, CI, store, records, messages or financial changes.
 
 Local proofs: `qa-artifacts/homepage-marketplace-20260928/local-desktop.png`, `local-narrow-hero.png`, `local-narrow-map.png`.
+
+## Production release/readback
+
+- Deployed application source: `e11c3bbade232a2979b7a0a7ff2512415bf84429`.
+- Hosting version: `ff3cbe19f89af672`, released 2026-09-28 14:22:17 UTC. Hosting only; original rewrites/headers preserved.
+- Firebase uploaded the 78 deployable files in the 80-file local inventory (normal ignored build files excluded). Only the three listed served files differ from the preceding release.
+- Eleven live HTTP downloads matched SHA-256 exactly: index, main bundle, bootstrap, analytics, all five public static pages, versioned social preview and approved dark wordmark.
+- Final main bundle: 6682020 bytes, +834 bytes (~0.013%). No new raster assets or tracking code.
+- Existing authenticated Attractive Remodel session: production `/` resolved to Business Home. No logout or local-data clearing. Authenticated Scaler/Admin routing was covered by tests, not live sessions.
+- The deployed public homepage was inspected through the maintained `/#/i` public route so the authenticated session could stay intact. It uses the same `PublicLandingScreen` as the signed-out root.
+- Live keyboard traversal: Business CTA -> Tab -> Scaler CTA; Enter opened `/#/scalers`. No account creation or form submission.
+- Live Business CTA opened the maintained `/#/businesses` destination. Both live CTA destinations are confirmed; role-specific signup form checks were local production-build checks, not live account creations.
+- The visible live copyright link opened `https://www.openstreetmap.org/copyright`; licence page read back successfully. Temporary licence tabs were closed.
+- Production desktop and narrow proofs: `qa-artifacts/homepage-marketplace-20260928/live-desktop.png`, `live-narrow-hero.png`, `live-narrow-map.png`. Public-only content, no customer record screenshots.
+- Existing own-team, onboarding/profile/21061, campaign, mapping/freehand and financial implementation was preserved by the minimal source delta and unchanged server deployment. Those workflows were not re-exercised or modified for homepage QA. No claim that pending own-team physical acceptance has been completed.
