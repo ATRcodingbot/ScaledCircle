@@ -9,12 +9,7 @@ function createService({db,FieldValue,authority,now=Date.now}){
  const rows=s=>s.docs.map(d=>({id:d.id,...d.data()}));
  const stamp=()=>FieldValue.serverTimestamp();
  async function bounded(query,tx){const s=await(tx?tx.get(query.limit(READ_CAP+1)):query.limit(READ_CAP+1).get());if(s.size>READ_CAP)m.fail('resource-exhausted','This view is too large. Use a smaller date range or contact support. No partial totals are shown.');return rows(s);}
- async function people(a,tx){
-  const [members,crew]=await Promise.all([bounded(db.collection(`businessWorkspaces/${a.businessId}/members`).where('status','==','active'),tx),bounded(root(a.businessId).collection('resources'),tx)]);
-  const owner=(await(tx?tx.get(db.doc('users/'+a.ownerUid)):db.doc('users/'+a.ownerUid).get())).data()||{};
-  const users=[{id:'user:'+a.ownerUid,name:owner.displayName||owner.name||(a.actorUid===a.ownerUid?a.actorName:null)||owner.companyName||'Business owner',kind:'user',uid:a.ownerUid},...members.filter(x=>x.businessId===a.businessId&&Number.isInteger(x.seatIndex)&&x.seatIndex>0&&x.seatIndex<a.capacity).map(x=>({id:'user:'+x.uid,name:x.name||'Team member',kind:'user',uid:x.uid}))];
-  return [...users,...crew.map(x=>({id:'crew:'+x.id,name:x.name,kind:'crew',status:x.status,linkedUid:x.linkedUid||null,version:x.version}))];
- }
+ const people=require('./people_roster').createRoster({db});
  function resolver(roster){return p=>roster.find(x=>x.id===p)?.linkedUid?'user:'+roster.find(x=>x.id===p).linkedUid:p;}
  function checkPeople(values,roster){if(values.some(p=>!roster.some(x=>x.id===p&&x.status!=='inactive')))m.fail('failed-precondition','An assigned person is no longer active. Choose the current team or crew.');const resolved=values.map(resolver(roster));if(new Set(resolved).size!==resolved.length)m.fail('invalid-argument','This person is selected twice through a linked crew record.');}
  function ownAssignment(a,item,roster){return item.assignedPeople.some(x=>resolver(roster)(x)==='user:'+a.actorUid);}
@@ -162,7 +157,7 @@ function createService({db,FieldValue,authority,now=Date.now}){
     if(input.overrideConflict===true){if(!a.isOwner)m.fail('permission-denied','Only the owner can override a schedule conflict.');m.text(input.overrideReason,500,true);}
     if(input.newCustomer){if(data.customerId)m.fail('invalid-argument','Choose an existing customer or create one.');const c=await prepareCustomer(input.newCustomer,null,0,{reuse:true});data={...data,customerId:c.id};customerBefore=c.value;}
     const controlledSchedule=(emailBinding?.link||current?.emailLink)?.controlledTest===true;
-    if(controlledSchedule&&!data.title.startsWith('Controlled test — '))data={...data,title:'Controlled test — '+data.title};
+    if(controlledSchedule&&!data.title.startsWith('Controlled test â€” '))data={...data,title:'Controlled test â€” '+data.title};
     const value={...data,...(current?.estimate?{estimate:current.estimate}:{}),...(emailBinding?{emailLink:emailBinding.link}:current?.emailLink?{emailLink:current.emailLink}:{}),businessId:a.businessId,version:ver,createdAtMs:current?.createdAtMs||now(),updatedAtMs:now(),updatedBy:a.actorUid};
     queue(ref(a.businessId,'items',itemId),value);event(data.customerId,current?'schedule_updated':'schedule_created',current?'Scheduled item updated':'Scheduled '+data.type,{itemId,title:data.title,startMs:data.startMs,status:data.status});
     if(!controlledSchedule&&(!current||current.status==='tentative')&&data.status==='scheduled'&&customerBefore&&['estimate','meeting'].includes(data.type))await learningEvent(customerBefore,'appointment',itemId);
@@ -286,6 +281,7 @@ function createService({db,FieldValue,authority,now=Date.now}){
  return {load,timeline,mutate,acceptEmailOffer,async execute(request){m.strict(request.data,['businessId','operation','input','requestId']);if(['inspectContactCsv','previewContactImport','commitContactImport','exportContacts','listContactImports'].includes(request.data.operation))return require('./contact_portability').createContactPortability({db,authority,now}).execute(request);if(['listContactSources','importContactSource'].includes(request.data.operation))return require('./contact_sources').execute({db,authority,request,now});
   if(['campaignListActions','changeCampaignListState'].includes(request.data.operation))return require('./shared/campaign_list_lifecycle').createService({db,FieldValue,authorize:async(r,tx)=>{const a=await authority(r,{transaction:tx});if(a.internal)m.fail('permission-denied','Use a Business campaign-management account.');return a;}}).execute(request);
   if(['createCampaignPlan','campaignPlanningContext','campaignWorkloadContext','saveCampaignWorkload','saveCampaignPlanningArea','saveCampaignMaterials','scheduleOwnTeamCampaign'].includes(request.data.operation))return require('./campaign_planning').createPlanner({db,FieldValue,authority,now}).execute(request);
+  if(['ownTeamAreaWork','amendOwnTeamAreaWork'].includes(request.data.operation))return require('./own_team_work').createService({db,FieldValue,authority,now}).execute(request);
   if(['marketingAreaHistory','markMarketingComplete'].includes(request.data.operation))return require('./marketing_history').createHistoryService({db,FieldValue,authority,now}).execute(request);
   if(request.data.operation==='campaignMapRecord')return require('./campaign_map_record').mapRecord({db,authority,request,now});if(request.data.operation==='appointmentOptions')return appointmentOptions(request);if(request.data.operation==='load')return load(request);if(request.data.operation==='timeline')return timeline(request);if(request.data.operation==='propose')return propose(request);return mutate(request);}};
 }

@@ -1,3 +1,4 @@
+import '../../widgets/own_team_area_work.dart';
 import 'campaign_map_record_screen.dart';
 import '../../widgets/campaign_workload_summary.dart';
 import '../../widgets/zone_intelligence_summary.dart';
@@ -887,6 +888,12 @@ class _CampaignZonesScreenState extends State<CampaignZonesScreen> {
                       ),
                     ],
                     const SizedBox(height: 16),
+                    if (_ownTeam)
+                      OwnTeamAreaWork(
+                        businessId: (campaign.data() as Map)['businessId']
+                            .toString(),
+                        campaignId: campaign.id,
+                      ),
                     ...zones.asMap().entries.map((entry) {
                       final index = entry.key;
                       final zone = entry.value;

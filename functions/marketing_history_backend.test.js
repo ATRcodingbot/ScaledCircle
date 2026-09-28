@@ -110,3 +110,79 @@ test('partial-work settlements cannot project an entire marketed zone even with 
   await assert.rejects(read(b,c),{code:'failed-precondition'});assert.equal((await records(b)).length,0);assert.deepEqual((await ref.get()).data(),saved);
  }
 });
+
+const workRequest=(b,op,input,uid=b,key=crypto.randomUUID())=>require('../functions-business-operations/own_team_work').createService({db,FieldValue,authority,now:()=>now}).execute(request(b,op,input,uid,key));
+async function crew(b,name='Internal marketer'){const id='person_'+crypto.randomUUID();await db.doc(`businessOperations/${b}/resources/${id}`).set({businessId:b,name,status:'active',version:1});return 'crew:'+id;}
+const workInput=(zoneId,ids,notes='')=>[{zoneId,personIds:ids,notes}];
+test('one or several people share one immutable area completion with no marketplace or cash effects',async()=>{
+ const b=await owner(),c=await campaign(b),z=await zone(b,c),p=await crew(b),q=await crew(b,'Second marketer');
+ const key=crypto.randomUUID(),data={wholeTerritory:false,zoneIds:[z],zoneWork:workInput(z,[p,q],'Worked together')};
+ await complete(b,c,data,b,key);await complete(b,c,data,b,key);
+ const [r]=await records(b);assert.equal(r.zoneWork[0].people.length,2);assert.equal(r.zoneWork[0].workedAtMs,now-day);assert.equal(r.areaSnapshots[0].zoneId,z);assert.deepEqual(r.areaSnapshots[0].geometryParts,[{points:box()}]);
+ assert.equal((await records(b)).length,1);for(const col of ['earnings','walletTransactions','campaignPayments','assignmentCompensations','campaignCompletions'])assert.equal((await db.collection(col).where('campaignId','==',c).get()).size,0);
+ assert.equal((await db.doc('campaignZones/'+z).get()).data().assignedScalerId,null);
+});
+test('attribution is optional; correction audits one record without changing coverage, completed boundary or original names',async()=>{
+ const b=await owner(),c=await campaign(b),z=await zone(b,c),p=await crew(b),q=await crew(b,'Correct person');
+ await complete(b,c,{wholeTerritory:false,zoneIds:[z]});const [original]=await records(b);
+ const input={campaignId:c,historyId:original.id,expectedRevision:0,zoneWork:workInput(z,[p],'Initial attribution')};const key=crypto.randomUUID();
+ await workRequest(b,'amendOwnTeamAreaWork',input,b,key);assert.equal((await workRequest(b,'amendOwnTeamAreaWork',input,b,key)).duplicate,true);
+ await workRequest(b,'amendOwnTeamAreaWork',{...input,expectedRevision:1,zoneWork:workInput(z,[q],'Correction')});
+ assert.deepEqual((await records(b))[0],original);const result=await workRequest(b,'ownTeamAreaWork',{campaignId:c});
+ assert.equal(result.records.length,1);assert.equal(result.records[0].attributionRevision,2);assert.equal(result.records[0].zoneWork[0].people[0].name,'Correct person');
+ assert.equal(result.records[0].amendments[1].before[0].people[0].name,'Internal marketer');
+ assert.equal((await read(b,c)).overlapPercent,100);
+});
+test('renaming/deactivating crew and archiving campaign preserve readable history; historical attribution is no active assignment',async()=>{
+ const b=await owner(),c=await campaign(b),z=await zone(b,c),p=await crew(b,'Original name');await complete(b,c,{wholeTerritory:false,zoneIds:[z],zoneWork:workInput(z,[p])});
+ await db.doc(`businessOperations/${b}/resources/${p.slice(5)}`).update({name:'Renamed',status:'inactive'});await db.doc('campaigns/'+c).update({archived:true,status:'archived'});
+ const result=await workRequest(b,'ownTeamAreaWork',{campaignId:c});assert.equal(result.records[0].zoneWork[0].people[0].name,'Original name');assert.equal(result.canComplete,false);
+ const r=result.records[0];await workRequest(b,'amendOwnTeamAreaWork',{campaignId:c,historyId:r.id,expectedRevision:0,zoneWork:workInput(z,[p],'Historical note')});
+ assert.equal((await db.doc('campaignZones/'+z).get()).data().assignedScalerId,null);
+});
+test('cross-workspace people, wrong campaign/area and marketplace attribution are denied',async()=>{
+ const b=await owner(),other=await owner(),c=await campaign(b),z=await zone(b,c),p=await crew(other);
+ await assert.rejects(complete(b,c,{wholeTerritory:false,zoneIds:[z],zoneWork:workInput(z,[p])}),{code:'permission-denied'});
+ await assert.rejects(complete(b,c,{wholeTerritory:false,zoneIds:[z],zoneWork:workInput('wrong-zone',[])}),{code:'invalid-argument'});
+ await complete(b,c,{wholeTerritory:false,zoneIds:[z]});const [r]=await records(b);
+ await assert.rejects(workRequest(b,'amendOwnTeamAreaWork',{campaignId:c,historyId:r.id,expectedRevision:0,zoneWork:workInput(z,[])},other),{code:'permission-denied'});
+ await assert.rejects(workRequest(b,'ownTeamAreaWork',{campaignId:await campaign(b,{executionMode:'marketplace'})}),{code:'failed-precondition'});
+ await assert.rejects(workRequest(b,'ownTeamAreaWork',{campaignId:c},null),{code:'unauthenticated'});
+});
+test('concurrent attribution amendments use one revision and cannot silently overwrite',async()=>{
+ const b=await owner(),c=await campaign(b),z=await zone(b,c),p=await crew(b);await complete(b,c,{wholeTerritory:false,zoneIds:[z]});const [r]=await records(b);
+ const input={campaignId:c,historyId:r.id,expectedRevision:0,zoneWork:workInput(z,[p])};
+ const result=await Promise.allSettled([workRequest(b,'amendOwnTeamAreaWork',input),workRequest(b,'amendOwnTeamAreaWork',{...input,zoneWork:workInput(z,[p],'Different note')})]);
+ assert.equal(result.filter(x=>x.status==='fulfilled').length,1);assert.equal(result.find(x=>x.status==='rejected').reason.code,'aborted');assert.equal((await records(b)).length,1);
+});
+test('per-area names remain isolated in grouped completion and planned assignment never implies worked by',async()=>{
+ const b=await owner(),c=await campaign(b),p=await crew(b),q=await crew(b,'Other person'),z=await zone(b,c,-76,{assignedPeople:[p]}),other=await zone(b,c,-75.99);
+ await db.doc('campaigns/'+c).update({scheduleItemId:'schedule_'+c});
+ await db.doc(`businessOperations/${b}/items/schedule_${c}`).set({businessId:b,campaignId:c,sourceKind:'own_team_campaign',assignedPeople:[q],status:'open',version:1});
+ const before=await workRequest(b,'ownTeamAreaWork',{campaignId:c});assert.equal(before.campaignAssignedPeople[0].id,q);assert.equal(before.records.length,0);assert.equal(before.areas.find(a=>a.id===z).assignedPeople[0].id,p);
+ await complete(b,c,{wholeTerritory:false,zoneIds:[z,other],zoneWork:workInput(other,[q])});const after=await workRequest(b,'ownTeamAreaWork',{campaignId:c});assert.equal(after.records[0].zoneWork.length,1);assert.equal(after.records[0].zoneWork[0].zoneId,other);
+});
+test('maintained saveResource creates internal person without login, invitation, paid seat or money',async()=>{
+ const b=await owner(),before=(await auth.listUsers(1000)).users.length;
+ const result=await require('../functions-business-operations/service').createService({db,FieldValue,authority,now:()=>now}).execute(request(b,'saveResource',{name:'No-account marketer',status:'active',expectedVersion:0}));
+ assert.equal(result.loginCreated,false);assert.equal(result.seatConsumed,false);assert.equal((await auth.listUsers(1000)).users.length,before);
+ assert.equal((await db.collection(`businessWorkspaces/${b}/members`).get()).size,0);assert.equal((await db.collection(`businessWorkspaces/${b}/invitations`).get()).size,0);
+});
+
+test('new completion rejects stale boundary version before recording any work',async()=>{
+ const b=await owner(),c=await campaign(b),z=await zone(b,c),p=await crew(b);
+ const ctx=await workRequest(b,'ownTeamAreaWork',{campaignId:c});const digest=ctx.areas[0].geometryDigest;
+ await db.doc('campaignZones/'+z).update({serviceArea:box(-77)});
+ await assert.rejects(complete(b,c,{wholeTerritory:false,zoneIds:[z],zoneWork:workInput(z,[p]),expectedAreaDigests:{[z]:digest}}),{code:'aborted'});assert.equal((await records(b)).length,0);
+});
+
+test('attribution retains linked person identity and does not block existing archive authority',async()=>{
+ const b=await owner(),c=await campaign(b),z=await zone(b,c),p=await crew(b);
+ await db.doc(`businessOperations/${b}/resources/${p.slice(5)}`).update({linkedUid:b});
+ await complete(b,c,{wholeTerritory:false,zoneIds:[z],zoneWork:workInput(z,[p])});const [r]=await records(b);
+ await assert.rejects(workRequest(b,'amendOwnTeamAreaWork',{campaignId:c,historyId:r.id,expectedRevision:0,zoneWork:workInput(z,[p,'user:'+b])}),{code:'invalid-argument'});
+ const before=(await db.doc('campaigns/'+c).get()).data();
+ const lifecycle=require('../functions-business-operations/service').createService({db,FieldValue,authority,now:()=>now});
+ const eligibility=await lifecycle.execute(request(b,'campaignListActions',{campaignId:c}));assert.ok(eligibility.actions.includes('archive'));
+ assert.deepEqual((await db.doc('campaigns/'+c).get()).data(),before);
+});

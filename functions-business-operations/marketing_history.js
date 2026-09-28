@@ -37,7 +37,7 @@ function summarize({businessId,proposedParts,records,nowMs}){
    !Number.isSafeInteger(row.completedAtMs)||row.completedAtMs>nowMs)m.fail('failed-precondition','Marketing history evidence needs review.');
   const hit=g.overlap(subject,g.shape(row.geometryParts));if(!hit.meaningful)continue;
   const result={id:row.id,...metadata({...row,id:row.campaignId}),executionMode:row.executionMode,completionEvidenceSource:row.completionEvidenceSource,
-   completedAtMs:row.completedAtMs,zoneIds:row.zoneIds||[],geometryParts:row.geometryParts};
+   completedAtMs:row.completedAtMs,zoneIds:row.zoneIds||[],geometryParts:row.geometryParts,zoneWork:row.zoneWork||[],areaSnapshots:row.areaSnapshots||[],attributionRevision:row.attributionRevision||0};
   if(row.completedAtMs>=windowStartMs){recent.push(result);intersections.push(hit.intersection);}else historical.push(result);
  }
  const sort=(a,b)=>b.completedAtMs-a.completedAtMs||a.id.localeCompare(b.id);recent.sort(sort);historical.sort(sort);
@@ -79,13 +79,17 @@ function createHistoryService({db,FieldValue,authority,now=Date.now}){
     if(!record)m.fail('failed-precondition','Approved completion evidence needs review before marketing history can be classified.');
     const value={id:historyId,...record};available.set(historyId,value);pending.push(value);
    }
+   for(const [id,row] of available)if(row.executionMode==='own_team'){
+    const head=(await tx.get(db.doc(`businessOperations/${a.businessId}/marketingHistoryAttribution/${id}`))).data();
+    available.set(id,require('./own_team_work').effective(row,head));
+   }
    const result=summarize({businessId:a.businessId,proposedParts,records:[...available.values()],nowMs:atMs});
    for(const {id,...record}of pending)tx.create(history(a.businessId).doc(id),{...record,recordedAt:FieldValue.serverTimestamp()});
    return result;
   });
  }
  async function markMarketingComplete(request){
-  const input=request.data?.input||{};m.strict(input,['campaignId','completedAtMs','confirmed','wholeTerritory','zoneIds']);
+  const input=request.data?.input||{};m.strict(input,['campaignId','completedAtMs','confirmed','wholeTerritory','zoneIds','zoneWork','expectedAreaDigests']);
   const initial=await authority(request,{write:false});permission(initial);const requestId=m.id(request.data?.requestId);
   if(!/^[a-zA-Z0-9_-]{16,128}$/.test(requestId)||input.confirmed!==true||typeof input.wholeTerritory!=='boolean')m.fail('invalid-argument','Confirm the completed marketing date and saved geography.');
   const ids=input.zoneIds||[];if(!Array.isArray(ids)||ids.length>ZONE_CAP||new Set(ids).size!==ids.length) m.fail('invalid-argument','Choose saved zones once each.');ids.forEach(m.id);
@@ -106,6 +110,16 @@ function createHistoryService({db,FieldValue,authority,now=Date.now}){
    if(ids.some(id=>!zones.some(z=>z.id===id)))m.fail('permission-denied','Choose saved zones from this campaign and Business.');
    if(input.wholeTerritory&&campaign.serviceArea?.length&&zones.length&&!g.containedParts(zones.map(z=>({points:z.serviceArea})),[{points:campaign.serviceArea}]))m.fail('failed-precondition','Some saved zones are outside the current campaign territory. Confirm the actual saved zones or review the campaign area before completing the whole territory.');
    const selected=zones.filter(z=>ids.includes(z.id)),geometryParts=g.parts(input.wholeTerritory?(campaign.serviceArea?.length?[{points:campaign.serviceArea}]:zones.map(z=>({points:z.serviceArea}))):selected.map(z=>({points:z.serviceArea})));g.shape(geometryParts);
+   if(input.expectedAreaDigests!==undefined){
+    const expected=input.expectedAreaDigests;
+    if(!expected||typeof expected!=='object'||Array.isArray(expected))m.fail('invalid-argument','Check the saved area version.');
+    for(const [id,digest] of Object.entries(expected)){
+     const z=zones.find(z=>z.id===id);
+     if(id!=='territory'&&!z||id==='territory'&&zones.length||!input.wholeTerritory&&!ids.includes(id))m.fail('invalid-argument','Choose a selected saved area.');
+     const current=g.parts([{points:id==='territory'?campaign.serviceArea:z.serviceArea}]);
+     if(digest!==m.hash(current))m.fail('aborted','The saved boundary changed. Review it before recording work.');
+    }
+   }
    const previousZones=new Set(prior.filter(r=>r.completionEvidenceSource==='business_reported').flatMap(r=>r.zoneIds||[]));
    if(!input.wholeTerritory&&ids.some(id=>previousZones.has(id)))m.fail('already-exists','One of these saved zones already has a completion record.');
    const completedZoneIds=input.wholeTerritory?zones.map(z=>z.id):[...previousZones,...ids],allComplete=input.wholeTerritory||(zones.length>0&&zones.every(z=>completedZoneIds.includes(z.id)));
@@ -115,9 +129,13 @@ function createHistoryService({db,FieldValue,authority,now=Date.now}){
     const saved=await tx.get(scheduleRef);scheduleItem=saved.data();
     if(!saved.exists||scheduleItem.businessId!==a.businessId||scheduleItem.sourceKind!=='own_team_campaign'||scheduleItem.campaignId!==campaign.id)m.fail('failed-precondition','The linked campaign schedule needs review.');
    }
+   const recordedZoneIds=input.wholeTerritory?zones.map(z=>z.id):ids;
+   const roster=await require('./people_roster').createRoster({db})(a,tx);
+   const zoneWork=require('./own_team_work').snapshotWork(input.zoneWork,roster,recordedZoneIds.length?recordedZoneIds:['territory'],input.completedAtMs);
+   const areaSnapshots=zones.filter(z=>recordedZoneIds.includes(z.id)).map(z=>({zoneId:z.id,name:z.zoneName||'Saved area',geometryParts:g.parts([{points:z.serviceArea}]),geometryDigest:m.hash(g.parts([{points:z.serviceArea}]))}));
    const record={schemaVersion:VERSION,businessId:a.businessId,workspaceId:a.businessId,...metadata(campaign),executionMode:'own_team',
     completedAtMs:input.completedAtMs,geometryParts,geometryDigest:m.hash(geometryParts),zoneIds:input.wholeTerritory?zones.map(z=>z.id):[...ids].sort(),wholeTerritory:input.wholeTerritory,
-    completionEvidenceSource:'business_reported',confirmed:true,recordedBy:a.actorUid,recordedAtMs:atMs,immutable:true,requestFingerprint:fingerprint};
+    zoneWork,areaSnapshots,completionEvidenceSource:'business_reported',confirmed:true,recordedBy:a.actorUid,recordedAtMs:atMs,immutable:true,requestFingerprint:fingerprint};
    tx.create(history(a.businessId).doc(historyId),{...record,recordedAt:FieldValue.serverTimestamp()});
    const campaignStatus=allComplete?'own_team_completed':campaign.status;
    tx.update(db.doc('campaigns/'+campaign.id),{status:campaignStatus,marketingCompletion:{state:allComplete?'completed':'partially_completed',completionEvidenceSource:'business_reported',lastCompletedAtMs:Math.max(input.completedAtMs,...prior.map(r=>r.completedAtMs)),completedZoneIds:[...new Set(completedZoneIds)].sort(),updatedBy:a.actorUid,updatedAtMs:atMs},updatedAt:FieldValue.serverTimestamp()});

@@ -2,6 +2,13 @@ import 'package:flutter/material.dart';
 import '../models/campaign_planner.dart';
 import '../services/business_operations_service.dart';
 
+String _areaLabel(Map<String, dynamic> record, dynamic id) {
+  for (final area in operationRows(record['areaSnapshots'])) {
+    if (area['zoneId'] == id) return area['name']?.toString() ?? 'Saved area';
+  }
+  return id == 'territory' ? 'Campaign area' : 'Saved area';
+}
+
 class CampaignMarketingHistory extends StatelessWidget {
   const CampaignMarketingHistory({
     super.key,
@@ -67,7 +74,8 @@ class CampaignMarketingHistory extends StatelessWidget {
                         '${campaignPlanningDateLabel(item['completedAtMs'])} · '
                         '${campaignPlanningTypeLabel(item['campaignType']?.toString() ?? '')}'
                         '${item['materialType'] == null ? '' : ' · ${item['materialType']}'}'
-                        '${item['completionEvidenceSource'] == 'business_reported' ? ' · Business-reported completion' : ''}',
+                        '${item['completionEvidenceSource'] == 'business_reported' ? ' · Business-reported completion' : ''}'
+                        '${operationRows(item['zoneWork']).map((w) => '\n${_areaLabel(item, w['zoneId'])}: ${operationRows(w['people']).map((p) => p['name']).join(', ')}').join()}',
                       ),
                       trailing: const Icon(Icons.open_in_new),
                       onTap: () =>

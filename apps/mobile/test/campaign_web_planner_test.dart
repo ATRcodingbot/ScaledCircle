@@ -98,6 +98,15 @@ class PlannerFixture {
       case 'scheduleOwnTeamCampaign':
         status = 'own_team_scheduled';
         return context;
+      case 'ownTeamAreaWork':
+        return {
+          'areas': [
+            {'id': 'zoneA', 'name': 'Zone A', 'geometryDigest': 'fixture-a'},
+            {'id': 'zoneB', 'name': 'Zone B', 'geometryDigest': 'fixture-b'},
+          ],
+          'people': [],
+          'records': [],
+        };
       case 'markMarketingComplete':
         return {'recorded': true, 'allComplete': false};
       default:
