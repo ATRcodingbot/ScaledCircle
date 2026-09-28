@@ -1,0 +1,12 @@
+{
+  "before": "2026-09-28T12:30:56.765326+00:00",
+  "after": "2026-09-28T12:55:36.796199+00:00",
+  "projectedRecordsUnchanged": true,
+  "socialJobCount": 12,
+  "socialStatusCounts": {
+    "scheduled": 6,
+    "approved": 2,
+    "authority_review_required": 4
+  },
+  "otherInspectedActiveQueuesEmpty": true
+}

@@ -1,0 +1,344 @@
+[
+  {
+    "function": "sendTransactionalEmailJob",
+    "sourceSha": "6f99cc628071d0549bd9c9abec0a8501533ae742",
+    "state": "ACTIVE",
+    "revision": "sendtransactionalemailjob-00011-nis",
+    "configurationUnchanged": true,
+    "iamUnchanged": true,
+    "sourceArchiveExactMatch": true,
+    "changedFiles": [
+      "transactional_email.js",
+      "weather_delivery_policy.js"
+    ]
+  },
+  {
+    "function": "retryTransactionalEmailJob",
+    "sourceSha": "6f99cc628071d0549bd9c9abec0a8501533ae742",
+    "state": "ACTIVE",
+    "revision": "retrytransactionalemailjob-00008-luf",
+    "configurationUnchanged": true,
+    "iamUnchanged": true,
+    "sourceArchiveExactMatch": true,
+    "changedFiles": [
+      "transactional_email.js",
+      "weather_delivery_policy.js"
+    ]
+  },
+  {
+    "function": "sendArtifactDeliveryEmailJob",
+    "sourceSha": "6f99cc628071d0549bd9c9abec0a8501533ae742",
+    "state": "ACTIVE",
+    "revision": "sendartifactdeliveryemailjob-00002-qob",
+    "configurationUnchanged": true,
+    "iamUnchanged": true,
+    "sourceArchiveExactMatch": true,
+    "changedFiles": [
+      "managed_growth_delivery.js"
+    ]
+  },
+  {
+    "function": "deliverMobileNotificationsV1",
+    "sourceSha": "6f99cc628071d0549bd9c9abec0a8501533ae742",
+    "state": "ACTIVE",
+    "revision": "delivermobilenotificationsv1-00009-tag",
+    "configurationUnchanged": true,
+    "iamUnchanged": true,
+    "sourceArchiveExactMatch": true,
+    "changedFiles": [
+      "policy.js",
+      "service.js"
+    ]
+  },
+  {
+    "function": "queueMobileNotificationV1",
+    "sourceSha": "6f99cc628071d0549bd9c9abec0a8501533ae742",
+    "state": "ACTIVE",
+    "revision": "queuemobilenotificationv1-00009-guy",
+    "configurationUnchanged": true,
+    "iamUnchanged": true,
+    "sourceArchiveExactMatch": true,
+    "changedFiles": [
+      "service.js"
+    ]
+  },
+  {
+    "function": "finalizePublicAccountSignup",
+    "sourceSha": "6f99cc628071d0549bd9c9abec0a8501533ae742",
+    "state": "ACTIVE",
+    "revision": "finalizepublicaccountsignup-00004-zem",
+    "configurationUnchanged": true,
+    "iamUnchanged": true,
+    "sourceArchiveExactMatch": true,
+    "changedFiles": [
+      "transactional_email.js"
+    ]
+  },
+  {
+    "function": "resendEmailVerification",
+    "sourceSha": "6f99cc628071d0549bd9c9abec0a8501533ae742",
+    "state": "ACTIVE",
+    "revision": "resendemailverification-00002-vev",
+    "configurationUnchanged": true,
+    "iamUnchanged": true,
+    "sourceArchiveExactMatch": true,
+    "changedFiles": [
+      "transactional_email.js"
+    ]
+  },
+  {
+    "function": "monitorMarylandWeatherAlerts",
+    "sourceSha": "6f99cc628071d0549bd9c9abec0a8501533ae742",
+    "state": "ACTIVE",
+    "revision": "monitormarylandweatheralerts-00008-luc",
+    "configurationUnchanged": true,
+    "iamUnchanged": true,
+    "sourceArchiveExactMatch": true,
+    "changedFiles": [
+      "weather_delivery_policy.js",
+      "weather_monitor.js"
+    ]
+  },
+  {
+    "function": "deliverManagedGrowthArtifact",
+    "sourceSha": "6f99cc628071d0549bd9c9abec0a8501533ae742",
+    "state": "ACTIVE",
+    "revision": "delivermanagedgrowthartifact-00003-kug",
+    "configurationUnchanged": true,
+    "iamUnchanged": true,
+    "sourceArchiveExactMatch": true,
+    "changedFiles": [
+      "managed_growth_delivery.js"
+    ]
+  },
+  {
+    "function": "queueCustomerGrowthReportEmailV1",
+    "sourceSha": "6f99cc628071d0549bd9c9abec0a8501533ae742",
+    "state": "ACTIVE",
+    "revision": "queuecustomergrowthreportemailv1-00008-huf",
+    "configurationUnchanged": true,
+    "iamUnchanged": true,
+    "sourceArchiveExactMatch": true,
+    "changedFiles": [
+      "growth_report_presentation.js",
+      "index.js"
+    ]
+  },
+  {
+    "function": "updateScalerProfile",
+    "sourceSha": "6f99cc628071d0549bd9c9abec0a8501533ae742",
+    "state": "ACTIVE",
+    "revision": "updatescalerprofile-00002-gow",
+    "configurationUnchanged": true,
+    "iamUnchanged": true,
+    "sourceArchiveExactMatch": true,
+    "changedFiles": [
+      "scaler_profile_notifications.js"
+    ]
+  },
+  {
+    "function": "notifyScalersOnCampaignOpened",
+    "sourceSha": "6f99cc628071d0549bd9c9abec0a8501533ae742",
+    "state": "ACTIVE",
+    "revision": "notifyscalersoncampaignopened-00007-quy",
+    "configurationUnchanged": true,
+    "iamUnchanged": true,
+    "sourceArchiveExactMatch": true,
+    "changedFiles": [
+      "scaler_job_alert_email.js"
+    ]
+  },
+  {
+    "function": "inviteBusinessTeamMember",
+    "sourceSha": "6f99cc628071d0549bd9c9abec0a8501533ae742",
+    "state": "ACTIVE",
+    "revision": "invitebusinessteammember-00004-seb",
+    "configurationUnchanged": true,
+    "iamUnchanged": true,
+    "sourceArchiveExactMatch": true,
+    "changedFiles": [
+      "business_workspace.js"
+    ]
+  },
+  {
+    "function": "mutateLandingPageDraft",
+    "sourceSha": "6f99cc628071d0549bd9c9abec0a8501533ae742",
+    "state": "ACTIVE",
+    "revision": "mutatelandingpagedraft-00005-tek",
+    "configurationUnchanged": true,
+    "iamUnchanged": true,
+    "sourceArchiveExactMatch": true,
+    "changedFiles": [
+      "landing_page.js"
+    ]
+  },
+  {
+    "function": "submitLandingPageForm",
+    "sourceSha": "6f99cc628071d0549bd9c9abec0a8501533ae742",
+    "state": "ACTIVE",
+    "revision": "submitlandingpageform-00003-hay",
+    "configurationUnchanged": true,
+    "iamUnchanged": true,
+    "sourceArchiveExactMatch": true,
+    "changedFiles": [
+      "landing_page.js"
+    ]
+  },
+  {
+    "function": "reconcileLandingPageInquiryDelivery",
+    "sourceSha": "6f99cc628071d0549bd9c9abec0a8501533ae742",
+    "state": "ACTIVE",
+    "revision": "reconcilelandingpageinquirydelivery-00003-mav",
+    "configurationUnchanged": true,
+    "iamUnchanged": true,
+    "sourceArchiveExactMatch": true,
+    "changedFiles": [
+      "landing_page.js"
+    ]
+  },
+  {
+    "function": "renderLandingPage",
+    "sourceSha": "6f99cc628071d0549bd9c9abec0a8501533ae742",
+    "state": "ACTIVE",
+    "revision": "renderlandingpage-00004-hiw",
+    "configurationUnchanged": true,
+    "iamUnchanged": true,
+    "sourceArchiveExactMatch": true,
+    "changedFiles": [
+      "landing_page.js"
+    ]
+  },
+  {
+    "function": "preparePhysicalMarketingVersion",
+    "sourceSha": "6f99cc628071d0549bd9c9abec0a8501533ae742",
+    "state": "ACTIVE",
+    "revision": "preparephysicalmarketingversion-00006-gov",
+    "configurationUnchanged": true,
+    "iamUnchanged": true,
+    "sourceArchiveExactMatch": true,
+    "changedFiles": [
+      "physical_marketing.js"
+    ]
+  },
+  {
+    "function": "mutatePhysicalMarketingMaterial",
+    "sourceSha": "6f99cc628071d0549bd9c9abec0a8501533ae742",
+    "state": "ACTIVE",
+    "revision": "mutatephysicalmarketingmaterial-00005-vil",
+    "configurationUnchanged": true,
+    "iamUnchanged": true,
+    "sourceArchiveExactMatch": true,
+    "changedFiles": [
+      "physical_marketing.js"
+    ]
+  },
+  {
+    "function": "businessEmailCallbackV1",
+    "sourceSha": "6f99cc628071d0549bd9c9abec0a8501533ae742",
+    "state": "ACTIVE",
+    "revision": "businessemailcallbackv1-00005-dip",
+    "configurationUnchanged": true,
+    "iamUnchanged": true,
+    "sourceArchiveExactMatch": true,
+    "changedFiles": [
+      "index.js"
+    ]
+  },
+  {
+    "function": "syncBusinessEmailRepliesV1",
+    "sourceSha": "6f99cc628071d0549bd9c9abec0a8501533ae742",
+    "state": "ACTIVE",
+    "revision": "syncbusinessemailrepliesv1-00018-zok",
+    "configurationUnchanged": true,
+    "iamUnchanged": true,
+    "sourceArchiveExactMatch": true,
+    "changedFiles": [
+      "shared/lead_reply_alert.js"
+    ]
+  },
+  {
+    "function": "businessEmailOperationsV1",
+    "sourceSha": "6f99cc628071d0549bd9c9abec0a8501533ae742",
+    "state": "ACTIVE",
+    "revision": "businessemailoperationsv1-00033-pin",
+    "configurationUnchanged": true,
+    "iamUnchanged": true,
+    "sourceArchiveExactMatch": true,
+    "changedFiles": [
+      "shared/lead_reply_alert.js"
+    ]
+  },
+  {
+    "function": "stripeWebhook",
+    "sourceSha": "6f99cc628071d0549bd9c9abec0a8501533ae742",
+    "state": "ACTIVE",
+    "revision": "stripewebhook-00014-bab",
+    "configurationUnchanged": true,
+    "iamUnchanged": true,
+    "sourceArchiveExactMatch": true,
+    "changedFiles": [
+      "billing_communications.js"
+    ]
+  },
+  {
+    "function": "recordBusinessReferralAttribution",
+    "sourceSha": "6f99cc628071d0549bd9c9abec0a8501533ae742",
+    "state": "ACTIVE",
+    "revision": "recordbusinessreferralattribution-00003-cuf",
+    "configurationUnchanged": true,
+    "iamUnchanged": true,
+    "sourceArchiveExactMatch": true,
+    "changedFiles": [
+      "affiliate_program.js"
+    ]
+  },
+  {
+    "function": "recordScalerReferralAttribution",
+    "sourceSha": "6f99cc628071d0549bd9c9abec0a8501533ae742",
+    "state": "ACTIVE",
+    "revision": "recordscalerreferralattribution-00002-xon",
+    "configurationUnchanged": true,
+    "iamUnchanged": true,
+    "sourceArchiveExactMatch": true,
+    "changedFiles": [
+      "affiliate_program.js"
+    ]
+  },
+  {
+    "function": "socialOAuthMetaCallbackV1",
+    "sourceSha": "6f99cc628071d0549bd9c9abec0a8501533ae742",
+    "state": "ACTIVE",
+    "revision": "socialoauthmetacallbackv1-00005-keg",
+    "configurationUnchanged": true,
+    "iamUnchanged": true,
+    "sourceArchiveExactMatch": true,
+    "changedFiles": [
+      "social_oauth.js"
+    ]
+  },
+  {
+    "function": "socialOAuthXCallbackV1",
+    "sourceSha": "6f99cc628071d0549bd9c9abec0a8501533ae742",
+    "state": "ACTIVE",
+    "revision": "socialoauthxcallbackv1-00003-mit",
+    "configurationUnchanged": true,
+    "iamUnchanged": true,
+    "sourceArchiveExactMatch": true,
+    "changedFiles": [
+      "social_oauth.js"
+    ]
+  },
+  {
+    "function": "sendScalerJobAlertEmailJob",
+    "sourceSha": "6f99cc628071d0549bd9c9abec0a8501533ae742",
+    "state": "ACTIVE",
+    "revision": "sendscalerjobalertemailjob-00003-yeg",
+    "configurationUnchanged": true,
+    "iamUnchanged": true,
+    "sourceArchiveExactMatch": true,
+    "changedFiles": [
+      "index.js",
+      "scaler_job_alert_email.js"
+    ]
+  }
+]

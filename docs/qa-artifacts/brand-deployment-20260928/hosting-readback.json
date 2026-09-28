@@ -1,0 +1,24 @@
+{
+  "sourceSha": "66f8dfdeb6abe72ad47cb317006b8756803a8bcd",
+  "version": "sites/scaled-circle/versions/94449182c64a1df1",
+  "releaseTime": "2026-09-28T12:33:00.020Z",
+  "configUnchanged": true,
+  "filesMatched": [
+    "main.dart.js",
+    "index.html",
+    "flutter_bootstrap.js",
+    "analytics.js",
+    "social/scaled-circle-social-preview-20260928.png",
+    "social/scaled-circle-social-preview.png",
+    "assets/assets/brand/wordmark-20260928/scaledcircle-lockup-dark-surface.png",
+    "assets/assets/brand/wordmark-20260928/scaledcircle-lockup-light-surface.png",
+    "assets/assets/brand/scaledcircle-lockup-dark-surface.png",
+    "assets/assets/brand/scaledcircle-lockup-light-surface.png",
+    "how-it-works/index.html",
+    "referrals/index.html",
+    "scalers/index.html",
+    "businesses/index.html",
+    "pricing/index.html"
+  ],
+  "mainSha256": "5b2ab3924e7a912c7a7a4d1f3ce3a269df67e8fb3a799db2f089d937d3eed11c"
+}
