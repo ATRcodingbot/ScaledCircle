@@ -21,3 +21,11 @@ Only the homepage illustration and focused tests changed. Existing hero, CTA rou
 No Functions, native build, dependency-lock change, account or production record mutation.
 
 Deployment/readback is recorded separately after release.
+## Production readback
+
+Deployed source: e72b896237a2a3eb34ec15b978ac85db252eb786.
+Hosting version: 23b9f8dc42266fec, released 2026-09-28T14:41:08.109Z.
+
+Nine live HTTP file hashes match the prepared package, including main/bootstrap, index, analytics and the five retained static public pages. Only main.dart.js and flutter_bootstrap.js changed from the preceding release. Live desktop and narrow browser screenshots confirm the shared workflow illustration and descriptions. The public landing route /#/i was used for visual verification without disturbing the user's signed-in Business tab.
+
+Frozen native source, functions and production records remain unchanged.
