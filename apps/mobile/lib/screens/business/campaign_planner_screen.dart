@@ -1,3 +1,4 @@
+import '../../widgets/own_team_area_work.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -431,6 +432,13 @@ class _CampaignPlannerScreenState extends State<CampaignPlannerScreen> {
   });
 
   Future<void> _complete() => _run(() async {
+    final workContext = await _call('ownTeamAreaWork', {
+      'campaignId': _campaignId,
+    });
+    if (!mounted) return;
+    final people = operationRows(workContext['people']);
+    var workedBy = <String>{};
+    var workNotes = '';
     final selected = <String>{};
     bool whole = false, confirmed = false;
     DateTime completion = DateTime.now();
@@ -508,6 +516,22 @@ class _CampaignPlannerScreenState extends State<CampaignPlannerScreen> {
                       }
                     },
                   ),
+                  OwnTeamPeoplePicker(
+                    people: people,
+                    selected: workedBy,
+                    onChanged: (v) => update(() => workedBy = v),
+                  ),
+                  const Text(
+                    'These names apply only to each area selected in this completion. Leave blank or record areas separately if different people worked them.',
+                  ),
+                  TextFormField(
+                    initialValue: workNotes,
+                    onChanged: (value) => workNotes = value,
+                    maxLength: 2000,
+                    decoration: const InputDecoration(
+                      labelText: 'Work notes (optional)',
+                    ),
+                  ),
                   CheckboxListTile(
                     value: confirmed,
                     title: const Text(
@@ -534,6 +558,7 @@ class _CampaignPlannerScreenState extends State<CampaignPlannerScreen> {
         ),
       ),
     );
+    final notes = workNotes;
     if (accepted != true) return;
     await _call('markMarketingComplete', {
       'campaignId': _campaignId,
@@ -541,6 +566,20 @@ class _CampaignPlannerScreenState extends State<CampaignPlannerScreen> {
       'confirmed': true,
       'wholeTerritory': whole,
       if (!whole) 'zoneIds': selected.toList(),
+      'expectedAreaDigests': {
+        for (final area in operationRows(workContext['areas']))
+          if (whole || selected.contains(area['id']))
+            area['id'].toString(): area['geometryDigest'],
+      },
+      'zoneWork': [
+        for (final area in operationRows(workContext['areas']))
+          if (whole || selected.contains(area['id']))
+            {
+              'zoneId': area['id'],
+              'personIds': workedBy.toList(),
+              'notes': notes,
+            },
+      ],
     });
     await _reload(hydrate: true);
   });
@@ -766,6 +805,13 @@ class _CampaignPlannerScreenState extends State<CampaignPlannerScreen> {
           'Save at least one campaign zone for Scaler work before choosing materials.',
         ),
       ..._intelligence(),
+      if (_ownTeam && _campaignId != null)
+        OwnTeamAreaWork(
+          businessId: _campaign['businessId'].toString(),
+          campaignId: _campaignId!,
+          operation: widget.operation,
+          onChanged: () => _reload(hydrate: true),
+        ),
       if (_history != null)
         CampaignMarketingHistory(
           history: _history!,
