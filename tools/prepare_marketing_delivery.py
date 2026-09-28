@@ -174,6 +174,8 @@ img{max-width:100%;height:auto;margin-top:30px;border-radius:18px}
                 styles += (ROOT / 'apps/mobile/web/marketing/audience-pages.css').read_text(encoding='utf-8')
             if route in ('/pricing', '/referrals'):
                 styles += (ROOT / 'apps/mobile/web/marketing/sales-pages.css').read_text(encoding='utf-8')
+            if route == '/businesses':
+                styles += (ROOT / 'apps/mobile/web/marketing/businesses.css').read_text(encoding='utf-8')
             # Replace only the delivery stylesheet, never the maintained head,
             # structured metadata or auth-resolution script.
             document = re.sub(r'<style>\s*\.resolving-session #marketing.*?</style>',

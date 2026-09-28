@@ -147,7 +147,7 @@ for(const pathname of ['/','/pricing']) for(const ref of ['abc234','invalid-secr
             self.assertIn('id="workflow"', body)
             self.assertEqual(body.count('class="button primary"'), 2)
             self.assertIn('href="' + route + '" aria-current="page"', body)
-            self.assertIn('href="/#' + route + '"', body)
+            self.assertIn('href="/#/login"' if route == '/businesses' else 'href="/#/scalers"', body)
             self.assertEqual(body.count('aria-label="Scaled Circle home"'), 1)
         business = docs['/businesses']
         for tool in ['Business Assistant', 'Email Campaigns', 'YouTube']:
