@@ -7,8 +7,8 @@ void main() {
     const assets = [
       'assets/brand/source/scaledcircle-approved-artwork.png',
       'assets/brand/scaledcircle-symbol.png',
-      'assets/brand/scaledcircle-lockup-dark-surface.png',
-      'assets/brand/scaledcircle-lockup-light-surface.png',
+      'assets/brand/wordmark-20260928/scaledcircle-lockup-dark-surface.png',
+      'assets/brand/wordmark-20260928/scaledcircle-lockup-light-surface.png',
       'assets/brand/scaledcircle-secondary-marketing-lockup.png',
       'web/favicon.png',
       'web/icons/Icon-192.png',
@@ -36,7 +36,7 @@ void main() {
     ).readAsStringSync();
     final publicBrand = public.split('class PublicTopNavigation').first;
     for (final source in [shared, publicBrand]) {
-      expect(source, contains('assets/brand/scaledcircle-'));
+      expect(source, contains('assets/brand/wordmark-20260928/scaledcircle-'));
       expect(source, isNot(contains('BoxShape.circle')));
     }
   });

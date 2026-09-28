@@ -1,0 +1,233 @@
+{
+  "readAt": "2026-09-28T12:06:57.252439+00:00",
+  "socialJobs": [
+    {
+      "id": "social_growth_job_0396d3c8d9106cd7b2d2350f0306f24e8721f49a4629778b817caf5a4384a458",
+      "status": "authority_review_required",
+      "provider": "instagram",
+      "bindingKeys": [
+        "versionId",
+        "version",
+        "contentHash",
+        "scheduledFor",
+        "goal",
+        "pillar",
+        "variants",
+        "bindingHash"
+      ],
+      "bindingHashPresent": true,
+      "oldSpelling": false,
+      "sharedLogoUrl": false,
+      "scheduledFor": "2026-09-18T16:00:00.000Z"
+    },
+    {
+      "id": "social_growth_job_2b64e8c82bcff187ef5f57feb757e3f6ee1403b45104cca72cd5a302cb0a3225",
+      "status": "authority_review_required",
+      "provider": "instagram",
+      "bindingKeys": [
+        "versionId",
+        "version",
+        "contentHash",
+        "scheduledFor",
+        "goal",
+        "pillar",
+        "variants",
+        "bindingHash"
+      ],
+      "bindingHashPresent": true,
+      "oldSpelling": false,
+      "sharedLogoUrl": false,
+      "scheduledFor": "2026-09-25T16:00:00.000Z"
+    },
+    {
+      "id": "social_growth_job_362bb2bf6f796b86d8010336a3ea65fcee331b37f22ac89d0963bd4eed987071",
+      "status": "scheduled",
+      "provider": "facebook",
+      "bindingKeys": [
+        "versionId",
+        "version",
+        "contentHash",
+        "scheduledFor",
+        "goal",
+        "pillar",
+        "variants",
+        "bindingHash"
+      ],
+      "bindingHashPresent": true,
+      "oldSpelling": false,
+      "sharedLogoUrl": false,
+      "scheduledFor": "2026-10-02T16:00:00.000Z"
+    },
+    {
+      "id": "social_growth_job_4aee7f259f676449e66c11d57c4994fef25de79cb83ed4a1429ecac6a25c7e34",
+      "status": "scheduled",
+      "provider": "facebook",
+      "bindingKeys": [
+        "versionId",
+        "version",
+        "contentHash",
+        "scheduledFor",
+        "goal",
+        "pillar",
+        "variants",
+        "bindingHash"
+      ],
+      "bindingHashPresent": true,
+      "oldSpelling": false,
+      "sharedLogoUrl": false,
+      "scheduledFor": "2026-10-05T16:00:00.000Z"
+    },
+    {
+      "id": "social_growth_job_89691b44bdf83231a3d0e36d3e1f27256fe8ac59baf97e59f4a0ad4922e7673a",
+      "status": "scheduled",
+      "provider": "facebook",
+      "bindingKeys": [
+        "versionId",
+        "version",
+        "contentHash",
+        "scheduledFor",
+        "goal",
+        "pillar",
+        "variants",
+        "bindingHash"
+      ],
+      "bindingHashPresent": true,
+      "oldSpelling": false,
+      "sharedLogoUrl": false,
+      "scheduledFor": "2026-09-28T16:00:00.000Z"
+    },
+    {
+      "id": "social_growth_job_89b3272798a795a7021f083efdd05c6c7cee27e34e1556cc622b02ebc89e4625",
+      "status": "approved",
+      "provider": "instagram",
+      "bindingKeys": [
+        "versionId",
+        "version",
+        "contentHash",
+        "scheduledFor",
+        "goal",
+        "pillar",
+        "variants",
+        "bindingHash"
+      ],
+      "bindingHashPresent": true,
+      "oldSpelling": false,
+      "sharedLogoUrl": false,
+      "scheduledFor": "2026-09-13T15:00:00.000Z"
+    },
+    {
+      "id": "social_growth_job_8e6328440d437442ee77455c70236fc9fffc072724639530576714350a96bb93",
+      "status": "authority_review_required",
+      "provider": "facebook",
+      "bindingKeys": [
+        "versionId",
+        "version",
+        "contentHash",
+        "scheduledFor",
+        "goal",
+        "pillar",
+        "variants",
+        "bindingHash"
+      ],
+      "bindingHashPresent": true,
+      "oldSpelling": false,
+      "sharedLogoUrl": false,
+      "scheduledFor": "2026-09-18T16:00:00.000Z"
+    },
+    {
+      "id": "social_growth_job_a5e461585ad01f902752aa83d774c9fac9e5b222a165d5467320be4bc23e697a",
+      "status": "scheduled",
+      "provider": "instagram",
+      "bindingKeys": [
+        "versionId",
+        "version",
+        "contentHash",
+        "scheduledFor",
+        "goal",
+        "pillar",
+        "variants",
+        "bindingHash"
+      ],
+      "bindingHashPresent": true,
+      "oldSpelling": false,
+      "sharedLogoUrl": false,
+      "scheduledFor": "2026-10-02T16:00:00.000Z"
+    },
+    {
+      "id": "social_growth_job_a63aa3e100cb6bc632012b656de2b31a3f18244fb437a245647bc1dc23dd791d",
+      "status": "scheduled",
+      "provider": "instagram",
+      "bindingKeys": [
+        "versionId",
+        "version",
+        "contentHash",
+        "scheduledFor",
+        "goal",
+        "pillar",
+        "variants",
+        "bindingHash"
+      ],
+      "bindingHashPresent": true,
+      "oldSpelling": false,
+      "sharedLogoUrl": false,
+      "scheduledFor": "2026-09-28T16:00:00.000Z"
+    },
+    {
+      "id": "social_growth_job_cd263c33c0e5e3ad006b2e896881782eb7729922edf2d666f427872a6ff536c5",
+      "status": "scheduled",
+      "provider": "instagram",
+      "bindingKeys": [
+        "versionId",
+        "version",
+        "contentHash",
+        "scheduledFor",
+        "goal",
+        "pillar",
+        "variants",
+        "bindingHash"
+      ],
+      "bindingHashPresent": true,
+      "oldSpelling": false,
+      "sharedLogoUrl": false,
+      "scheduledFor": "2026-10-05T16:00:00.000Z"
+    },
+    {
+      "id": "social_growth_job_f3e91de21ec9d9a1571d9ddc27b5fefeb552d537fdbcf936238a98ae5484d8f3",
+      "status": "authority_review_required",
+      "provider": "instagram",
+      "bindingKeys": [
+        "versionId",
+        "version",
+        "contentHash",
+        "scheduledFor",
+        "goal",
+        "pillar",
+        "variants",
+        "bindingHash"
+      ],
+      "bindingHashPresent": true,
+      "oldSpelling": false,
+      "sharedLogoUrl": false,
+      "scheduledFor": "2026-09-26T19:00:00.000Z"
+    },
+    {
+      "id": "social_growth_job_fa11256be649122b40e9c0cb7e502d0ac5cfa1c3183faf0b29f634541513630b",
+      "status": "approved",
+      "provider": "instagram",
+      "bindingKeys": [
+        "versionId",
+        "version",
+        "contentHash",
+        "scheduledFor",
+        "goal",
+        "pillar",
+        "variants",
+        "bindingHash"
+      ],
+      "bindingHashPresent": true,
+      "oldSpelling": false,
+      "sharedLogoUrl": false,
+      "scheduledFor": "2026-09-10T22:30:00.000Z"
+    }
+  ]
+}

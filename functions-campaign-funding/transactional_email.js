@@ -67,7 +67,7 @@ function button(label, url, color = "#1769e0") {
     `font:700 15px Arial,sans-serif">${safeLabel}</a></td></tr></table>`;
 }
 
-function shell({preheader, heading, greeting, bodyHtml, reason = "You received this email because a Scaled Circle account was created using this email address."}) {
+function shell({preheader, heading, greeting, bodyHtml, brandName = "Scaled Circle", reason = "You received this email because a Scaled Circle account was created using this email address."}) {
   const salutation = cleanText(greeting, 120);
   return `<!doctype html><html><body style="margin:0;background:#eef3f8">` +
     `<div style="display:none;max-height:0;overflow:hidden;color:transparent">${escapeHtml(preheader)}</div>` +
@@ -75,8 +75,8 @@ function shell({preheader, heading, greeting, bodyHtml, reason = "You received t
     `<tr><td align="center" style="padding:24px 12px"><table role="presentation" width="100%" ` +
     `cellspacing="0" cellpadding="0" style="max-width:640px;background:#ffffff;border-radius:14px;` +
     `border:1px solid #dbe5ef"><tr><td style="padding:30px 34px;font-family:Arial,sans-serif;color:#10243e">` +
-    `<div style="text-align:center"><img src="${LOGO_URL}" width="72" height="72" alt="Scaled Circle" ` +
-    `style="display:inline-block;border:0"><div style="font-size:22px;font-weight:800;color:#10243e">Scaled Circle</div></div>` +
+    `<div style="text-align:center"><img src="${LOGO_URL}" width="72" height="72" alt="${brandName}" ` +
+    `style="display:inline-block;border:0"><div style="font-size:22px;font-weight:800;color:#10243e">${brandName}</div></div>` +
     `<h1 style="margin:28px 0 14px;font-size:26px;line-height:1.2;color:#10243e">${escapeHtml(heading)}</h1>` +
     `<p style="font-size:16px;line-height:1.6">${salutation ? `Hi ${escapeHtml(salutation)},` : "Hello,"}</p>${bodyHtml}` +
     `<hr style="border:0;border-top:1px solid #dbe5ef;margin:28px 0">` +
@@ -216,13 +216,14 @@ function landingPagePayload(job) {
 }
 
 function landingPageContent(job) {
+  const brandName = job.templateRevision === "brand-20260928" ? "Scaled Circle" : "ScaledCircle";
   const payload = landingPagePayload(job);
   if (job.template === "landing_page_business_inquiry") {
     const subject = `New estimate request from ${payload.customerName}`;
-    const text = [`New customer inquiry from Scaled Circle`, "", `Landing Page: ${payload.landingPageTitle}`,
+    const text = [`New customer inquiry from ${brandName}`, "", `Landing Page: ${payload.landingPageTitle}`,
       `Customer: ${payload.customerName}`, `Email: ${payload.customerEmail}`,
       `Phone: ${payload.customerPhone}`, `Request: ${payload.inquirySummary || "No additional details provided"}`,
-      "", "Open the inquiry in Scaled Circle:", payload.inquiryUrl].join("\n");
+      "", `Open the inquiry in ${brandName}:`, payload.inquiryUrl].join("\n");
     const bodyHtml = `<p style="font-size:15px;line-height:1.6">A customer sent a request through ` +
       `<strong>${escapeHtml(payload.landingPageTitle)}</strong>.</p><table role="presentation">` +
       [["Customer", payload.customerName], ["Email", payload.customerEmail], ["Phone", payload.customerPhone],
@@ -230,9 +231,9 @@ function landingPageContent(job) {
         .map(([label, value]) => `<tr><td style="padding:6px 10px;color:#60758a">${escapeHtml(label)}</td>` +
           `<td style="padding:6px 10px;color:#10243e">${escapeHtml(value)}</td></tr>`).join("") +
       `</table><div style="margin-top:24px">${button("OPEN INQUIRY", payload.inquiryUrl, "#0c9f73")}</div>`;
-    return {subject, text, html: shell({preheader: subject, heading: "NEW CUSTOMER INQUIRY",
+    return {subject, text, html: shell({brandName, preheader: subject, heading: "NEW CUSTOMER INQUIRY",
       greeting: payload.businessName === "the Business" ? "" : payload.businessName, bodyHtml,
-      reason:"You received this transactional email because your published Scaled Circle Landing Page received an inquiry."})};
+      reason:`You received this transactional email because your published ${brandName} Landing Page received an inquiry.`})};
   }
   const subject = `Your request was sent to ${payload.businessName}`;
   const detail = payload.inquirySummary ? `\n\nYour request:\n${payload.inquirySummary}` : "";
@@ -246,9 +247,9 @@ function landingPageContent(job) {
     `<p style="font-size:14px;line-height:1.6;color:#60758a">They can follow up using the contact details ` +
     `you provided. This confirmation does not promise a response time, appointment, quote, or acceptance. ` +
     `It is not a marketing subscription.</p>`;
-  return {subject, text, html: shell({preheader: subject, heading: "REQUEST RECEIVED",
+  return {subject, text, html: shell({brandName, preheader: subject, heading: "REQUEST RECEIVED",
     greeting: firstName(payload.customerName), bodyHtml,
-    reason:"You received this transactional confirmation because you submitted a request through a Scaled Circle Landing Page."})};
+    reason:`You received this transactional confirmation because you submitted a request through a ${brandName} Landing Page.`})};
 }
 
 function deliveryContent(job) {
@@ -422,7 +423,7 @@ async function processDeliveryJob({db, reference, jobId, FieldValue, createTrans
   const content = deliveryContent(job);
   const transport = createTransport({service:"gmail",auth:{user:SUPPORT_EMAIL,pass:smtpPassword}});
   try {
-    const result = await transport.sendMail({from:`${SUPPORT_NAME} <${SUPPORT_EMAIL}>`,to:validEmail(job.to),
+    const result = await transport.sendMail({from:`${job.fromName === SUPPORT_NAME ? SUPPORT_NAME : "ScaledCircle Support"} <${SUPPORT_EMAIL}>`,to:validEmail(job.to),
       replyTo:SUPPORT_EMAIL,subject:content.subject,text:content.text,...(content.html?{html:content.html}:{}),
       headers:{"X-Scaled-Circle-Notification":jobId}});
     await reference.set({status:"sent",messageId:cleanText(result?.messageId,500),providerResult:"accepted",

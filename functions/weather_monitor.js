@@ -63,7 +63,7 @@ function createService({db,getOwner,now=Date.now,fetchImpl=fetch,providerBoundar
    const matches=geo.matches(c.coverage,await geo.alertGeometry(feature,zone));
    if(c.coverage.unresolved.length)throw Error('weather_coverage_unresolved');
    const result=policy.decision({userId:job.businessUid,job,preferences:c.preferences,entitled:c.entitled,owner:identity,event,matches,now:now()});
-   return {...result,...(result.state==='eligible'?{content:policy.content({event,matches,timeZone:c.timeZone,url:job.viewUrl,preferencesUrl:job.preferencesUrl})}:{})};
+   return {...result,...(result.state==='eligible'?{content:policy.content({event,matches,timeZone:c.timeZone,url:job.viewUrl,preferencesUrl:job.preferencesUrl,templateRevision:job.templateRevision})}:{})};
  }
  async function monitorUser(uid,features){
    const c=await context(uid);if(!c.entitled)return {status:'not_entitled'};
@@ -94,8 +94,8 @@ function createService({db,getOwner,now=Date.now,fetchImpl=fetch,providerBoundar
        }
        if(eligible&&c.timeZone){
          const viewUrl='https://scaledcircle.com/#/business/weather?alert='+encodeURIComponent(id),preferencesUrl='https://scaledcircle.com/#/business/weather-preferences';
-         const message=policy.content({event:e,matches,timeZone:c.timeZone,url:viewUrl,preferencesUrl});
-         tx.create(db.doc('outboundEmailJobs/weather_'+id),{template:'weather_alert_v2',businessUid:uid,to:identity.email.toLowerCase(),fromAddress:'support@scaledcircle.com',eventId:e.eventId,eventRevision:e.revision,eventStatus:e.status,expiresAt:e.expiresAt,officialUrl:e.officialUrl,viewUrl,preferencesUrl,...message,status:'queued',attempts:0,createdAtMs:at});
+         const message=policy.content({templateRevision:'brand-20260928',event:e,matches,timeZone:c.timeZone,url:viewUrl,preferencesUrl});
+         tx.create(db.doc('outboundEmailJobs/weather_'+id),{template:'weather_alert_v2',templateRevision:'brand-20260928',fromName:'Scaled Circle Support',businessUid:uid,to:identity.email.toLowerCase(),fromAddress:'support@scaledcircle.com',eventId:e.eventId,eventRevision:e.revision,eventStatus:e.status,expiresAt:e.expiresAt,officialUrl:e.officialUrl,viewUrl,preferencesUrl,...message,status:'queued',attempts:0,createdAtMs:at});
        }
      }
      tx.set(stateRef,{status:partialCoverage?'partial_coverage':'available',reason:partialCoverage?'saved_area_exceeds_maryland_provider_coverage':null,checkedAt:at,baselineAt:previous?.baselineAt||at,coverageBaselineAt:boundary,coverageDigest,activeAlerts:matched.map(x=>({event:x.event,matches:x.matches})),unresolved:[]},{merge:true});

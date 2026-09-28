@@ -23,6 +23,14 @@ def spelling(data):
     return b''.join(parts)
 
 
+def artwork(data):
+    # New first-party presentation opts into immutable v2 artwork; old URLs stay served.
+    return (data.replace(b'brand/scaledcircle-lockup-', b'brand/wordmark-20260928/scaledcircle-lockup-')
+            .replace(b'scaled-circle-social-preview.png', b'scaled-circle-social-preview-20260928.png')
+            .replace(b'.brand img{width:192px', b'.brand img{width:199px')
+            .replace(b'.brand img{width:160px', b'.brand img{width:166px'))
+
+
 def prepare(baseline, build, output):
     if output.exists():
         raise ValueError('Use a new review output directory; retain prior evidence.')
@@ -36,7 +44,7 @@ def prepare(baseline, build, output):
     changes = {}
     for page in PAGES:
         original = (baseline / page).read_bytes()
-        updated = spelling(original)
+        updated = artwork(spelling(original))
         (output / page).write_bytes(updated)
         changes[page] = {'before': hashlib.sha256(original).hexdigest(),
                          'after': hashlib.sha256(updated).hexdigest()}

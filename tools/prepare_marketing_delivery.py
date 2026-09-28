@@ -67,7 +67,7 @@ def documents(*, staging=False):
     links = ''.join('<a href="' + route + '">' + label + '</a>' for route, label in
                    [('/businesses', 'Businesses'), ('/scalers', 'Scalers'),
                     ('/how-it-works', 'How it works'), ('/pricing', 'Pricing'), ('/referrals', 'Referral Program'), ('/#/login', 'Log in')])
-    navigation = ('<a class="brand" href="/" aria-label="Scaled Circle home"><img src="/assets/assets/brand/scaledcircle-lockup-dark-surface.png" alt="Scaled Circle" width="192" height="64"></a>'
+    navigation = ('<a class="brand" href="/" aria-label="Scaled Circle home"><img src="/assets/assets/brand/wordmark-20260928/scaledcircle-lockup-dark-surface.png" alt="Scaled Circle" width="192" height="64"></a>'
                   '<div class="desktop-links">' + links + '</div><details class="mobile-menu"><summary>Menu</summary><div>' + links + '</div></details>')
     result = {}
     for route, sections in content().items():
@@ -158,7 +158,7 @@ addEventListener('hashchange', startProduct); startProduct();
         document = document.replace('</head>', '''<script>if(location.pathname==='/'||location.pathname==='/login'||location.hash.startsWith('#/')){document.documentElement.classList.add('resolving-session');}</script><style>
 .resolving-session #marketing{display:none}
 body{margin:0;background:#071525;color:#fff;font:18px/1.6 system-ui,sans-serif}
-*{box-sizing:border-box}main{max-width:1160px;margin:auto;padding:28px}nav{display:flex;gap:24px;align-items:center;justify-content:space-between;padding-bottom:28px;border-bottom:1px solid #29445b}.desktop-links{display:flex;gap:18px;align-items:center}.mobile-menu{display:none}.brand img{width:192px;height:64px;object-fit:contain;margin:0;border-radius:0}nav>.cta{display:none}
+*{box-sizing:border-box}main{max-width:1160px;margin:auto;padding:28px}nav{display:flex;gap:24px;align-items:center;justify-content:space-between;padding-bottom:28px;border-bottom:1px solid #29445b}.desktop-links{display:flex;gap:18px;align-items:center}.mobile-menu{display:none}.brand img{width:199px;height:64px;object-fit:contain;margin:0;border-radius:0}nav>.cta{display:none}
 a{color:#45dfbd}section{padding:24px 0;border-bottom:1px solid #29445b}
 a:focus-visible{outline:3px solid white;outline-offset:5px}nav a,footer a{display:inline-block;padding:10px 0}
 .cta{display:inline-block;background:#45dfbd;color:#071525;padding:12px 22px;border-radius:8px;text-decoration:none;font-weight:700}
@@ -166,7 +166,7 @@ a:focus-visible{outline:3px solid white;outline-offset:5px}nav a,footer a{displa
 h1{font-size:clamp(32px,5vw,58px);line-height:1.1}h2{font-size:27px}p{max-width:760px;color:#c6d5e1}
 img{max-width:100%;height:auto;margin-top:30px;border-radius:18px}
 .plans{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px}.plans article,.capabilities article{padding:24px;border:1px solid #29445b;border-radius:18px;background:#0b1d30}.plans h2{font-size:24px}.price{font-size:32px;font-weight:700;color:#fff}.example{margin-top:36px;padding:28px;background:#102b42;border-radius:20px}.eyebrow{text-transform:uppercase;letter-spacing:1px;font-size:14px}.mobile-menu summary{cursor:pointer;min-height:48px;padding:12px;list-style:none}.mobile-menu div{position:absolute;right:0;top:48px;z-index:5;padding:16px;background:#102b42;border:1px solid #29445b;border-radius:12px;min-width:220px}.mobile-menu a{display:block;padding:12px}summary:focus-visible{outline:3px solid white;outline-offset:4px}a{overflow-wrap:anywhere}section{padding-block:36px}
-@media(max-width:1100px){.desktop-links{display:none}.mobile-menu{display:block;position:relative}main{padding:20px}nav{gap:12px}.brand img{width:160px}.plans{grid-template-columns:1fr}h1{font-size:38px}.example{padding:22px}}
+@media(max-width:1100px){.desktop-links{display:none}.mobile-menu{display:block;position:relative}main{padding:20px}nav{gap:12px}.brand img{width:166px}.plans{grid-template-columns:1fr}h1{font-size:38px}.example{padding:22px}}
 </style></head>''')
         if route in ('/how-it-works', '/businesses', '/scalers', '/pricing', '/referrals'):
             styles = (ROOT / 'apps/mobile/web/marketing/how-it-works.css').read_text(encoding='utf-8')

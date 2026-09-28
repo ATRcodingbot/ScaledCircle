@@ -1,0 +1,28 @@
+{
+  "liveBaseline": "sites/scaled-circle/versions/414aeb5e1f4ea9a9",
+  "baselineAppSource": "16dabbf907baf54487ade9c453db278e4c38fa21",
+  "staticChanges": {
+    "businesses/index.html": {
+      "before": "b17d4cb4ca8794b75c2dd92098a7ec90d04669b467a99962ce4db4f1340bd562",
+      "after": "9eac91e91278deaa8527f397dafed0ac3d21928fd2c30f310297c3622aa5f062"
+    },
+    "scalers/index.html": {
+      "before": "050fb3ce22b21b4f9549b62852fcf20d7595e5026c92a6f272909a9a76b8fb66",
+      "after": "733addf0f7d9abe925903b730a918ac92433f91f3eb4b06084ddce1f60ac0320"
+    },
+    "pricing/index.html": {
+      "before": "0ae99f534556bf95818a626658b86d9be5668e8c99462253b10c16535825758f",
+      "after": "446719cedc70ca68271d593c8a1adf51bde0a4e75075152b7dbddaa74cba070a"
+    },
+    "how-it-works/index.html": {
+      "before": "900266e618adeef848040ade6e749d1cfc1efa18d57748c495bd347a32dd60e0",
+      "after": "baabdf73a12b0fb5f28370876a44fbba90c07690cc57790b5145259b6086e5e0"
+    },
+    "referrals/index.html": {
+      "before": "7705bfd3d5ba0d64dc9a1942f54b464ae74c8fc901903825af28e3cccb6d4c99",
+      "after": "99b3d2cc86ccac38258e34dc9f586904b48a1fd892df53349d154245eeb1d930"
+    }
+  },
+  "mainSha256": "5b2ab3924e7a912c7a7a4d1f3ce3a269df67e8fb3a799db2f089d937d3eed11c",
+  "oldAssetsPreserved": true
+}

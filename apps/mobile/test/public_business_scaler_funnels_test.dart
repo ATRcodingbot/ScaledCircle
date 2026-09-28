@@ -320,7 +320,7 @@ void main() {
 
     expect(
       components,
-      contains("'assets/brand/scaledcircle-lockup-dark-surface.png'"),
+      contains("'assets/brand/wordmark-20260928/scaledcircle-lockup-dark-surface.png'"),
     );
     expect(components, contains('How do you want to use Scaled Circle?'));
     expect(business, contains('Selected Area'));

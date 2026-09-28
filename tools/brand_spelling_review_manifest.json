@@ -1,5 +1,5 @@
 {
-  "base": "01eaaeb",
+  "base": "cd5c294",
   "presentationFiles": {
     "apps/mobile/lib/bootstrap/ios_startup_gate.dart": {
       "normalizedSha256": "bf01388f42e4ae7e74bbad262cf06b069992bbe551484476d3e63f7a2ef79ade",
@@ -94,11 +94,11 @@
       "destinationsSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     },
     "apps/mobile/lib/screens/business/campaign_planner_screen.dart": {
-      "normalizedSha256": "c0b59e36ffa9a090e94fe63051fb5a222468627b36dd1e8360bff82d650db1c5",
+      "normalizedSha256": "85555aa55ea3eea672c1c7f823e8299e11f8e57a5d2ce36c66bb24bcda0dc09f",
       "destinationsSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     },
     "apps/mobile/lib/screens/business/campaign_zones_screen.dart": {
-      "normalizedSha256": "18adb56ac900e89b30b3d204d203425918f8675a9a6a43360bc898c7cbc86d32",
+      "normalizedSha256": "627d0385fd8bfeaab3160a073386e7a0933b2788a0a5650afa3ea2e35de0e9a1",
       "destinationsSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     },
     "apps/mobile/lib/screens/business/create/campaigns/flyer/flyer_campaign_screen.dart": {
@@ -874,5 +874,23 @@
     "functions/admin_launch_candidate_evidence.js": "da90f38aca07b1125654e7cad87b9e4c12d1888eb2c8061122ace6dbf39c6e1a",
     "functions/attribution_foundation.js": "8a95b333470518aa70ecbae9e1f996c178cdf77d0c3d735dcf410c96088fdb08",
     "functions/legal_consent.js": "a63413ef1dd11ddd314991e89792b01072192ece6ba019938248895ae1cf3398"
-  }
+  },
+  "retainedProductionSource": "16dabbf907baf54487ade9c453db278e4c38fa21",
+  "assetPathMigrations": {
+    "brand/wordmark-20260928/scaledcircle-lockup-": "brand/scaledcircle-lockup-",
+    "scaled-circle-social-preview-20260928.png": "scaled-circle-social-preview.png"
+  },
+  "versionedTemplates": [
+    "functions-artifact-email/managed_growth_delivery.js",
+    "functions-campaign-funding/transactional_email.js",
+    "functions-landing-page/landing_page.js",
+    "functions-mobile-notifications/policy.js",
+    "functions-transactional-email/transactional_email.js",
+    "functions-weather/weather_delivery_policy.js",
+    "functions/landing_page.js",
+    "functions/managed_growth_delivery.js",
+    "functions/transactional_email.js",
+    "functions/weather_delivery_policy.js"
+  ],
+  "versioningTests": "functions/brand_revision.test.js"
 }

@@ -154,7 +154,7 @@ void main() {
         void header(String step) {
           expect(find.byType(AuthenticatedAppBar), findsOneWidget);
           expect(find.byType(AppBar), findsOneWidget);
-          expect(find.byTooltip('ScaledCircle Home'), findsOneWidget);
+          expect(find.byTooltip('Scaled Circle Home'), findsOneWidget);
           expect(find.byType(BackButton), findsOneWidget);
           expect(find.byTooltip('Workspace and account'), findsOneWidget);
           expect(find.text(step), findsOneWidget);
@@ -210,13 +210,13 @@ void main() {
       expect(find.text('Step 1 — Campaign'), findsOneWidget);
       expect(find.byType(BackButton), findsOneWidget);
       await tester.enterText(find.byType(TextField).first, 'Unsaved fixture');
-      await tester.tap(find.byTooltip('ScaledCircle Home'));
+      await tester.tap(find.byTooltip('Scaled Circle Home'));
       await tester.pumpAndSettle();
       expect(find.text('Leave unsaved changes?'), findsOneWidget);
       await tester.tap(find.text('Keep editing'));
       await tester.pumpAndSettle();
       expect(find.text('Unsaved fixture'), findsOneWidget);
-      await tester.tap(find.byTooltip('ScaledCircle Home'));
+      await tester.tap(find.byTooltip('Scaled Circle Home'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Discard changes'));
       await tester.pumpAndSettle();

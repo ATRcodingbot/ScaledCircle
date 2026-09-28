@@ -14,13 +14,20 @@ class BrandReview(unittest.TestCase):
     def test_only_display_spelling_changes(self):
         for name, evidence in MANIFEST['presentationFiles'].items():
             with self.subTest(file=name):
+                if name in MANIFEST.get('versionedTemplates', []):
+                    continue  # Explicit compatibility behavior is exercised in brand_revision.test.js.
                 data = (ROOT / name).read_bytes()
+                for new, old in MANIFEST.get('assetPathMigrations', {}).items():
+                    data = data.replace(new.encode(), old.encode())
+                data = data.replace(b'.brand img{width:199px', b'.brand img{width:192px').replace(b'.brand img{width:166px', b'.brand img{width:160px')
                 normalized = data.replace(b'Scaled Circle', b'ScaledCircle').replace(b'SCALED CIRCLE', b'SCALEDCIRCLE').replace(b'\r\n', b'\n')
                 self.assertEqual(hashlib.sha256(normalized).hexdigest(), evidence['normalizedSha256'])
 
     def test_urls_and_email_destinations_unchanged(self):
         for name, evidence in MANIFEST['presentationFiles'].items():
             data = (ROOT / name).read_bytes()
+            for new, old in MANIFEST.get('assetPathMigrations', {}).items():
+                data = data.replace(new.encode(), old.encode())
             urls = re.findall(rb'(?:https?://|mailto:)[^\s<>"\x27`]+', data)
             self.assertEqual(hashlib.sha256(b'\n'.join(urls)).hexdigest(), evidence['destinationsSha256'], name)
 

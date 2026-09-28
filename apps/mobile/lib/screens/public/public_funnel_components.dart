@@ -89,7 +89,7 @@ class ScaledCircleBrand extends StatelessWidget {
             padding: const EdgeInsets.symmetric(vertical: 7, horizontal: 2),
             child: Image.asset(
               showWordmark
-                  ? 'assets/brand/scaledcircle-lockup-dark-surface.png'
+                  ? 'assets/brand/wordmark-20260928/scaledcircle-lockup-dark-surface.png'
                   : 'assets/brand/scaledcircle-symbol.png',
               height: compact ? 34 : 42,
               fit: BoxFit.contain,

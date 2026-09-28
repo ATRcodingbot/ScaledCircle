@@ -1,4 +1,4 @@
-param([string]$Source = (Join-Path $PSScriptRoot '..\apps\mobile\assets\brand\source\scaledcircle-approved-artwork.png'))
+param([string]$Source = (Join-Path $PSScriptRoot '..\apps\mobile\assets\brand\source\scaledcircle-approved-artwork.png'), [switch]$SpacedWordmarkOnly)
 
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Drawing
@@ -65,7 +65,7 @@ function New-Lockup([System.Drawing.Bitmap]$symbol, [System.Drawing.Bitmap]$scal
   $right = Recolor-Opacity $circle $wordColor
   $symbolWidth = [int][Math]::Round($symbol.Width * $height / $symbol.Height)
   $smallSymbol = Resize-Bitmap $symbol $symbolWidth $height
-  $brandGap = 28; $wordGap = 4
+  $brandGap = 28; $wordGap = if ($SpacedWordmarkOnly) { 47 } else { 4 } # Original source: Circle x704 minus Scaled right edge x657.
   $result = New-Object System.Drawing.Bitmap(($symbolWidth + $brandGap + $scaled.Width + $wordGap + $circle.Width), $height, [System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
   $graphics = [System.Drawing.Graphics]::FromImage($result)
   try {
@@ -90,10 +90,16 @@ try {
   $circle = Remove-WhiteCanvas $sourceBitmap ([System.Drawing.Rectangle]::new(704, 773, 460, 145))
   $secondary = Remove-WhiteCanvas $sourceBitmap ([System.Drawing.Rectangle]::new(97, 160, 1068, 837))
   try {
+    if ($SpacedWordmarkOnly) {
+      $brand = Join-Path $brand 'wordmark-20260928'
+      New-Item -ItemType Directory -Force -Path $brand | Out-Null
+    } else {
     Save-Png $symbol (Join-Path $brand 'scaledcircle-symbol.png')
     Save-Png $secondary (Join-Path $brand 'scaledcircle-secondary-marketing-lockup.png')
+    }
     New-Lockup $symbol $scaled $circle ([System.Drawing.ColorTranslator]::FromHtml('#FFFFFF')) (Join-Path $brand 'scaledcircle-lockup-dark-surface.png')
     New-Lockup $symbol $scaled $circle ([System.Drawing.ColorTranslator]::FromHtml('#062650')) (Join-Path $brand 'scaledcircle-lockup-light-surface.png')
+    if (-not $SpacedWordmarkOnly) {
     foreach ($icon in @(
       @{Size=64; Path=(Join-Path $web 'favicon.png'); Scale=.92},
       @{Size=192; Path=(Join-Path $icons 'Icon-192.png'); Scale=.92},
@@ -114,17 +120,19 @@ try {
       } finally { $graphics.Dispose(); $canvas.Dispose(); $resized.Dispose() }
     }
 
-    $socialPath = Join-Path $web 'social\scaled-circle-social-preview.png'
+    }
+    $socialName = if ($SpacedWordmarkOnly) { 'social\scaled-circle-social-preview-20260928.png' } else { 'social\scaled-circle-social-preview.png' }
+    $socialPath = Join-Path $web $socialName
     New-Item -ItemType Directory -Force -Path (Split-Path $socialPath) | Out-Null
     $socialLockup = [System.Drawing.Bitmap]::FromFile((Join-Path $brand 'scaledcircle-lockup-dark-surface.png'))
     $socialCanvas = New-Object System.Drawing.Bitmap(1200, 630, [System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
     $socialGraphics = [System.Drawing.Graphics]::FromImage($socialCanvas)
     try {
       $socialGraphics.Clear([System.Drawing.ColorTranslator]::FromHtml('#020914'))
-      $lockupWidth = 980
+      $lockupWidth = if ($SpacedWordmarkOnly) { [int][Math]::Round($socialLockup.Width * (980 / 1189)) } else { 980 }
       $lockupHeight = [int][Math]::Round($socialLockup.Height * $lockupWidth / $socialLockup.Width)
       $lockup = Resize-Bitmap $socialLockup $lockupWidth $lockupHeight
-      try { $socialGraphics.DrawImageUnscaled($lockup, 110, [int]((630-$lockupHeight)/2)); Save-Png $socialCanvas $socialPath }
+      try { $socialGraphics.DrawImageUnscaled($lockup, [int]((1200-$lockupWidth)/2), [int]((630-$lockupHeight)/2)); Save-Png $socialCanvas $socialPath }
       finally { $lockup.Dispose() }
     } finally { $socialGraphics.Dispose(); $socialCanvas.Dispose(); $socialLockup.Dispose() }
   } finally { $symbol.Dispose(); $scaled.Dispose(); $circle.Dispose(); $secondary.Dispose() }

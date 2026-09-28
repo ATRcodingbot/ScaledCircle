@@ -1,5 +1,7 @@
 # Scaled Circle spelling review — 2026-09-28
 
+Historical text-only checkpoint. The completed artwork and queue-compatibility review is in [brand-package-review-20260928.md](brand-package-review-20260928.md). Findings below describe the earlier candidate, not the final package.
+
 Prepared only. No Hosting/Functions deployment, provider console change, native build, message send, artwork regeneration or production record mutation was performed.
 
 ## Source and preservation

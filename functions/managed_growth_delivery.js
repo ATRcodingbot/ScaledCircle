@@ -49,7 +49,7 @@ async function processArtifactEmailJob({jobId, job, senderEmail, senderName,
   if (!await claim()) return {status: "already_claimed"};
   try {
     const result = await sendMail({
-      from: `${text(senderName, 120)} <${normalizeEmail(senderEmail)}>`,
+      from: `${text(job.fromName || "ScaledCircle Support", 120)} <${normalizeEmail(senderEmail)}>`,
       to: validated.recipient,
       replyTo: normalizeEmail(senderEmail),
       subject: validated.subject,
