@@ -1474,7 +1474,7 @@ exports.sendScalerJobAlertEmailJob = onDocumentCreated(
     try {
       const result = await nodemailer.createTransport({service: "gmail", auth: {
         user: scalerJobAlertEmail.SUPPORT_EMAIL, pass: SUPPORT_EMAIL_SMTP_PASSWORD.value(),
-      }}).sendMail({from: `${scalerJobAlertEmail.SUPPORT_FROM_NAME} <${scalerJobAlertEmail.SUPPORT_EMAIL}>`,
+      }}).sendMail({from: `${queued.fromName === "Scaled Circle" ? "Scaled Circle" : "ScaledCircle"} <${scalerJobAlertEmail.SUPPORT_EMAIL}>`,
         to: queued.to, replyTo: scalerJobAlertEmail.SUPPORT_EMAIL,
         subject: queued.subject, text: queued.text,
         headers: {"X-Scaled-Circle-Notification": event.params.jobId}});

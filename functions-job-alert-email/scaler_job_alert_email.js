@@ -33,7 +33,7 @@ function createJob({campaignId, scalerUid, recipient, campaignName, jobType, are
   const safeReasons = Array.isArray(reasons) ? reasons.slice(0, 3).map((reason) =>
     String(reason).trim().slice(0, 160)).filter(Boolean).join(" ") : "";
   return {id, schemaVersion: "ScalerJobAlertEmailJobV1", policyVersion: POLICY_VERSION,
-    status: "queued",
+    status: "queued", fromName: SUPPORT_FROM_NAME,
     scalerUid, campaignId, to, fromAddress: SUPPORT_EMAIL, template: "scaler_job_alert_v1",
     subject: "New Scaled Circle job near your work area",
     text: `A new ${safeType} job${campaignName ? ` (${String(campaignName).slice(0, 120)})` : ""} matches your saved preferences.\n\nArea: ${safeArea}${safeReasons ? `\nWhy it matched: ${safeReasons}` : ""}\n\nThis is an opportunity, not an assignment. Open Scaled Circle to review and apply: https://scaledcircle.com/#/jobs\n\nManage job alerts in Scaled Circle → My Work Areas & Alerts.`,

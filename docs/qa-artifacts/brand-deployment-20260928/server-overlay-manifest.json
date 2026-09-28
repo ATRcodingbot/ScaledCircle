@@ -1,0 +1,368 @@
+[
+  {
+    "function": "sendTransactionalEmailJob",
+    "beforeRevision": "sendtransactionalemailjob-00010-yij",
+    "changedFiles": [
+      {
+        "file": "transactional_email.js",
+        "beforeSha256": "967fcc2bf9183dbb7e2074d595aea222fcc31d28ab379770f04909205917b0a4",
+        "afterSha256": "a09081531967f4cae388335abdd267921207e98a01adfd6ddb68b799b2e6183b"
+      },
+      {
+        "file": "weather_delivery_policy.js",
+        "beforeSha256": "b0fde895263b318cb8203c0e9f4484c3b91c2b4bacdfb2f08a7614bdd36ec8f6",
+        "afterSha256": "ac78cabf47ae7d89852429da6040ba595834f6a39203aeb5d37922c5b742d3a1"
+      }
+    ],
+    "lockUnchanged": true
+  },
+  {
+    "function": "retryTransactionalEmailJob",
+    "beforeRevision": "retrytransactionalemailjob-00007-weg",
+    "changedFiles": [
+      {
+        "file": "transactional_email.js",
+        "beforeSha256": "967fcc2bf9183dbb7e2074d595aea222fcc31d28ab379770f04909205917b0a4",
+        "afterSha256": "a09081531967f4cae388335abdd267921207e98a01adfd6ddb68b799b2e6183b"
+      },
+      {
+        "file": "weather_delivery_policy.js",
+        "beforeSha256": "b0fde895263b318cb8203c0e9f4484c3b91c2b4bacdfb2f08a7614bdd36ec8f6",
+        "afterSha256": "ac78cabf47ae7d89852429da6040ba595834f6a39203aeb5d37922c5b742d3a1"
+      }
+    ],
+    "lockUnchanged": true
+  },
+  {
+    "function": "sendArtifactDeliveryEmailJob",
+    "beforeRevision": "sendartifactdeliveryemailjob-00001-guh",
+    "changedFiles": [
+      {
+        "file": "managed_growth_delivery.js",
+        "beforeSha256": "a2c2f47a39feacc31c2f6358ef477f508049b999ec99fcd850b68d25f93554fc",
+        "afterSha256": "07effd795eb372ae44dd69b37cb949d780140ca32da05aa48f2aedc558346b9a"
+      }
+    ],
+    "lockUnchanged": true
+  },
+  {
+    "function": "deliverMobileNotificationsV1",
+    "beforeRevision": "delivermobilenotificationsv1-00008-gut",
+    "changedFiles": [
+      {
+        "file": "policy.js",
+        "beforeSha256": "dbc8562e23bea037919ed11808130c2c9eab372372f6f7bf4ffafbe444de4957",
+        "afterSha256": "2c03db8a636f2eb9f15ba4d9ec1340850b48b25216478e7c9f80c28054fc2814"
+      },
+      {
+        "file": "service.js",
+        "beforeSha256": "1a4e28540e1fb411e6543e60f2a02fddd8315780d6c515d17da2c5ebfeb454e9",
+        "afterSha256": "41c93899e4762e9a8653e37dcc15857e74ec26618964b1796303bc2a2a1338f1"
+      }
+    ],
+    "lockUnchanged": true
+  },
+  {
+    "function": "queueMobileNotificationV1",
+    "beforeRevision": "queuemobilenotificationv1-00008-pey",
+    "changedFiles": [
+      {
+        "file": "service.js",
+        "beforeSha256": "1a4e28540e1fb411e6543e60f2a02fddd8315780d6c515d17da2c5ebfeb454e9",
+        "afterSha256": "41c93899e4762e9a8653e37dcc15857e74ec26618964b1796303bc2a2a1338f1"
+      }
+    ],
+    "lockUnchanged": true
+  },
+  {
+    "function": "finalizePublicAccountSignup",
+    "beforeRevision": "finalizepublicaccountsignup-00003-keg",
+    "changedFiles": [
+      {
+        "file": "transactional_email.js",
+        "beforeSha256": "626d489c5dc962d23ef208fb2661f84723330a004c2c05aa09d55e7705ed592e",
+        "afterSha256": "349c53c3b6754513face3741a5f6ac681478074a5053051c59bd6b2246d91c0b"
+      }
+    ],
+    "lockUnchanged": true
+  },
+  {
+    "function": "resendEmailVerification",
+    "beforeRevision": "resendemailverification-00001-mov",
+    "changedFiles": [
+      {
+        "file": "transactional_email.js",
+        "beforeSha256": "2488f26569d4a0fa89f0468c5bcd70f8c6fde742639c924d90e31fe047291def",
+        "afterSha256": "cc088ec5734095b5bf004b9a54799501cd2ef2305f34d7f372bfd4fb82fcab29"
+      }
+    ],
+    "lockUnchanged": true
+  },
+  {
+    "function": "monitorMarylandWeatherAlerts",
+    "beforeRevision": "monitormarylandweatheralerts-00007-gim",
+    "changedFiles": [
+      {
+        "file": "weather_delivery_policy.js",
+        "beforeSha256": "b0fde895263b318cb8203c0e9f4484c3b91c2b4bacdfb2f08a7614bdd36ec8f6",
+        "afterSha256": "ac78cabf47ae7d89852429da6040ba595834f6a39203aeb5d37922c5b742d3a1"
+      },
+      {
+        "file": "weather_monitor.js",
+        "beforeSha256": "e089d53317707f1282d3912e552229fed92df3a61d828947a992d2a561dde52c",
+        "afterSha256": "b207b7088e24a5109902fe589ba999a78e1d15256103669f8f9e858a9c9b0cec"
+      }
+    ],
+    "lockUnchanged": true
+  },
+  {
+    "function": "deliverManagedGrowthArtifact",
+    "beforeRevision": "delivermanagedgrowthartifact-00002-gub",
+    "changedFiles": [
+      {
+        "file": "managed_growth_delivery.js",
+        "beforeSha256": "a2c2f47a39feacc31c2f6358ef477f508049b999ec99fcd850b68d25f93554fc",
+        "afterSha256": "07effd795eb372ae44dd69b37cb949d780140ca32da05aa48f2aedc558346b9a"
+      }
+    ],
+    "lockUnchanged": true
+  },
+  {
+    "function": "queueCustomerGrowthReportEmailV1",
+    "beforeRevision": "queuecustomergrowthreportemailv1-00007-cic",
+    "changedFiles": [
+      {
+        "file": "growth_report_presentation.js",
+        "beforeSha256": "ba70c09a691099951f674cbd653eb9bb1033a7e9d1ef06667217a88baa7e742e",
+        "afterSha256": "3f5369c266720580d60da358170791442139388d4816cb5f64a9e08b2426226e"
+      },
+      {
+        "file": "index.js",
+        "beforeSha256": "78a34820fb6be344559f76fe64beaeb547d38e356c9bac3a18214aca65fc64be",
+        "afterSha256": "017edc434761804daf551ef7d47586d47fbb65d3e5cc0158585ec8882d233da6"
+      }
+    ],
+    "lockUnchanged": true
+  },
+  {
+    "function": "updateScalerProfile",
+    "beforeRevision": "updatescalerprofile-00001-ril",
+    "changedFiles": [
+      {
+        "file": "scaler_profile_notifications.js",
+        "beforeSha256": "53564d7124b9b178941683df9d5b15901e2314e2b87add85f0e42a6038fa069f",
+        "afterSha256": "1087d76c76a915679da6e457d3b56341428a06df0785d2765e0c1555f10fae7e"
+      }
+    ],
+    "lockUnchanged": true
+  },
+  {
+    "function": "notifyScalersOnCampaignOpened",
+    "beforeRevision": "notifyscalersoncampaignopened-00006-piq",
+    "changedFiles": [
+      {
+        "file": "scaler_job_alert_email.js",
+        "beforeSha256": "619ce761b375c63af94ac89280ae645617454e98c76a0714c53606c9183c23ff",
+        "afterSha256": "a6c2179f0851251a670bfbb87fa191c5389926beaf6c40d45c004a5ee39be383"
+      }
+    ],
+    "lockUnchanged": true
+  },
+  {
+    "function": "inviteBusinessTeamMember",
+    "beforeRevision": "invitebusinessteammember-00003-vil",
+    "changedFiles": [
+      {
+        "file": "business_workspace.js",
+        "beforeSha256": "428d24d33eb2916bbfc3fc9f05970c02388149cf381dcc27611df17f5eb70a3c",
+        "afterSha256": "dbd46eaf4c4fce106b5a648490b47c72f6a01dcfb34670333d07e23392a7b752"
+      }
+    ],
+    "lockUnchanged": true
+  },
+  {
+    "function": "mutateLandingPageDraft",
+    "beforeRevision": "mutatelandingpagedraft-00004-mil",
+    "changedFiles": [
+      {
+        "file": "landing_page.js",
+        "beforeSha256": "8c4cf34943245a7e4146bd8dd5bde42919511c46cf318a13346121889de59238",
+        "afterSha256": "96a58ed3e0d894a5204b0e23895f3d6750fe30df4ff0065c476e9ef86ea7b225"
+      }
+    ],
+    "lockUnchanged": true
+  },
+  {
+    "function": "submitLandingPageForm",
+    "beforeRevision": "submitlandingpageform-00002-yiy",
+    "changedFiles": [
+      {
+        "file": "landing_page.js",
+        "beforeSha256": "d92f9767a54581d9db8359bdf07896055734eb422d5568bb49f298f7703f8b8c",
+        "afterSha256": "7f003582d84a3d66750211f6c64a027be2e3c93df70092481a4b4f95c55540f0"
+      }
+    ],
+    "lockUnchanged": true
+  },
+  {
+    "function": "reconcileLandingPageInquiryDelivery",
+    "beforeRevision": "reconcilelandingpageinquirydelivery-00002-dip",
+    "changedFiles": [
+      {
+        "file": "landing_page.js",
+        "beforeSha256": "8c4cf34943245a7e4146bd8dd5bde42919511c46cf318a13346121889de59238",
+        "afterSha256": "96a58ed3e0d894a5204b0e23895f3d6750fe30df4ff0065c476e9ef86ea7b225"
+      }
+    ],
+    "lockUnchanged": true
+  },
+  {
+    "function": "renderLandingPage",
+    "beforeRevision": "renderlandingpage-00003-dex",
+    "changedFiles": [
+      {
+        "file": "landing_page.js",
+        "beforeSha256": "d6776e741fe778165002fcf416fd5804100a4d7323e9d7f4d08d5bc8287a8d99",
+        "afterSha256": "91fd185ebf241d8dfa6ecf3814d951f136fb5de61023cd47e51f03cea562f23c"
+      }
+    ],
+    "lockUnchanged": true
+  },
+  {
+    "function": "preparePhysicalMarketingVersion",
+    "beforeRevision": "preparephysicalmarketingversion-00005-laf",
+    "changedFiles": [
+      {
+        "file": "physical_marketing.js",
+        "beforeSha256": "2301aaf8ff4e24c816c276e18340958791fed0e117171eb1de933cf84cc08b34",
+        "afterSha256": "c46f3eeb399460bae04d54e0eea2723e5576e8a1ce7d17568a3bce0de5b9eec7"
+      }
+    ],
+    "lockUnchanged": true
+  },
+  {
+    "function": "mutatePhysicalMarketingMaterial",
+    "beforeRevision": "mutatephysicalmarketingmaterial-00004-pol",
+    "changedFiles": [
+      {
+        "file": "physical_marketing.js",
+        "beforeSha256": "2301aaf8ff4e24c816c276e18340958791fed0e117171eb1de933cf84cc08b34",
+        "afterSha256": "c46f3eeb399460bae04d54e0eea2723e5576e8a1ce7d17568a3bce0de5b9eec7"
+      }
+    ],
+    "lockUnchanged": true
+  },
+  {
+    "function": "businessEmailCallbackV1",
+    "beforeRevision": "businessemailcallbackv1-00004-jiw",
+    "changedFiles": [
+      {
+        "file": "index.js",
+        "beforeSha256": "b478ee317beeb82773a126651f71a0fe8bb152512a0b4ecedaef44ae4b909324",
+        "afterSha256": "4bcb5da5d73690b82539a99f1732a99c94cc8f84a8d8b5f61f11c69b59f51830"
+      }
+    ],
+    "lockUnchanged": true
+  },
+  {
+    "function": "syncBusinessEmailRepliesV1",
+    "beforeRevision": "syncbusinessemailrepliesv1-00017-fik",
+    "changedFiles": [
+      {
+        "file": "shared/lead_reply_alert.js",
+        "beforeSha256": "1829c744f570b35fc7ad6ae510df889c40918eecc1b9dccdcee159427d1507fa",
+        "afterSha256": "e53ff129d43898b70f836ad0f631b7107f1c747b538626ac7cc8667ffa23c693"
+      }
+    ],
+    "lockUnchanged": true
+  },
+  {
+    "function": "businessEmailOperationsV1",
+    "beforeRevision": "businessemailoperationsv1-00032-tiy",
+    "changedFiles": [
+      {
+        "file": "shared/lead_reply_alert.js",
+        "beforeSha256": "1829c744f570b35fc7ad6ae510df889c40918eecc1b9dccdcee159427d1507fa",
+        "afterSha256": "e53ff129d43898b70f836ad0f631b7107f1c747b538626ac7cc8667ffa23c693"
+      }
+    ],
+    "lockUnchanged": true
+  },
+  {
+    "function": "stripeWebhook",
+    "beforeRevision": "stripewebhook-00013-wup",
+    "changedFiles": [
+      {
+        "file": "billing_communications.js",
+        "beforeSha256": "10e516965e0d9ad6aef91c902840b5655aeb72a27a4f713d944d1ea6c0448f37",
+        "afterSha256": "04ab738274c0721784b12f7da5421b9b8c036f6bea5f54e9410612f542c20fa2"
+      }
+    ],
+    "lockUnchanged": true
+  },
+  {
+    "function": "recordBusinessReferralAttribution",
+    "beforeRevision": "recordbusinessreferralattribution-00002-wor",
+    "changedFiles": [
+      {
+        "file": "affiliate_program.js",
+        "beforeSha256": "91ae31f186f339f1d11f4c2904989b6cfc443d37f787bbdfae505be56d9404a3",
+        "afterSha256": "d2dae2a4d068cdaacd84801dec5359d361899a8224c22f9af8c27359430ef405"
+      }
+    ],
+    "lockUnchanged": true
+  },
+  {
+    "function": "recordScalerReferralAttribution",
+    "beforeRevision": "recordscalerreferralattribution-00001-yix",
+    "changedFiles": [
+      {
+        "file": "affiliate_program.js",
+        "beforeSha256": "91ae31f186f339f1d11f4c2904989b6cfc443d37f787bbdfae505be56d9404a3",
+        "afterSha256": "d2dae2a4d068cdaacd84801dec5359d361899a8224c22f9af8c27359430ef405"
+      }
+    ],
+    "lockUnchanged": true
+  },
+  {
+    "function": "socialOAuthMetaCallbackV1",
+    "beforeRevision": "socialoauthmetacallbackv1-00004-yim",
+    "changedFiles": [
+      {
+        "file": "social_oauth.js",
+        "beforeSha256": "a5f83cac946dfc0e365dd5e6470687872e276535e1f12743529378e11d36a827",
+        "afterSha256": "d91336c31c0d70a6ad49edad7f7825b40eb8ca8428df27d88d3b5701ad72b481"
+      }
+    ],
+    "lockUnchanged": true
+  },
+  {
+    "function": "socialOAuthXCallbackV1",
+    "beforeRevision": "socialoauthxcallbackv1-00002-vij",
+    "changedFiles": [
+      {
+        "file": "social_oauth.js",
+        "beforeSha256": "d7376d502f3ebc846d303818b5b554a9799c676474318b62d9ccdee35cdc5422",
+        "afterSha256": "30ad348ba5891b638a24a5a9735d65a30ee1245a3889826069e800e908c7d85e"
+      }
+    ],
+    "lockUnchanged": true
+  },
+  {
+    "function": "sendScalerJobAlertEmailJob",
+    "beforeRevision": "sendscalerjobalertemailjob-00002-poc",
+    "changedFiles": [
+      {
+        "file": "index.js",
+        "beforeSha256": "e23a9dfff30ccc56aa2906c5842b3f40f2c7d2fdbf30fbbbeec6c58bb692a4d0",
+        "afterSha256": "98b746bf33c20e834aefd8ddb930f1c770dceef6643bc2a63baefa263bef8ff2"
+      },
+      {
+        "file": "scaler_job_alert_email.js",
+        "beforeSha256": "619ce761b375c63af94ac89280ae645617454e98c76a0714c53606c9183c23ff",
+        "afterSha256": "a6c2179f0851251a670bfbb87fa191c5389926beaf6c40d45c004a5ee39be383"
+      }
+    ],
+    "lockUnchanged": true
+  }
+]

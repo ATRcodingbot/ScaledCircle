@@ -9,6 +9,14 @@ const landing=require('./landing_page');
 const push=require('../functions-mobile-notifications/policy');
 const sharp=require('sharp');
 const root=path.resolve(__dirname,'..');
+test('future Scaler alert snapshots sender while the delivery fallback preserves unversioned jobs',()=>{
+ const alerts=require('./scaler_job_alert_email');
+ const job=alerts.createJob({campaignId:'fixture',scalerUid:'fixture',recipient:'recipient@example.test'});
+ assert.equal(job.fromName,'Scaled Circle');
+ assert.equal(alerts.validateJob(job),true);
+ const source=fs.readFileSync(path.join(root,'functions-job-alert-email/index.js'),'utf8');
+ assert.match(source,/queued\.fromName === "Scaled Circle" \? "Scaled Circle" : "ScaledCircle"/);
+});
 test('old payload email renders the original approved brand without modifying customer words',()=>{
  const job={template:'landing_page_business_inquiry',payload:{businessName:'Scaled Circle customer company',customerName:'ScaledCircle customer',landingPageTitle:'Customer Scaled Circle',inquiryUrl:'https://scaledcircle.com/#/business/landing-pages'}};
  const old=email.deliveryContent(job),future=email.deliveryContent({...job,templateRevision:'brand-20260928'});

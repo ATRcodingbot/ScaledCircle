@@ -883,12 +883,17 @@
   "versionedTemplates": [
     "functions-artifact-email/managed_growth_delivery.js",
     "functions-campaign-funding/transactional_email.js",
+    "functions-discovery/scaler_job_alert_email.js",
+    "functions-job-alert-email/index.js",
+    "functions-job-alert-email/scaler_job_alert_email.js",
     "functions-landing-page/landing_page.js",
     "functions-mobile-notifications/policy.js",
     "functions-transactional-email/transactional_email.js",
     "functions-weather/weather_delivery_policy.js",
+    "functions/index.js",
     "functions/landing_page.js",
     "functions/managed_growth_delivery.js",
+    "functions/scaler_job_alert_email.js",
     "functions/transactional_email.js",
     "functions/weather_delivery_policy.js"
   ],
