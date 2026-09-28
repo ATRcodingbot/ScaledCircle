@@ -109,7 +109,7 @@ void main() {
           },
         ),
       );
-      expect(find.text('Opening ScaledCircle…'), findsOneWidget);
+      expect(find.text('Opening Scaled Circle…'), findsOneWidget);
       expect(find.text('PUBLIC MARKETING'), findsNothing);
       load.complete(signed('business'));
       await t.pumpAndSettle();

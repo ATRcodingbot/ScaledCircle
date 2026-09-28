@@ -16,7 +16,7 @@ void main() {
   ) async {
     final pending = Completer<void>();
     await tester.pumpWidget(gate(() => pending.future));
-    expect(find.text('Starting ScaledCircle…'), findsOneWidget);
+    expect(find.text('Starting Scaled Circle…'), findsOneWidget);
     pending.complete();
     await tester.pumpAndSettle();
     expect(find.text('Normal application'), findsOneWidget);

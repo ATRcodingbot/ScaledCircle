@@ -7,7 +7,7 @@ import re
 
 ROUTES = {
     '/': ('Scaled Circle: Run Your Business. Grow Locally.',
-          'Organize customers, schedule, jobs and your team. Choose local growth tools and track what worked.'),
+          'Connect with local Scalers for flyer distribution, door hangers and door-to-door outreach in Maryland. Organize customers, schedules, jobs and your team.'),
     '/businesses': ('Customers, Schedule and Local Growth — Scaled Circle',
                     'Keep customers, leads, estimates, jobs and team responsibilities together. Choose growth tools with clear costs and permissions.'),
     '/scalers': ('Scaler Field Work in Maryland — Scaled Circle',

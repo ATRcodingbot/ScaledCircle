@@ -84,12 +84,12 @@ class PublicLandingScreen extends StatelessWidget {
                                 AppNavigation.push(context, AppRoutes.scalers),
                           ),
                           const _Gap(),
-                          _HowItWorks(key: howItWorksKey),
+                          _HowItWorks(key: howItWorksKey, homepage: true),
                           const SizedBox(height: 24),
                           FilledButton(
                             key: const Key('business-after-proof-cta'),
                             onPressed: () => _start(context, 'business'),
-                            child: const Text('Start Your Business'),
+                            child: const Text('Get Started for Business'),
                           ),
                           const _Gap(),
                           const _BusinessExperience(),
@@ -247,7 +247,7 @@ class _Hero extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
-            'Run your business. Grow locally.',
+            'Run your business.\nGrow locally.',
             key: Key('homepage-hero-title'),
             style: TextStyle(
               color: Colors.white,
@@ -259,7 +259,7 @@ class _Hero extends StatelessWidget {
           ),
           const SizedBox(height: 20),
           const Text(
-            'Keep customers, schedule, jobs and your team in one place. Choose local growth tools as you need them, and track what worked.',
+            'Connect with local gig workers—called Scalers—for flyer distribution, door hangers and door-to-door outreach in Maryland.\n\nKeep your customers, schedules, jobs and team organized in the same workspace.',
             style: TextStyle(color: _muted, fontSize: 19, height: 1.55),
           ),
           const SizedBox(height: 12),
@@ -281,7 +281,7 @@ class _Hero extends StatelessWidget {
                   minimumSize: const Size(190, 52),
                 ),
                 icon: const Icon(Icons.trending_up),
-                label: const Text('Start Your Business'),
+                label: const Text('Get Started for Business'),
               ),
               OutlinedButton.icon(
                 key: const Key('scaler-primary-cta'),
@@ -295,6 +295,12 @@ class _Hero extends StatelessWidget {
                 label: const Text('Join as a Scaler'),
               ),
             ],
+          ),
+          const SizedBox(height: 14),
+          const Text(
+            'Business plans from \$99/month. Campaign work is priced and funded separately.',
+            key: Key('homepage-cost-separation'),
+            style: TextStyle(color: _muted, fontSize: 16, height: 1.5),
           ),
         ],
       );
@@ -317,48 +323,82 @@ class _MapPreview extends StatelessWidget {
   const _MapPreview();
   @override
   Widget build(BuildContext context) => _Panel(
-    child: const AuthenticProductMap(
-      mode: PublicProductMapMode.campaign,
-      height: 410,
-      showOpportunityCard: true,
+    child: const Padding(
+      padding: EdgeInsets.all(18),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Example campaign area',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 24,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          SizedBox(height: 10),
+          Text(
+            'Review your territory, mapped property types and estimated field time.',
+            style: TextStyle(color: _muted, fontSize: 16, height: 1.5),
+          ),
+          SizedBox(height: 16),
+          AuthenticProductMap(
+            mode: PublicProductMapMode.campaign,
+            height: 320,
+            illustrativeOnly: true,
+          ),
+          SizedBox(height: 12),
+          Text(
+            'Planning estimates—not verified deliveries or a finalized walking route.',
+            style: TextStyle(color: _muted, fontSize: 14, height: 1.5),
+          ),
+        ],
+      ),
     ),
   );
 }
 
 class _HowItWorks extends StatelessWidget {
-  const _HowItWorks({super.key});
+  const _HowItWorks({super.key, this.homepage = false});
+  final bool homepage;
   @override
-  Widget build(BuildContext context) => const Column(
+  Widget build(BuildContext context) => Column(
     children: [
       _Heading(
         eyebrow: 'HOW SCALED CIRCLE WORKS',
-        title: 'Organize the work. Choose your next step.',
-        subtitle:
-            'Start with your customers and schedule. Add growth tools when you need them.',
+        title: homepage
+            ? 'How Scaled Circle works'
+            : 'Organize the work. Choose your next step.',
+        subtitle: homepage
+            ? 'Own-team work is Business-reported. Marketplace work shows the available assignment and GPS evidence.'
+            : 'Start with your customers and schedule. Add growth tools when you need them.',
       ),
-      SizedBox(height: 22),
+      const SizedBox(height: 22),
       _Cards(
         children: [
           _Outcome(
             number: '1',
             icon: Icons.travel_explore,
-            title: 'Set up your Business',
-            body:
-                'Save your Business details, customers and service areas. Keep appointments, jobs and tasks together.',
+            title: homepage ? 'Set up your business' : 'Set up your Business',
+            body: homepage
+                ? 'Add your services and locations, then organize your customers, schedule and team.'
+                : 'Save your Business details, customers and service areas. Keep appointments, jobs and tasks together.',
           ),
           _Outcome(
             number: '2',
             icon: Icons.auto_awesome,
-            title: 'Choose how to grow',
-            body:
-                'Choose a campaign or an available growth tool. Review the work, permissions and costs before proceeding.',
+            title: homepage ? 'Plan your local campaign' : 'Choose how to grow',
+            body: homepage
+                ? 'Choose the work, marketing materials and territory. Use your own team or arrange eligible work through Scalers.'
+                : 'Choose a campaign or an available growth tool. Review the work, permissions and costs before proceeding.',
           ),
           _Outcome(
             number: '3',
             icon: Icons.rocket_launch_outlined,
-            title: 'Track and review',
-            body:
-                'Follow work and customer responses, review the results, and use what you learn to plan your next step.',
+            title: homepage ? 'Review the work' : 'Track and review',
+            body: homepage
+                ? 'Follow campaign status, review available evidence and keep your records together.'
+                : 'Follow work and customer responses, review the results, and use what you learn to plan your next step.',
           ),
         ],
       ),
@@ -745,7 +785,7 @@ class _FinalCta extends StatelessWidget {
               foregroundColor: _bg,
               minimumSize: const Size(180, 52),
             ),
-            child: const Text('Start Your Business'),
+            child: const Text('Get Started for Business'),
           ),
           FilledButton(
             onPressed: onScaler,

@@ -64,11 +64,16 @@ class AuthenticProductMap extends StatelessWidget {
     required this.mode,
     this.height = 260,
     this.showOpportunityCard = false,
+    this.illustrativeOnly = false,
   });
 
   final PublicProductMapMode mode;
   final double height;
   final bool showOpportunityCard;
+
+  /// The root homepage reuses only the legacy Baltimore boundary, not its
+  /// unsupported target/workload estimates. Other public previews are unchanged.
+  final bool illustrativeOnly;
 
   @override
   Widget build(BuildContext context) {
@@ -85,7 +90,9 @@ class AuthenticProductMap extends StatelessWidget {
       borderRadius: BorderRadius.circular(16),
       child: Semantics(
         image: true,
-        label: activeWork
+        label: illustrativeOnly
+            ? 'Illustrative campaign boundary over a Baltimore, Maryland basemap. No property count, field-time estimate or finalized walking route is shown.'
+            : activeWork
             ? 'Read-only product preview of an assigned Zone with GPS verification active and a current-position marker. No route is shown.'
             : 'Read-only Baltimore demo showing a selected area and the validated Smart Zone produced by the maintained planner. Route not yet verified.',
         child: SizedBox(
@@ -99,12 +106,14 @@ class AuthenticProductMap extends StatelessWidget {
                     child: FlutterMap(
                       options: MapOptions(
                         initialCenter: validatedSmartZoneDemoPosition,
-                        initialZoom: 15.4,
+                        initialZoom: illustrativeOnly ? 14.5 : 15.4,
                         initialCameraFit: CameraFit.bounds(
                           bounds: LatLngBounds.fromPoints(
                             validatedSmartZoneDemo,
                           ),
-                          padding: const EdgeInsets.all(28),
+                          padding: illustrativeOnly
+                              ? const EdgeInsets.fromLTRB(28, 60, 28, 28)
+                              : const EdgeInsets.all(28),
                           maxZoom: 16,
                         ),
                         interactionOptions: const InteractionOptions(
@@ -162,16 +171,19 @@ class AuthenticProductMap extends StatelessWidget {
                 ),
                 Positioned(
                   left: 12,
+                  right: illustrativeOnly ? 12 : null,
                   top: 12,
                   child: _MapStateBadge(
-                    text: activeWork
+                    text: illustrativeOnly
+                        ? 'Illustrative boundary • Baltimore, Maryland'
+                        : activeWork
                         ? 'GPS verification • Active'
                         : 'Smart Zone A • Validated demo',
                     color: activeWork ? businessGreen : scalerBlue,
                   ),
                 ),
 
-                if (showOpportunityCard)
+                if (showOpportunityCard && !illustrativeOnly)
                   const Positioned(
                     left: 14,
                     right: 14,

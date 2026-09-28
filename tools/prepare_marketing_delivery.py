@@ -21,11 +21,13 @@ def funnel(name):
 
 def content():
     landing = (SCREENS / 'public_landing_screen.dart').read_text(encoding='utf-8')
-    hero = 'Run your business. Grow locally.'
-    intro = 'Keep customers, schedule, jobs and your team in one place. Choose local growth tools as you need them, and track what worked.'
-    assert hero in landing and intro in landing
+    hero = 'Run your business.\nGrow locally.'
+    intro = 'Connect with local gig workers—called Scalers—for flyer distribution, door hangers and door-to-door outreach in Maryland.\n\nKeep your customers, schedules, jobs and team organized in the same workspace.'
+    assert hero.replace('\n', '\\n') in landing and intro.replace('\n', '\\n') in landing
     how = landing.split('class _HowItWorks ')[1].split('\nclass ')[0]
-    steps = re.findall(r"title:\s*'([^']+)',\s*body:\s*'([^']+)'", how)
+    step_variants = re.findall(r"title:\s*homepage\s*\?\s*'([^']+)'\s*:\s*'([^']+)',\s*body:\s*homepage\s*\?\s*'([^']+)'\s*:\s*'([^']+)'", how)
+    steps = [(old_title, old_body) for _, old_title, _, old_body in step_variants]
+    homepage_steps = [(title, body) for title, _, body, _ in step_variants]
     assert len(steps) == 3
     plans = (ROOT / 'apps/mobile/lib/services/subscription_plan_service.dart').read_text(encoding='utf-8')
     prices = re.findall(r"'name': '([^']+)',\s*'price': ([0-9.]+)", plans)
@@ -41,7 +43,7 @@ def content():
     scaler = ('Know the work and pay before you apply.',
               'Choose from available local campaigns that fit your preferences. Work availability varies by area; creating a profile does not guarantee a job.')
     assert all(text in landing for text in scaler)
-    return {'/': [(hero, intro), heading('_BusinessExperience'), *steps,
+    return {'/': [(hero, intro), heading('_BusinessExperience'), *homepage_steps,
                   heading('_FieldCampaigns'), scaler, heading('_ManagedGrowth')], '/businesses': funnel('business_funnel_screen.dart'),
             '/scalers': [*funnel('scaler_funnel_screen.dart'),
                          ('Canvassing with clear accepted pay', 'Review the fixed base compensation and any accepted coverage bonus before accepting. Automatic route tracking supports review; residential photos are not required. This is not pure-commission work or an employment offer.'),
@@ -72,7 +74,7 @@ def documents(*, staging=False):
     result = {}
     for route, sections in content().items():
         document = render(template, route).replace('$FLUTTER_BASE_HREF', '/')
-        primary = ('Join as a Scaler', '/#/scalers') if route == '/scalers' else ('Start Your Business', '/#/businesses')
+        primary = ('Join as a Scaler', '/#/scalers') if route == '/scalers' else ('Get Started for Business' if route == '/' else 'Start Your Business', '/#/businesses')
         cta = lambda label: f'<p><a class="cta" href="{primary[1]}">{label}</a></p>'
         blocks = []
         for index, (title, body) in enumerate(sections):
@@ -91,6 +93,7 @@ def documents(*, staging=False):
             if index == 0:
                 blocks.append(cta(primary[0]))
                 if route == '/':
+                    blocks.append('<p>Business plans from $99/month. Campaign work is priced and funded separately.</p>')
                     blocks.append('<p><a href="/#/scalers">Join as a Scaler</a> · <a href="/how-it-works">See How It Works</a></p>')
                     blocks.append('<section class="example"><p class="eyebrow">A workflow example</p><h2>A contractor has a neighborhood in mind.</h2><p>Choose the area, define the work and accepted pay, then review the Scaler’s tracked route. Residents can respond through configured QR codes and landing pages. Recorded responses stay connected to their campaign.</p><p>This explains the workflow; it does not promise leads, conversions or revenue.</p></section>')
         if route in ('/', '/businesses', '/pricing'):

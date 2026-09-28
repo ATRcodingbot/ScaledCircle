@@ -33,7 +33,7 @@ void main() {
         ),
       );
       expect(tester.takeException(), isNull);
-      expect(find.text('Run your business. Grow locally.'), findsOneWidget);
+      expect(find.text('Run your business.\nGrow locally.'), findsOneWidget);
       expect(find.textContaining('422 homes'), findsNothing);
       expect(find.textContaining('98% coverage'), findsNothing);
       expect(find.textContaining('THIS WEEK'), findsNothing);
@@ -59,6 +59,11 @@ void main() {
 
   testWidgets('homepage opens the dedicated Business funnel', (tester) async {
     await tester.pumpWidget(app());
+    await Scrollable.ensureVisible(
+      tester.element(find.byKey(const Key('business-primary-cta'))),
+      alignment: .5,
+    );
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('business-primary-cta')));
     await tester.pumpAndSettle();
     expect(find.text('FOR LOCAL BUSINESSES'), findsOneWidget);
@@ -67,24 +72,50 @@ void main() {
     expect(find.text('Analyze Main Service Area'), findsOneWidget);
   });
 
-  testWidgets('homepage restores authentic campaign-map hero and role paths', (
+  testWidgets('homepage uses an illustrative map without unsupported metrics', (
     tester,
   ) async {
+    final semantics = tester.ensureSemantics();
     await tester.pumpWidget(app());
-    expect(find.text('Run your business. Grow locally.'), findsOneWidget);
+    expect(find.text('Run your business.\nGrow locally.'), findsOneWidget);
     expect(
-      find.textContaining('Keep customers, schedule, jobs and your team'),
+      find.textContaining('Connect with local gig workers—called Scalers'),
       findsOneWidget,
     );
     expect(find.textContaining('Results you can review'), findsOneWidget);
-    expect(find.text('VALIDATED SMART ZONE • DEMO'), findsOneWidget);
-    expect(find.textContaining('Route not yet verified'), findsWidgets);
-    expect(find.text('Start Your Business'), findsWidgets);
+    expect(
+      find.bySemanticsLabel(RegExp('Illustrative campaign boundary')),
+      findsOneWidget,
+    );
+    expect(find.bySemanticsLabel(RegExp('validated Smart Zone')), findsNothing);
+    expect(find.text('Example campaign area'), findsOneWidget);
+    expect(find.textContaining('225 estimated homes'), findsNothing);
+    expect(find.textContaining('5-hour'), findsNothing);
+    expect(find.textContaining('Validated demo'), findsNothing);
+    expect(find.text('VALIDATED SMART ZONE • DEMO'), findsNothing);
+    expect(
+      find.text('Illustrative boundary • Baltimore, Maryland'),
+      findsOneWidget,
+    );
+    expect(find.text('How Scaled Circle works'), findsOneWidget);
+    expect(find.text('Plan your local campaign'), findsOneWidget);
+    expect(find.byKey(const Key('homepage-cost-separation')), findsOneWidget);
+    expect(
+      find.textContaining('Planning estimates—not verified deliveries'),
+      findsOneWidget,
+    );
+    expect(find.text('Get Started for Business'), findsWidgets);
     expect(find.text('Join as a Scaler'), findsWidgets);
+    semantics.dispose();
   });
 
   testWidgets('homepage opens the dedicated Scaler funnel', (tester) async {
     await tester.pumpWidget(app());
+    await Scrollable.ensureVisible(
+      tester.element(find.byKey(const Key('scaler-primary-cta'))),
+      alignment: .5,
+    );
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('scaler-primary-cta')));
     await tester.pumpAndSettle();
     expect(find.text('FOR SCALERS'), findsWidgets);
@@ -320,7 +351,9 @@ void main() {
 
     expect(
       components,
-      contains("'assets/brand/wordmark-20260928/scaledcircle-lockup-dark-surface.png'"),
+      contains(
+        "'assets/brand/wordmark-20260928/scaledcircle-lockup-dark-surface.png'",
+      ),
     );
     expect(components, contains('How do you want to use Scaled Circle?'));
     expect(business, contains('Selected Area'));
@@ -358,11 +391,6 @@ void main() {
     expect(html, contains('twitter:image'));
     expect(html, contains('href="favicon.png"'));
     expect(html, isNot(contains('scaled-circle-mark.svg')));
-    expect(
-      html,
-      contains(
-        'Scaled Circle — Local Growth Intelligence + Verified Field Campaigns',
-      ),
-    );
+    expect(html, contains('Scaled Circle — Run your business. Grow locally.'));
   });
 }
