@@ -50,7 +50,7 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
       if (profile.data()?['role']?.toString().toLowerCase() != 'admin') {
         await FirebaseAuth.instance.signOut();
         throw StateError(
-          'This account is not authorized for ScaledCircle administration.',
+          'This account is not authorized for Scaled Circle administration.',
         );
       }
       await const SecureFunctionService().call(

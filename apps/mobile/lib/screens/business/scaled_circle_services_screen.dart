@@ -37,7 +37,7 @@ class ScaledCircleServicesScreen extends StatelessWidget {
         final status = data['subscriptionStatus']?.toString() ?? 'inactive';
         return Scaffold(
           appBar: AuthenticatedAppBar(
-            title: const Text('ScaledCircle Services'),
+            title: const Text('Scaled Circle Services'),
           ),
           body: ListView(
             padding: const EdgeInsets.all(20),
@@ -49,7 +49,7 @@ class ScaledCircleServicesScreen extends StatelessWidget {
                   leading: const Icon(Icons.location_on_outlined),
                   title: const Text('My Service Areas'),
                   subtitle: const Text(
-                    'Tell ScaledCircle where you work and what jobs matter to you.',
+                    'Tell Scaled Circle where you work and what jobs matter to you.',
                   ),
                   trailing: const Icon(Icons.chevron_right),
                   onTap: () => Navigator.push(
@@ -199,7 +199,7 @@ class ScaledCircleServicesScreen extends StatelessWidget {
           Text('Direct Mail — Printing: No approved quote'),
           Text('Direct Mail — Postage: No approved quote'),
           Text('Direct Mail — Management fee: No approved quote'),
-          Text('Vendor costs and ScaledCircle fees remain separate.'),
+          Text('Vendor costs and Scaled Circle fees remain separate.'),
           Divider(),
           Text(
             'Field Campaigns — Uses existing authoritative campaign funding and payment records.',

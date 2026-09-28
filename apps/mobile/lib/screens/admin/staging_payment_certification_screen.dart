@@ -85,7 +85,7 @@ class _CertificationState extends State<StagingPaymentCertificationScreen> {
       'submit' =>
         'Confirm that you performed the assigned checks and that your notes describe the actual result. Submission does not approve payment.',
       'approve' =>
-        'Approve the submitted checks and record \$5.00 TEST compensation? The \$0.05 referral reward is separate, funded by ScaledCircle and held for review. This does not execute a cash-out.',
+        'Approve the submitted checks and record \$5.00 TEST compensation? The \$0.05 referral reward is separate, funded by Scaled Circle and held for review. This does not execute a cash-out.',
       'reverse' =>
         'Append a -\$5.00 TEST earning adjustment and reverse the associated \$0.05 referral liability? Original earning, referral and audit records are retained. This does not refund the Stripe payment or execute a payout.',
       _ => null,

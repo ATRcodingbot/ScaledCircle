@@ -126,8 +126,8 @@ class _EarlyAccessPendingScreenState extends State<EarlyAccessPendingScreen> {
                     const SizedBox(height: 12),
                     Text(
                       widget.onboardingComplete
-                          ? 'ScaledCircle is currently in early access. We’ll notify you when full ${widget.role == 'business' ? 'Business' : 'Scaler'} access is available.'
-                          : 'Your ScaledCircle account has been created for ${widget.email}. '
+                          ? 'Scaled Circle is currently in early access. We’ll notify you when full ${widget.role == 'business' ? 'Business' : 'Scaler'} access is available.'
+                          : 'Your Scaled Circle account has been created for ${widget.email}. '
                                 "We're rolling out marketplace access in stages. We'll let you know when your account is ready.",
                       textAlign: TextAlign.center,
                       style: const TextStyle(

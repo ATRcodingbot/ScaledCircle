@@ -1284,7 +1284,7 @@ exports.recordLegalConsent = onCall(
     } catch (error) {
       const code = error?.message;
       if (["invalid_consent_request", "unknown_agreement"].includes(code)) {
-        throw new HttpsError("invalid-argument", "Choose a current ScaledCircle agreement.");
+        throw new HttpsError("invalid-argument", "Choose a current Scaled Circle agreement.");
       }
       if (["scaler_agreement_requires_scaler", "consent_actor_invalid"].includes(code)) {
         throw new HttpsError("permission-denied", "This agreement does not apply to your account role.");

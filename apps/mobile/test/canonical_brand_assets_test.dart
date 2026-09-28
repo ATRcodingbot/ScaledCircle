@@ -24,7 +24,7 @@ void main() {
     expect(pubspec, contains('- assets/brand/'));
     final index = File('web/index.html').readAsStringSync();
     expect(index, isNot(contains('scaled-circle-mark.svg')));
-    expect(index, contains('ScaledCircle'));
+    expect(index, contains('Scaled Circle'));
   });
 
   test('maintained brand widgets use approved assets, not drawn substitutes', () {

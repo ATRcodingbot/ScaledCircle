@@ -9,7 +9,7 @@ function reviewValid(r){const p=require('./provider_review');return r?.status===
 function create({db,now=Date.now,workspaces=b.WORKSPACES}){
  const grantRef=db.doc('emailAssistanceOperatingGrants/'+require('./pilot_enrollment').GRANT),reviewRef=db.doc('emailAssistanceProviderReviews/'+REVIEW);
  async function enroll(a,input){
-  if(a.businessId!==workspaces[0]||a.actorUid!==workspaces[0]||a.beta.kind!=='internal'||a.beta.canManageConnection!==true)fail('Use the authenticated ScaledCircle internal owner.');
+  if(a.businessId!==workspaces[0]||a.actorUid!==workspaces[0]||a.beta.kind!=='internal'||a.beta.canManageConnection!==true)fail('Use the authenticated Scaled Circle internal owner.');
   if(input?.confirm!==true||Object.keys(input).some(k=>!['confirm','sourceSha'].includes(k))||!(/^[a-f0-9]{40}$/.test(input.sourceSha||'')))fail('Review the exact outbound purpose and implementation source.');
   return db.runTransaction(async tx=>{
    const g=(await tx.get(grantRef)).data(),old=(await tx.get(reviewRef)).data();

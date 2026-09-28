@@ -81,7 +81,7 @@ class _ServiceAreaMapPickerState extends State<ServiceAreaMapPicker> {
             padding: const EdgeInsets.all(12),
             child: Text(
               widget.confirmationOnly && !_adjusting
-                  ? 'Is this the area you serve? The saved boundary will be reused across ScaledCircle.'
+                  ? 'Is this the area you serve? The saved boundary will be reused across Scaled Circle.'
                   : widget.drawArea
                   ? 'Tap around the area where you want to work. Use at least three points.'
                   : 'Tap the map near your business or preferred work area. This does not turn on GPS.',

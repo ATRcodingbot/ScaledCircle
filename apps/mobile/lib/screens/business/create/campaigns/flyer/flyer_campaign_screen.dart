@@ -581,7 +581,7 @@ class _FlyerCampaignScreenState extends State<FlyerCampaignScreen> {
         return 'Create Tracked Materials with Scaled Circle';
 
       case 'printed_by_scaled_circle':
-        return 'ScaledCircle Printing — Coming Soon';
+        return 'Scaled Circle Printing — Coming Soon';
 
       default:
         return source;

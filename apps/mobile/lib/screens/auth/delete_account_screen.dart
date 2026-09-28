@@ -195,7 +195,7 @@ class _DeleteAccountState extends State<DeleteAccountScreen> {
               ),
               FilledButton(
                 onPressed: () => AppNavigation.replace(context, '/'),
-                child: const Text('Return to ScaledCircle'),
+                child: const Text('Return to Scaled Circle'),
               ),
             ] else ...[
               const Text(

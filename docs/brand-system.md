@@ -1,13 +1,16 @@
-# ScaledCircle Brand System
+# Scaled Circle Brand System
 
-Status: canonical identity adopted and production-verified on 2026-08-24.
+Current spelling decision (2026-09-28): customer-facing authored text uses **Scaled Circle**; legal entity remains **Scaled Circle LLC**. Technical identifiers and historical records are unchanged. This source update is prepared, not deployed.
+
+The approved secondary marketing lockup already uses the spaced wording. Primary dark/light horizontal wordmarks still contain unspaced lettering and need an approved artwork update. Keep them unchanged until that asset is supplied; do not substitute typography or force the tall secondary lockup into compact headers.
+
+The following records the 2026-08-24 approved artwork and its existing derivation rules. Its old spelling is historical asset evidence, not the current copy standard.
 
 ## Canonical identity
 
 The primary product identity is the exact approved symbol plus the `ScaledCircle`
 wordmark on a transparent canvas. The legal entity remains **Scaled Circle LLC**.
-Primary product wordmarks must not alternate between `ScaledCircle` and
-`Scaled Circle`.
+Primary wordmark artwork remains pending an approved spaced replacement.
 
 The approved raster source is:
 

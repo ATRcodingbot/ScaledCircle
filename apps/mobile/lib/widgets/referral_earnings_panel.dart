@@ -116,7 +116,7 @@ class _ReferralEarningsPanelState extends State<ReferralEarningsPanel> {
               style: Theme.of(context).textTheme.titleLarge,
             ),
             const Text(
-              "Paid by ScaledCircle — never deducted from the Scaler's earnings.",
+              "Paid by Scaled Circle — never deducted from the Scaler's earnings.",
             ),
             if (_busy) const LinearProgressIndicator(),
             if (_error != null) Text(_error!),
@@ -194,7 +194,7 @@ class _ReferralEarningsPanelState extends State<ReferralEarningsPanel> {
                 ),
               if (data['executionEnabled'] != true)
                 const Text(
-                  'Referral Program. Rewards are tracked now. ScaledCircle verifies qualifying activity and manually reviews initial payments. Automatic payouts are off; a review window ending does not mean money was sent.',
+                  'Referral Program. Rewards are tracked now. Scaled Circle verifies qualifying activity and manually reviews initial payments. Automatic payouts are off; a review window ending does not mean money was sent.',
                 ),
               for (final op in (data['operations'] as List? ?? []).where(
                 (o) => o['status'] != 'completed',

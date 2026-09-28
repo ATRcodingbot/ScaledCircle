@@ -130,7 +130,7 @@ class ZoneIntelligenceSummary extends StatelessWidget {
         const SizedBox(height: 16),
         Text(
           data['mode'] == 'recommended'
-              ? 'Why ScaledCircle recommends this area'
+              ? 'Why Scaled Circle recommends this area'
               : 'What we found in this area',
           style: theme.textTheme.titleSmall,
         ),

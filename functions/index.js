@@ -498,7 +498,7 @@ function legalConsentError(error, message) {
   if (error?.message !== "legal_consent_required") return null;
   return new HttpsError(
     "failed-precondition",
-    message || "Review and accept the current ScaledCircle agreements to continue.",
+    message || "Review and accept the current Scaled Circle agreements to continue.",
     {
       reason: "LEGAL_CONSENT_REQUIRED",
       missing: Array.isArray(error.missing) ? error.missing : [],
@@ -1301,7 +1301,7 @@ exports.recordLegalConsent = onCall(
     } catch (error) {
       const code = error?.message;
       if (["invalid_consent_request", "unknown_agreement"].includes(code)) {
-        throw new HttpsError("invalid-argument", "Choose a current ScaledCircle agreement.");
+        throw new HttpsError("invalid-argument", "Choose a current Scaled Circle agreement.");
       }
       if (["scaler_agreement_requires_scaler", "consent_actor_invalid"].includes(code)) {
         throw new HttpsError("permission-denied", "This agreement does not apply to your account role.");
@@ -2283,7 +2283,7 @@ exports.createBillingPortalSession = onCall(
     let configurationId=(await configurationRef.get()).data()?.configurationId;
     if(!configurationId){
       const configuration=await stripe.billingPortal.configurations.create({
-        business_profile:{headline:'ScaledCircle payment methods and billing records'},
+        business_profile:{headline:'Scaled Circle payment methods and billing records'},
         features:{invoice_history:{enabled:true},payment_method_update:{enabled:true},
           customer_update:{enabled:false},subscription_cancel:{enabled:false},subscription_update:{enabled:false}},
         metadata:{purpose:'workspace_membership_v1'}
@@ -11078,7 +11078,7 @@ exports.getMarketplacePolicy = safeStripeCallable("getMarketplacePolicy", async 
   return {
     currency: marketplace.CURRENCY,
     platformFeeBasisPoints: marketplace.PLATFORM_FEE_BASIS_POINTS,
-    platformFeeLabel: "ScaledCircle Platform Fee",
+    platformFeeLabel: "Scaled Circle Platform Fee",
     reviewWindowHours: marketplace.REVIEW_WINDOW_HOURS,
     promotionalCreditsAreCash: false,
   };
@@ -11365,7 +11365,7 @@ exports.createCampaignFundingCheckoutSession = safeStripeCallable(
           client_reference_id: paymentId,
           line_items: [{quantity: 1, price_data: {currency: quote.currency,
             unit_amount: quote.businessChargeCents,
-            product_data: {name: `ScaledCircle campaign funding: ${readText(campaign.name, 80) || campaignId}`}}}],
+            product_data: {name: `Scaled Circle campaign funding: ${readText(campaign.name, 80) || campaignId}`}}}],
           payment_intent_data: {transfer_group: `campaign_${campaignId}`,
             metadata: {paymentId, campaignId, businessId: context.uid}},
           success_url: `${publicAppBaseUrl()}/?campaignFunding=return`,
@@ -13120,7 +13120,7 @@ exports.resolveTrackedResponse = onRequest(
       });
       response.status(code === "response_asset_inactive" ? 410 : 404)
         .set("Cache-Control", "no-store")
-        .send("This ScaledCircle response link is unavailable.");
+        .send("This Scaled Circle response link is unavailable.");
     }
   },
 );

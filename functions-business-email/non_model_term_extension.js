@@ -10,7 +10,7 @@ const EVENT='founder_non_model_extension_20260923';
 const fail=(code,message)=>{throw Object.assign(Error(message),{code});};
 function create({db,now=Date.now,workspaces=WORKSPACES}){
  async function apply(a,input){
-  if(a.businessId!==workspaces[0]||a.actorUid!==workspaces[0]||a.beta.kind!=='internal'||a.beta.canManageConnection!==true)fail('permission-denied','Use the authenticated production ScaledCircle enrollment administrator.');
+  if(a.businessId!==workspaces[0]||a.actorUid!==workspaces[0]||a.beta.kind!=='internal'||a.beta.canManageConnection!==true)fail('permission-denied','Use the authenticated production Scaled Circle enrollment administrator.');
   if(input?.confirm!==true||Object.keys(input).some(k=>!['confirm','expected'].includes(k))||!Array.isArray(input.expected)||input.expected.length!==2||input.expected.some((v,i)=>v.businessId!==workspaces[i]||!Number.isInteger(v.version)||typeof v.digest!=='string'||Object.keys(v).some(k=>!['businessId','version','digest'].includes(k))))fail('invalid-argument','Review both exact saved policies before extending their terms.');
   const fingerprint=digest(input),grantRef=db.doc('emailAssistanceOperatingGrants/'+GRANT),eventRef=grantRef.collection('audit').doc(EVENT);
   return db.runTransaction(async tx=>{

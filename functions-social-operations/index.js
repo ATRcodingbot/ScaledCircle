@@ -29,7 +29,7 @@ const PRODUCTION_X_PROVIDER_CONFIG = Object.freeze({
   provider: "x",
   clientId: "SVE2bE9DelpBSU1ZT1I4ejJRNXc6MTpjaQ",
   redirectUri: "https://us-east1-scaled-circle.cloudfunctions.net/socialOAuthXCallbackV1",
-  appName: "ScaledCircle Social Operations — Production",
+  appName: "Scaled Circle Social Operations — Production",
 });
 
 function runtimeEnvironment() {
@@ -568,7 +568,7 @@ exports.ingestScaledCircleLaunchPlanV1 = onCall(
         normalizedHandle("x") !== "scaledcircle" ||
         normalizedHandle("youtube") !== "scaledcircle") {
       throw new HttpsError("failed-precondition",
-        "Confirm all four ScaledCircle read-only provider identities before aligning the plan.");
+        "Confirm all four Scaled Circle read-only provider identities before aligning the plan.");
     }
     const migration = scaledCircleLaunchPlan.buildScaledCircleLaunchPlan({
       businessUid: business.uid, subscriptionPlanId: business.planId, now: Date.now(),
@@ -664,7 +664,7 @@ exports.prepareFirstXPublishFoundationV1 = onCall(
       batch.create(campaignRef, {
         schemaVersion: "SocialCampaignAttributionV1",
         businessId: business.uid,
-        campaignName: "ScaledCircle Maryland brand launch — September 2026",
+        campaignName: "Scaled Circle Maryland brand launch — September 2026",
         campaignType: "social_brand_launch",
         status: "draft",
         socialPlanId: xFirstPublish.PLAN_ID,
@@ -713,7 +713,7 @@ exports.prepareFirstXPublishFoundationV1 = onCall(
         businessUid: business.uid,
         requestId: `${xFirstPublish.CONTENT_ITEM_ID}:${xFirstPublish.VERSION_ID}`,
         type: "tracked_link",
-        label: "ScaledCircle X Smart Mapping — v3",
+        label: "Scaled Circle X Smart Mapping — v3",
         destination: xFirstPublish.DESTINATION_URL,
         source: "social",
         sourceDetail: `${xFirstPublish.CONTENT_ITEM_ID}:${xFirstPublish.VERSION_ID}`,
@@ -1038,7 +1038,7 @@ exports.createFirstXPublishApprovalV1 = onCall(
     try {
       xFirstPublish.assertWriteConnection(connection.data());
     } catch (_) {
-      throw new HttpsError("failed-precondition", "Reconnect the exact ScaledCircle X account first.");
+      throw new HttpsError("failed-precondition", "Reconnect the exact Scaled Circle X account first.");
     }
     if (!item.exists || item.data()?.businessUid !== business.uid ||
         Number(item.data()?.currentVersion) !== xFirstPublish.VERSION_NUMBER ||
@@ -1744,7 +1744,7 @@ exports.executeFirstXPublishV1 = onCall(
         safeFailure: readText(error?.message || error, 120),
         updatedAt: FieldValue.serverTimestamp()}, {merge: true});
       throw new HttpsError("aborted",
-        "X returned an uncertain outcome. ScaledCircle will reconcile before any further action.");
+        "X returned an uncertain outcome. Scaled Circle will reconcile before any further action.");
     }
   },
 );
@@ -2673,7 +2673,7 @@ exports.confirmFirstXPublishAuthorizationV1 = onCall(
         readText(safe.handle, 180).replace(/^@/, "").toLowerCase() !==
           xFirstPublish.EXPECTED_X_HANDLE || safe.capabilities.publishText !== true ||
         safe.capabilities.publishImage !== true) {
-      throw new HttpsError("failed-precondition", "The returned X identity does not match ScaledCircle.");
+      throw new HttpsError("failed-precondition", "The returned X identity does not match Scaled Circle.");
     }
     const credentialId = socialOAuth.digest(`${business.uid}:x:${selected.privateAccount.accountId}`);
     const credentialRef = db.collection("socialConnectionCredentials").doc(credentialId);
@@ -3030,7 +3030,7 @@ function socialOAuthCallbackHandler(expectedProvider, providerSecretParameter) {
       response.status(200).type("html").send(socialOAuth.callbackHtml({
         success: completed.status === "identity_pending",
         message: completed.status === "identity_pending" ?
-          "Return to ScaledCircle to review and confirm the exact account identity." :
+          "Return to Scaled Circle to review and confirm the exact account identity." :
           attempt.purpose === "x_first_publish_certification" ?
             "X did not grant the exact permission needed for this approved post." :
           attempt.purpose === "x_connection_authority" ?
@@ -3096,9 +3096,9 @@ function socialOAuthCallbackHandler(expectedProvider, providerSecretParameter) {
       }
       response.status(400).type("html").send(socialOAuth.callbackHtml({
         success: false,
-        message: expectedProvider === "meta" ? "Facebook wasn't connected. Return to ScaledCircle and try again." : safeFailure === "attempt_expired" ?
-          "This X authorization attempt expired before ScaledCircle could complete it. " +
-            "Return to ScaledCircle and choose Start fresh X authorization." :
+        message: expectedProvider === "meta" ? "Facebook wasn't connected. Return to Scaled Circle and try again." : safeFailure === "attempt_expired" ?
+          "This X authorization attempt expired before Scaled Circle could complete it. " +
+            "Return to Scaled Circle and choose Start fresh X authorization." :
           "The read-only authorization could not be completed. No account was connected.",
       }));
     }

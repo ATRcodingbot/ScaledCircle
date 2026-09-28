@@ -113,8 +113,8 @@ function createWorkspaceService({db,auth,FieldValue,Timestamp,now=Date.now,origi
         tx.set(ref(a.businessId),{ownerId:a.businessId,version:VERSION,revision:FieldValue.increment(1),updatedAt:FieldValue.serverTimestamp()},{merge:true});
         tx.set(ref(a.businessId).collection('invitations').doc(inviteId),invitation);
         const url=`${origin}/#/team-invitation?business=${encodeURIComponent(a.businessId)}&invitation=${inviteId}&token=${encodeURIComponent(token)}`;
-        tx.create(db.doc(`outboundEmailJobs/team_invitation_${requestId}`),{template:'business_team_invitation_v1',status:'queued',fromAddress:'support@scaledcircle.com',to:destination,subject:`You are invited to ${businessName} on ScaledCircle`,
-          text:`Hi ${name},\n\n${who.name} invited you to join ${businessName} on ScaledCircle.\n\nSign in or create an account with this email address, then accept your invitation:\n${url}\n\nThis single-use invitation expires in 7 days. No password is included or required by email. If you did not expect this invitation, you can ignore it.`,createdAt:FieldValue.serverTimestamp()});
+        tx.create(db.doc(`outboundEmailJobs/team_invitation_${requestId}`),{template:'business_team_invitation_v1',status:'queued',fromAddress:'support@scaledcircle.com',to:destination,subject:`You are invited to ${businessName} on Scaled Circle`,
+          text:`Hi ${name},\n\n${who.name} invited you to join ${businessName} on Scaled Circle.\n\nSign in or create an account with this email address, then accept your invitation:\n${url}\n\nThis single-use invitation expires in 7 days. No password is included or required by email. If you did not expect this invitation, you can ignore it.`,createdAt:FieldValue.serverTimestamp()});
         audit(tx,a.businessId,uid,'team_invited',inviteId,{permissions:grants});return {invitationId:inviteId,emailQueued:true,emailJobId:`team_invitation_${requestId}`};
       });return result;
     },

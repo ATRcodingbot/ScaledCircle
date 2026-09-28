@@ -2153,7 +2153,7 @@ class _CampaignDetailsScreenState extends State<CampaignDetailsScreen> {
                                   'Maximum Scaler Pay  \$${quote.workerCompensation.toStringAsFixed(2)}',
                                 ),
                                 Text(
-                                  'ScaledCircle Fee (${quote.platformFeePercentLabel}), up to  \$${quote.platformFee.toStringAsFixed(2)}',
+                                  'Scaled Circle Fee (${quote.platformFeePercentLabel}), up to  \$${quote.platformFee.toStringAsFixed(2)}',
                                 ),
                                 Text(
                                   'Maximum Campaign Cost  \$${quote.estimatedTotal.toStringAsFixed(2)}',

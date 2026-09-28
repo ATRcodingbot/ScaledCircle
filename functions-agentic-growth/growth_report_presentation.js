@@ -7,7 +7,7 @@ function renderGrowthReport({report,reportId,prospects=[],kind,customer=false,op
  const base=customer?'https://scaledcircle.com/#/business/growth-agents':'https://scaledcircle-staging.web.app/#/growth-agents';
  const link=base+'?report='+encodeURIComponent(reportId);
  const subject=kind==='weekly'?'Your Growth Weekly Report':kind==='daily'?'Your Growth Daily Brief':'Your Growth team needs your review';
- const lines=[clean(report.businessName||'ScaledCircle'),'', 'Needs your attention',`${count(s.awaitingApproval)} research drafts await review.`,
+ const lines=[clean(report.businessName||'Scaled Circle'),'', 'Needs your attention',`${count(s.awaitingApproval)} research drafts await review.`,
   'Nothing in this report approves outreach, Social publishing or ad spend.','',
   'Cumulative research inventory',`${count(s.businessesFound)} Business prospects · ${count(s.partnersFound)} organization partners · ${count(s.individualScalersFound)} individual candidates.`];
  if(s.discovery)lines.push('',require('./research_result').describe(s.discovery,null));

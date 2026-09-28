@@ -72,7 +72,7 @@ function callable(fn) {
       });
       const setupMessages = {
         cashout_setup_confirming: 'We are confirming your payout setup. Please check its status before trying again.',
-        cashout_setup_platform_blocked: 'Payout setup is currently unavailable. ScaledCircle is resolving an issue with its payout provider. Your earnings are unchanged.',
+        cashout_setup_platform_blocked: 'Payout setup is currently unavailable. Scaled Circle is resolving an issue with its payout provider. Your earnings are unchanged.',
         cashout_setup_provider_rejected: "We couldn't start payout setup. Please try again later or contact support."
       };
       throw new HttpsError('failed-precondition', setupMessages[reason] || 'This payout needs attention. Refresh its status; your earnings are preserved.', {

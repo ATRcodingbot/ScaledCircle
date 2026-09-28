@@ -156,7 +156,7 @@ void main() {
       await t.pumpWidget(page(SmartZoneRecommendationEvidence(plan: plan)));
       expect(find.text('11 mapped residential targets'), findsOneWidget);
       expect(
-        find.text('Why ScaledCircle recommends this area'),
+        find.text('Why Scaled Circle recommends this area'),
         findsOneWidget,
       );
       await t.pumpWidget(

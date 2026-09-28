@@ -25,7 +25,7 @@ extension on LegalActionConsent {
     LegalActionConsent.scalerWork =>
       'Before applying for or accepting new work, agree to the current Terms and Scaler Work Terms.',
     LegalActionConsent.locationTracking =>
-      'ScaledCircle uses your location while this job is actively tracked to verify the route and work completion. The foreground service may continue while the screen is locked or another app is open, and stops when tracking reaches a terminal state.',
+      'Scaled Circle uses your location while this job is actively tracked to verify the route and work completion. The foreground service may continue while the screen is locked or another app is open, and stops when tracking reaches a terminal state.',
   };
 }
 

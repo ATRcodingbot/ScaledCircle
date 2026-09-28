@@ -40,7 +40,7 @@ void openPublicRoleChooser(BuildContext context) {
     context: context,
     builder: (dialogContext) => AlertDialog(
       backgroundColor: publicPanel,
-      title: const Text('How do you want to use ScaledCircle?'),
+      title: const Text('How do you want to use Scaled Circle?'),
       content: const Text(
         'Choose the path that fits you.',
         style: TextStyle(color: publicMuted),
@@ -80,7 +80,7 @@ class ScaledCircleBrand extends StatelessWidget {
     builder: (context, constraints) {
       final showWordmark = !compact || constraints.maxWidth >= 130;
       return Semantics(
-        label: 'ScaledCircle Home',
+        label: 'Scaled Circle Home',
         button: true,
         child: InkWell(
           borderRadius: BorderRadius.circular(12),
@@ -93,7 +93,7 @@ class ScaledCircleBrand extends StatelessWidget {
                   : 'assets/brand/scaledcircle-symbol.png',
               height: compact ? 34 : 42,
               fit: BoxFit.contain,
-              semanticLabel: 'ScaledCircle logo',
+              semanticLabel: 'Scaled Circle logo',
               filterQuality: FilterQuality.high,
             ),
           ),
@@ -492,7 +492,7 @@ class ProductWindow extends StatelessWidget {
             ),
             const SizedBox(width: 10),
             const Text(
-              'ScaledCircle',
+              'Scaled Circle',
               style: TextStyle(
                 color: Colors.white,
                 fontWeight: FontWeight.w900,

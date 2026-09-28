@@ -3,7 +3,7 @@
 const crypto = require("node:crypto");
 
 const SUPPORT_EMAIL = "support@scaledcircle.com";
-const SUPPORT_NAME = "ScaledCircle Support";
+const SUPPORT_NAME = "Scaled Circle Support";
 const LOGO_URL = "https://scaledcircle.com/icons/Icon-192.png";
 // Select account-action destinations from the deployed project, never caller input.
 const ACCOUNT_ORIGIN = (process.env.GCLOUD_PROJECT || process.env.GOOGLE_CLOUD_PROJECT) === "scaledcircle-staging" ?
@@ -67,7 +67,7 @@ function button(label, url, color = "#1769e0") {
     `font:700 15px Arial,sans-serif">${safeLabel}</a></td></tr></table>`;
 }
 
-function shell({preheader, heading, greeting, bodyHtml, reason = "You received this email because a ScaledCircle account was created using this email address."}) {
+function shell({preheader, heading, greeting, bodyHtml, reason = "You received this email because a Scaled Circle account was created using this email address."}) {
   const salutation = cleanText(greeting, 120);
   return `<!doctype html><html><body style="margin:0;background:#eef3f8">` +
     `<div style="display:none;max-height:0;overflow:hidden;color:transparent">${escapeHtml(preheader)}</div>` +
@@ -75,8 +75,8 @@ function shell({preheader, heading, greeting, bodyHtml, reason = "You received t
     `<tr><td align="center" style="padding:24px 12px"><table role="presentation" width="100%" ` +
     `cellspacing="0" cellpadding="0" style="max-width:640px;background:#ffffff;border-radius:14px;` +
     `border:1px solid #dbe5ef"><tr><td style="padding:30px 34px;font-family:Arial,sans-serif;color:#10243e">` +
-    `<div style="text-align:center"><img src="${LOGO_URL}" width="72" height="72" alt="ScaledCircle" ` +
-    `style="display:inline-block;border:0"><div style="font-size:22px;font-weight:800;color:#10243e">ScaledCircle</div></div>` +
+    `<div style="text-align:center"><img src="${LOGO_URL}" width="72" height="72" alt="Scaled Circle" ` +
+    `style="display:inline-block;border:0"><div style="font-size:22px;font-weight:800;color:#10243e">Scaled Circle</div></div>` +
     `<h1 style="margin:28px 0 14px;font-size:26px;line-height:1.2;color:#10243e">${escapeHtml(heading)}</h1>` +
     `<p style="font-size:16px;line-height:1.6">${salutation ? `Hi ${escapeHtml(salutation)},` : "Hello,"}</p>${bodyHtml}` +
     `<hr style="border:0;border-top:1px solid #dbe5ef;margin:28px 0">` +
@@ -99,7 +99,7 @@ function welcomeTemplate({role, displayName, verificationUrl}) {
     `<p style="font-size:15px;line-height:1.6">Tell us where you want to work, how far you will travel, ` +
     `the work that interests you, vehicle information, other interests, and whether you want email alerts.</p>${profile}` +
     `<p style="font-size:15px;line-height:1.6">You can complete this while access is pending. ` +
-    `No platform fees are charged to Scalers for taking jobs through ScaledCircle.</p>` :
+    `No platform fees are charged to Scalers for taking jobs through Scaled Circle.</p>` :
     `<p style="font-size:15px;line-height:1.6">${escapeHtml(businessNextStep)}</p>`;
   const bodyHtml = `<p style="font-size:16px;line-height:1.6">Your ${role === "scaler" ? "Scaler" : "Business"} ` +
     `account has been created.</p><h2 style="font-size:18px;color:#10243e">${role === "scaler" ? "GET READY IN TWO STEPS" : "VERIFY YOUR EMAIL"}</h2>` +
@@ -107,25 +107,25 @@ function welcomeTemplate({role, displayName, verificationUrl}) {
     `<p style="font-size:15px;line-height:1.6">Verify your email address to secure your account${role === "scaler" ? " and unlock pre-launch profile setup" : ""}.</p>` +
     `${verify}${scalerDetails}<p style="font-size:15px;line-height:1.6">Welcome aboard,<br>${SUPPORT_NAME}</p>`;
   const text = role === "scaler" ? [
-    "WELCOME TO SCALEDCIRCLE", `Hi ${greeting},`, "", "Your Scaler account has been created.", "",
+    "WELCOME TO SCALED CIRCLE", `Hi ${greeting},`, "", "Your Scaler account has been created.", "",
     "1. VERIFY YOUR EMAIL", verificationUrl, "", "2. COMPLETE YOUR SCALER PROFILE", PROFILE_ROUTE, "",
     "Choose Work Areas, travel, work interests, vehicle/cargo, other interests, and notification preferences.",
-    "You can complete this while access is pending.", "No platform fees are charged to Scalers for taking jobs through ScaledCircle.",
+    "You can complete this while access is pending.", "No platform fees are charged to Scalers for taking jobs through Scaled Circle.",
     "", `Questions? ${SUPPORT_EMAIL}`, "https://scaledcircle.com",
   ].join("\n") : [
-    "WELCOME TO SCALEDCIRCLE", `Hi ${greeting},`, "", "Your Business account has been created.",
+    "WELCOME TO SCALED CIRCLE", `Hi ${greeting},`, "", "Your Business account has been created.",
     "Verify your email to secure your account:", verificationUrl, "",
     businessNextStep, "", `Questions? ${SUPPORT_EMAIL}`, "https://scaledcircle.com",
   ].join("\n");
   return {
-    subject: "Welcome to ScaledCircle — Verify Your Email",
+    subject: "Welcome to Scaled Circle — Verify Your Email",
     preheader: role === "scaler" ?
       "Verify your email and finish your Scaler profile so you're ready when opportunities launch." :
-      "Verify your email so your ScaledCircle Business account is ready for access.",
+      "Verify your email so your Scaled Circle Business account is ready for access.",
     text,
     html: shell({preheader: role === "scaler" ?
       "Verify your email and finish your Scaler profile so you're ready when opportunities launch." :
-      "Verify your email so your Business account is ready.", heading: "WELCOME TO SCALEDCIRCLE", greeting, bodyHtml}),
+      "Verify your email so your Business account is ready.", heading: "WELCOME TO SCALED CIRCLE", greeting, bodyHtml}),
   };
 }
 
@@ -143,41 +143,41 @@ function adminTemplate({uid, role, displayName, email, source, created}) {
     `${role === "scaler" ? `<h2 style="font-size:17px">WORK PROFILE</h2><p>Not completed yet</p>` : ""}` +
     `<h2 style="font-size:17px">STATUS</h2><p>${escapeHtml(accessStatus)}</p><p style="font-size:12px;color:#7a8c9e">Firebase UID: ${escapeHtml(uid)}</p>`;
   return {
-    subject: `New ScaledCircle Signup — ${label}`,
+    subject: `New Scaled Circle Signup — ${label}`,
     text: rows.map(([key, value]) => `${key}: ${value}`).concat(role === "scaler" ? ["Work Profile: Not completed yet"] : [], [`Firebase UID: ${uid}`]).join("\n"),
-    html: shell({preheader: `New ${label} signup`, heading: `NEW SCALEDCIRCLE SIGNUP — ${label.toUpperCase()}`, greeting: "Support", bodyHtml}),
+    html: shell({preheader: `New ${label} signup`, heading: `NEW SCALED CIRCLE SIGNUP — ${label.toUpperCase()}`, greeting: "Support", bodyHtml}),
   };
 }
 
 function verificationOnlyTemplate({displayName, verificationUrl}) {
   const greeting = firstName(displayName);
-  const bodyHtml = `<p style="font-size:16px;line-height:1.6">Use the button below to verify your ScaledCircle email.</p>` +
+  const bodyHtml = `<p style="font-size:16px;line-height:1.6">Use the button below to verify your Scaled Circle email.</p>` +
     button("VERIFY MY EMAIL", verificationUrl) + `<p style="font-size:14px;color:#60758a">If you did not request this, you can ignore it.</p>`;
   return {
-    subject: "Verify your ScaledCircle email",
-    text: `Hi ${greeting},\n\nVerify your ScaledCircle email:\n${verificationUrl}\n\nQuestions? ${SUPPORT_EMAIL}`,
-    html: shell({preheader: "Verify your ScaledCircle email.", heading: "VERIFY YOUR EMAIL", greeting, bodyHtml}),
+    subject: "Verify your Scaled Circle email",
+    text: `Hi ${greeting},\n\nVerify your Scaled Circle email:\n${verificationUrl}\n\nQuestions? ${SUPPORT_EMAIL}`,
+    html: shell({preheader: "Verify your Scaled Circle email.", heading: "VERIFY YOUR EMAIL", greeting, bodyHtml}),
   };
 }
 
 function historicalPendingScalerTemplate({displayName, verificationUrl}) {
   const greeting = firstName(displayName);
-  const bodyHtml = `<p style="font-size:16px;line-height:1.6">Thanks for getting in early with ScaledCircle.</p>` +
+  const bodyHtml = `<p style="font-size:16px;line-height:1.6">Thanks for getting in early with Scaled Circle.</p>` +
     `<p style="font-size:15px;line-height:1.6">We've upgraded Scaler setup so you can verify your email ` +
     `and tell us what opportunities you're looking for before launch.</p>` +
     button("VERIFY MY EMAIL", verificationUrl) +
     `<p style="font-size:15px;line-height:1.6">Then add Work Areas, travel distance, job interests, ` +
     `vehicle/cargo, other work interests, and job alerts.</p>` +
     button("COMPLETE MY SCALER PROFILE", PROFILE_ROUTE, "#0c9f73") +
-    `<p style="font-size:15px;line-height:1.6">No platform fees are charged to Scalers for taking jobs through ScaledCircle.</p>`;
+    `<p style="font-size:15px;line-height:1.6">No platform fees are charged to Scalers for taking jobs through Scaled Circle.</p>`;
   return {
-    subject: "Finish Setting Up Your ScaledCircle Account",
-    text: [`Hi ${greeting},`, "", "Thanks for getting in early with ScaledCircle.",
+    subject: "Finish Setting Up Your Scaled Circle Account",
+    text: [`Hi ${greeting},`, "", "Thanks for getting in early with Scaled Circle.",
       "Verify your email:", verificationUrl, "", "Complete your Scaler profile:", PROFILE_ROUTE,
       "", "Add Work Areas, travel distance, job interests, vehicle/cargo, other interests, and job alerts.",
-      "No platform fees are charged to Scalers for taking jobs through ScaledCircle."].join("\n"),
-    html: shell({preheader: "Verify your email and finish setting up ScaledCircle.",
-      heading: "FINISH SETTING UP SCALEDCIRCLE", greeting, bodyHtml}),
+      "No platform fees are charged to Scalers for taking jobs through Scaled Circle."].join("\n"),
+    html: shell({preheader: "Verify your email and finish setting up Scaled Circle.",
+      heading: "FINISH SETTING UP SCALED CIRCLE", greeting, bodyHtml}),
   };
 }
 
@@ -222,10 +222,10 @@ function landingPageContent(job) {
   const payload = landingPagePayload(job);
   if (job.template === "landing_page_business_inquiry") {
     const subject = `New estimate request from ${payload.customerName}`;
-    const text = [`New customer inquiry from ScaledCircle`, "", `Landing Page: ${payload.landingPageTitle}`,
+    const text = [`New customer inquiry from Scaled Circle`, "", `Landing Page: ${payload.landingPageTitle}`,
       `Customer: ${payload.customerName}`, `Email: ${payload.customerEmail}`,
       `Phone: ${payload.customerPhone}`, `Request: ${payload.inquirySummary || "No additional details provided"}`,
-      "", "Open the inquiry in ScaledCircle:", payload.inquiryUrl].join("\n");
+      "", "Open the inquiry in Scaled Circle:", payload.inquiryUrl].join("\n");
     const bodyHtml = `<p style="font-size:15px;line-height:1.6">A customer sent a request through ` +
       `<strong>${escapeHtml(payload.landingPageTitle)}</strong>.</p><table role="presentation">` +
       [["Customer", payload.customerName], ["Email", payload.customerEmail], ["Phone", payload.customerPhone],
@@ -235,7 +235,7 @@ function landingPageContent(job) {
       `</table><div style="margin-top:24px">${button("OPEN INQUIRY", payload.inquiryUrl, "#0c9f73")}</div>`;
     return {subject, text, html: shell({preheader: subject, heading: "NEW CUSTOMER INQUIRY",
       greeting: payload.businessName === "the Business" ? "" : payload.businessName, bodyHtml,
-      reason:"You received this transactional email because your published ScaledCircle Landing Page received an inquiry."})};
+      reason:"You received this transactional email because your published Scaled Circle Landing Page received an inquiry."})};
   }
   const subject = `Your request was sent to ${payload.businessName}`;
   const detail = payload.inquirySummary ? `\n\nYour request:\n${payload.inquirySummary}` : "";
@@ -251,7 +251,7 @@ function landingPageContent(job) {
     `It is not a marketing subscription.</p>`;
   return {subject, text, html: shell({preheader: subject, heading: "REQUEST RECEIVED",
     greeting: firstName(payload.customerName), bodyHtml,
-    reason:"You received this transactional confirmation because you submitted a request through a ScaledCircle Landing Page."})};
+    reason:"You received this transactional confirmation because you submitted a request through a Scaled Circle Landing Page."})};
 }
 
 function deliveryContent(job) {

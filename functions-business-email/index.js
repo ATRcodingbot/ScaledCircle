@@ -37,9 +37,9 @@ exports.businessEmailOperationsV1=onCall({...options,memory:'512MiB',enforceAppC
 exports.businessEmailCallbackV1=onRequest(options,async(req,res)=>{
   res.set('Cache-Control','no-store');res.set('Referrer-Policy','no-referrer');res.set('Content-Security-Policy',"default-src 'none'; style-src 'unsafe-inline'");
   try{if(req.method!=='GET')return res.status(405).send('Method not allowed');await service().callback(req.query);
-    return res.status(200).send('<!doctype html><title>Business Email connected</title><h1>Business Email connected</h1><p>Return to ScaledCircle and check your connection. Automatic sending is off.</p>');
+    return res.status(200).send('<!doctype html><title>Business Email connected</title><h1>Business Email connected</h1><p>Return to Scaled Circle and check your connection. Automatic sending is off.</p>');
   }catch(error){console.warn('Business Email connection held',{code:error.code||'unavailable'});
-    return res.status(400).send('<!doctype html><title>Email was not connected</title><h1>Email was not connected</h1><p>Return to ScaledCircle and try again. No email was sent.</p>');}
+    return res.status(400).send('<!doctype html><title>Email was not connected</title><h1>Email was not connected</h1><p>Return to Scaled Circle and try again. No email was sent.</p>');}
 });
 exports.syncBusinessEmailRepliesV1=onSchedule({...options,timeoutSeconds:540,schedule:'every 5 minutes',retryCount:0},async()=>{
   const beta=JSON.parse(process.env.BUSINESS_EMAIL_PRIVATE_BETA||'{}');

@@ -982,7 +982,7 @@ class _PropertyIntelligenceCenterScreenState
                   ),
                   const SizedBox(height: 14),
                   const Text(
-                    'Analyze housing-stock age, compare target areas, understand construction eras, and turn selected areas into ScaledCircle campaigns.',
+                    'Analyze housing-stock age, compare target areas, understand construction eras, and turn selected areas into Scaled Circle campaigns.',
                   ),
                   const SizedBox(height: 20),
                   FilledButton.icon(

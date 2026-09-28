@@ -51,7 +51,7 @@ function createAlerts({db,getOwner,now=Date.now}){
     if(old.data()?.status==='held_quiet'&&(old.data().attempts||0)===0)tx.update(job,{status:'retry_requested'});
     if(!old.exists)tx.create(job,{template:TEMPLATE,businessUid:businessId,operationId:v.operationId,alertId:v.alertId,to:v.ownerEmail,ownerEmail:v.ownerEmail,
      fromAddress:'support@scaledcircle.com',subject:'A Business email reply needs your review',
-     text:'A reply is ready in your Business conversation. Review it securely in ScaledCircle:\nhttps://scaledcircle.com/#/business/email-connection?operation='+encodeURIComponent(v.operationId)+'\nOpening this link does not send or approve a message.',
+     text:'A reply is ready in your Business conversation. Review it securely in Scaled Circle:\nhttps://scaledcircle.com/#/business/email-connection?operation='+encodeURIComponent(v.operationId)+'\nOpening this link does not send or approve a message.',
      status:'queued',attempts:0,connectionGeneration:mail.data().generation,createdAtMs:now()});
     tx.update(d.ref,{state:'queued',jobId,queuedAt:now()});queued++;
    });

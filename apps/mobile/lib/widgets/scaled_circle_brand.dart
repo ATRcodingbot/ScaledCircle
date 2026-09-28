@@ -15,7 +15,7 @@ class ScaledCircleBrand extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Semantics(
-      label: 'ScaledCircle',
+      label: 'Scaled Circle',
       image: true,
       child: Image.asset(
         lightSurface

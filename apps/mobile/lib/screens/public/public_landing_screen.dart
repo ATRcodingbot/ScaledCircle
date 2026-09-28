@@ -331,7 +331,7 @@ class _HowItWorks extends StatelessWidget {
   Widget build(BuildContext context) => const Column(
     children: [
       _Heading(
-        eyebrow: 'HOW SCALEDCIRCLE WORKS',
+        eyebrow: 'HOW SCALED CIRCLE WORKS',
         title: 'Organize the work. Choose your next step.',
         subtitle:
             'Start with your customers and schedule. Add growth tools when you need them.',
@@ -524,7 +524,7 @@ class _Pricing extends StatelessWidget {
     'scale':
         'Core Business OS for up to five, with Property and supported Weather Intelligence.',
     'managed_growth':
-        'For businesses that want ScaledCircle helping prepare and coordinate ongoing marketing.',
+        'For businesses that want Scaled Circle helping prepare and coordinate ongoing marketing.',
   };
 
   static const _featureLabels = <String, String>{

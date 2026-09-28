@@ -109,9 +109,9 @@ test("Scaler finalization atomically creates profile and exactly two determinist
     "users/scaler-1",
   ]);
   const welcome = db.documents.get("outboundEmailJobs/welcome-user_scaler-1");
-  assert.match(welcome.subject, /Welcome to ScaledCircle/);
+  assert.match(welcome.subject, /Welcome to Scaled Circle/);
   assert.match(welcome.html, /Icon-192\.png/);
-  assert.match(welcome.html, /alt="ScaledCircle"/);
+  assert.match(welcome.html, /alt="Scaled Circle"/);
   assert.match(welcome.text, /REAL_CODE/);
   assert.equal(welcome.trustedHtml, true);
   assert.equal(db.documents.get("users/scaler-1").active, false);
@@ -254,7 +254,7 @@ test("public role and signup values fail closed", () => {
 test("historical pending template is prepared without pretending it is a new signup", () => {
   const value = email.historicalPendingScalerTemplate({displayName: "Early Scaler",
     verificationUrl: "https://scaledcircle.com/#/verify-email?oobCode=x"});
-  assert.equal(value.subject, "Finish Setting Up Your ScaledCircle Account");
+  assert.equal(value.subject, "Finish Setting Up Your Scaled Circle Account");
   assert.match(value.text, /Thanks for getting in early/);
   assert.doesNotMatch(value.text, /Your Scaler account has been created/);
 });

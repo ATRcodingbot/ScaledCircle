@@ -173,7 +173,7 @@ class SocialConnectionCard extends StatelessWidget {
               if (failed) const Text("Facebook wasn't connected. Try again."),
               if (needsPermission)
                 const Text(
-                  'ScaledCircle needs additional permission to use this account.',
+                  'Scaled Circle needs additional permission to use this account.',
                 ),
               if (provider == 'instagram')
                 const Text("Instagram isn't connected yet."),

@@ -49,7 +49,7 @@ async function requireCampaign(db,campaign,reader={get:ref=>ref.get()},options={
   const state=await stateForWork({...campaign,serviceArea:area},options);
   const config=(await reader.get(db.doc(CONFIG))).data();
   if(statusFor(config,state.id)!=="ACTIVE")
-    fail("ScaledCircle marketplace campaigns are not active in this work area's state yet.");
+    fail("Scaled Circle marketplace campaigns are not active in this work area's state yet.");
   return state;
 }
 module.exports={envelope,stateForWork,requireCampaign};

@@ -43,7 +43,7 @@ class ReserveSettlementPanel extends StatelessWidget {
                   ? 'Only approved compensation is charged.'
                   : 'Full accepted compensation earned.',
             ),
-            row('ScaledCircle Fee', settlement['earnedFeeCents']),
+            row('Scaled Circle Fee', settlement['earnedFeeCents']),
             row(
               amount == 0
                   ? 'No return due'

@@ -80,7 +80,7 @@ List<String> _financialDetail(AdminTimelineEvent event) {
   if (event.type == 'payment_received') {
     return [
       'Customer paid: ${_money(detail['grossCents'])}${_reference(detail['reference'])}',
-      'Worker allocation: ${_money(detail['workerCents'])} • ScaledCircle fee: ${_money(detail['platformFeeCents'])}',
+      'Worker allocation: ${_money(detail['workerCents'])} • Scaled Circle fee: ${_money(detail['platformFeeCents'])}',
     ];
   }
   if (event.type == 'refund_completed') {

@@ -46,9 +46,9 @@ def content():
             '/scalers': [*funnel('scaler_funnel_screen.dart'),
                          ('Canvassing with clear accepted pay', 'Review the fixed base compensation and any accepted coverage bonus before accepting. Automatic route tracking supports review; residential photos are not required. This is not pure-commission work or an employment offer.'),
                          ('Share work opportunities', 'Refer Businesses or Scalers under the referral program. Signup alone earns no cash reward, and a referral reward never reduces the referred Scaler’s earned pay.')],
-            '/referrals': [('Refer Businesses. Refer Scalers.', 'Share ScaledCircle with people who may find it useful. Rewards require qualifying authoritative economic events.'),
-                           ('Refer a Business', 'Earn 10% of qualifying retained recurring ScaledCircle subscription revenue. Single-level referrals only.'),
-                           ('Refer a Scaler', "Earn 1% of final approved compensation from qualifying completed work. This does not come out of the Scaler's pay. ScaledCircle funds the reward separately."),
+            '/referrals': [('Refer Businesses. Refer Scalers.', 'Share Scaled Circle with people who may find it useful. Rewards require qualifying authoritative economic events.'),
+                           ('Refer a Business', 'Earn 10% of qualifying retained recurring Scaled Circle subscription revenue. Single-level referrals only.'),
+                           ('Refer a Scaler', "Earn 1% of final approved compensation from qualifying completed work. This does not come out of the Scaler's pay. Scaled Circle funds the reward separately."),
                            ('Honest reward states', 'Signing up alone does not create a cash reward. Earned, available and paid are different states. Payout availability remains subject to certification and eligibility; no immediate cash-out is promised.')],
             '/how-it-works': [('From a local campaign to work you can review.', 'One clear workflow for the Business and the Scaler.'), *steps],
             '/pricing': [('Choose your plan', 'One Business workspace. Total users including the owner: Starter 1, Growth 3, Scale 5, Managed Growth 10.'), *pricing,
@@ -58,7 +58,7 @@ def content():
                          ('Email Campaigns — Private Beta', 'Controlled campaign preparation is available to invited Businesses. General campaign sending is not available. Account messages, billing receipts and Growth reports continue normally.'),
                          ('YouTube — Coming Soon', 'Customer YouTube management is not available at launch.'),
                          ('Supported Social channels', 'Facebook and Instagram support Business connection and permission review. Publishing requires separate approved content and execution authority. Customer X is Coming Soon.'),
-                         ('Postcards — Private Beta', 'Choose an area, create and approve a design, and arrange fulfillment with ScaledCircle. General ordering is held until physical fulfillment certification.'),
+                         ('Postcards — Private Beta', 'Choose an area, create and approve a design, and arrange fulfillment with Scaled Circle. General ordering is held until physical fulfillment certification.'),
                          ('Growth Department — Coming Soon', '$2,000/month when authorized. Managed Growth, Business Assistant and Lead Generation Research; 10 total users. No public purchase is enabled.')]}
 
 
@@ -67,7 +67,7 @@ def documents(*, staging=False):
     links = ''.join('<a href="' + route + '">' + label + '</a>' for route, label in
                    [('/businesses', 'Businesses'), ('/scalers', 'Scalers'),
                     ('/how-it-works', 'How it works'), ('/pricing', 'Pricing'), ('/referrals', 'Referral Program'), ('/#/login', 'Log in')])
-    navigation = ('<a class="brand" href="/" aria-label="ScaledCircle home"><img src="/assets/assets/brand/scaledcircle-lockup-dark-surface.png" alt="ScaledCircle" width="192" height="64"></a>'
+    navigation = ('<a class="brand" href="/" aria-label="Scaled Circle home"><img src="/assets/assets/brand/scaledcircle-lockup-dark-surface.png" alt="Scaled Circle" width="192" height="64"></a>'
                   '<div class="desktop-links">' + links + '</div><details class="mobile-menu"><summary>Menu</summary><div>' + links + '</div></details>')
     result = {}
     for route, sections in content().items():
@@ -132,8 +132,8 @@ function startProduct() {
   appStarted = true;
   document.getElementById('marketing')?.remove();
   const loading=document.createElement('main'); loading.id='product-loading';
-  loading.textContent='Opening ScaledCircle…'; document.body.appendChild(loading);
-  const deadline=setTimeout(()=>{if(document.querySelector('flutter-view,flt-glass-pane'))return; loading.textContent='ScaledCircle could not finish loading. ';const retry=document.createElement('button');retry.textContent='Retry';retry.onclick=()=>location.reload();loading.appendChild(retry);},30000);
+  loading.textContent='Opening Scaled Circle…'; document.body.appendChild(loading);
+  const deadline=setTimeout(()=>{if(document.querySelector('flutter-view,flt-glass-pane'))return; loading.textContent='Scaled Circle could not finish loading. ';const retry=document.createElement('button');retry.textContent='Retry';retry.onclick=()=>location.reload();loading.appendChild(retry);},30000);
   addEventListener('flutter-first-frame',()=>{clearTimeout(deadline);loading.remove();},{once:true});
   const script = document.createElement('script');
   script.src = '/flutter_bootstrap.js'; script.async = true;

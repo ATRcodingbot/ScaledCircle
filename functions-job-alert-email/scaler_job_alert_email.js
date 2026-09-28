@@ -4,7 +4,7 @@ const crypto = require("node:crypto");
 
 const EMAIL_JOB_COLLECTION = "scalerJobAlertEmailJobs";
 const SUPPORT_EMAIL = "support@scaledcircle.com";
-const SUPPORT_FROM_NAME = "ScaledCircle";
+const SUPPORT_FROM_NAME = "Scaled Circle";
 const POLICY_VERSION = "ScalerJobAlertEmailPolicyV1";
 const DAILY_LIMIT = 5;
 
@@ -35,8 +35,8 @@ function createJob({campaignId, scalerUid, recipient, campaignName, jobType, are
   return {id, schemaVersion: "ScalerJobAlertEmailJobV1", policyVersion: POLICY_VERSION,
     status: "queued",
     scalerUid, campaignId, to, fromAddress: SUPPORT_EMAIL, template: "scaler_job_alert_v1",
-    subject: "New ScaledCircle job near your work area",
-    text: `A new ${safeType} job${campaignName ? ` (${String(campaignName).slice(0, 120)})` : ""} matches your saved preferences.\n\nArea: ${safeArea}${safeReasons ? `\nWhy it matched: ${safeReasons}` : ""}\n\nThis is an opportunity, not an assignment. Open ScaledCircle to review and apply: https://scaledcircle.com/#/jobs\n\nManage job alerts in ScaledCircle → My Work Areas & Alerts.`,
+    subject: "New Scaled Circle job near your work area",
+    text: `A new ${safeType} job${campaignName ? ` (${String(campaignName).slice(0, 120)})` : ""} matches your saved preferences.\n\nArea: ${safeArea}${safeReasons ? `\nWhy it matched: ${safeReasons}` : ""}\n\nThis is an opportunity, not an assignment. Open Scaled Circle to review and apply: https://scaledcircle.com/#/jobs\n\nManage job alerts in Scaled Circle → My Work Areas & Alerts.`,
     dedupeKey: id, bodyHash: crypto.createHash("sha256").update(`${id}:${to}`).digest("hex")};
 }
 

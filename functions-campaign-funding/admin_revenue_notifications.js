@@ -42,7 +42,7 @@ function financialEvent({kind, paymentId, campaign, payment, occurredAt}) {
     `Business: ${businessIdentity}`,
     `Original payment: ${money(grossCents, currency)}`,
     `Refund: ${money(refundCents, currency)}`,
-    `ScaledCircle retained from campaign charge: ${money(Math.max(0, grossCents - refundCents), currency)}`,
+    `Scaled Circle retained from campaign charge: ${money(Math.max(0, grossCents - refundCents), currency)}`,
     "Payment status: Refunded",
   ] : [
     `Campaign: ${campaignName}`,
@@ -50,8 +50,8 @@ function financialEvent({kind, paymentId, campaign, payment, occurredAt}) {
     `Business: ${businessIdentity}`,
     `Customer payment: ${money(grossCents, currency)}`,
     `Worker reserve: ${money(workerCents, currency)}`,
-    `ScaledCircle fee reserve: ${money(remainingFeeReserveCents, currency)}`,
-    `ScaledCircle recognized revenue: ${money(recognizedCents, currency)}`,
+    `Scaled Circle fee reserve: ${money(remainingFeeReserveCents, currency)}`,
+    `Scaled Circle recognized revenue: ${money(recognizedCents, currency)}`,
     "Payment status: Paid",
   ];
   lines.push(

@@ -66,7 +66,7 @@ for(const pathname of ['/','/pricing']) for(const ref of ['abc234','invalid-secr
             nav = page.split('<nav aria-label="Main">', 1)[1].split('</nav>', 1)[0]
             for target in ['/businesses', '/scalers', '/how-it-works', '/pricing', '/referrals']:
                 self.assertIn('href="' + target + '"', nav)
-            self.assertIn('aria-label="ScaledCircle home"', nav)
+            self.assertIn('aria-label="Scaled Circle home"', nav)
             self.assertIn('class="mobile-menu"', nav)
             self.assertNotIn('href="/#pricing"', nav)
             self.assertNotIn('href="/#how-it-works"', nav)
@@ -148,7 +148,7 @@ for(const pathname of ['/','/pricing']) for(const ref of ['abc234','invalid-secr
             self.assertEqual(body.count('class="button primary"'), 2)
             self.assertIn('href="' + route + '" aria-current="page"', body)
             self.assertIn('href="/#' + route + '"', body)
-            self.assertEqual(body.count('aria-label="ScaledCircle home"'), 1)
+            self.assertEqual(body.count('aria-label="Scaled Circle home"'), 1)
         business = docs['/businesses']
         for tool in ['Business Assistant', 'Email Campaigns', 'YouTube']:
             card = re.search(r'<article><h3>' + tool + r'</h3>(.*?)</article>', business, re.S).group(1)

@@ -1,0 +1,40 @@
+--- a/apps/mobile/ios/Runner/Info.plist
++++ b/apps/mobile/ios/Runner/Info.plist
+@@ -7,7 +7,7 @@
+ 	<key>CFBundleDevelopmentRegion</key>
+ 	<string>$(DEVELOPMENT_LANGUAGE)</string>
+ 	<key>CFBundleDisplayName</key>
+-	<string>ScaledCircle</string>
++	<string>Scaled Circle</string>
+ 	<key>CFBundleExecutable</key>
+ 	<string>$(EXECUTABLE_NAME)</string>
+ 	<key>CFBundleIdentifier</key>
+@@ -17,13 +17,13 @@
+ 	<key>CFBundleName</key>
+ 	<string>ScaledCircle</string>
+ 	<key>NSCameraUsageDescription</key>
+-	<string>ScaledCircle uses the camera when you choose to capture a photo for job evidence.</string>
++	<string>Scaled Circle uses the camera when you choose to capture a photo for job evidence.</string>
+ 	<key>NSPhotoLibraryUsageDescription</key>
+-	<string>ScaledCircle lets you choose photos to upload as job evidence or Business brand assets.</string>
++	<string>Scaled Circle lets you choose photos to upload as job evidence or Business brand assets.</string>
+ 	<key>NSLocationWhenInUseUsageDescription</key>
+-	<string>ScaledCircle records your route only after you start an assigned job and stops when you complete or stop that job.</string>
++	<string>Scaled Circle records your route only after you start an assigned job and stops when you complete or stop that job.</string>
+ 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+-	<string>During an active job, ScaledCircle continues recording the assigned route while your screen is locked or another app is open.</string>
++	<string>During an active job, Scaled Circle continues recording the assigned route while your screen is locked or another app is open.</string>
+ 	<key>UIBackgroundModes</key>
+ 	<array>
+ 		<string>location</string>
+--- a/apps/mobile/android/app/src/main/AndroidManifest.xml
++++ b/apps/mobile/android/app/src/main/AndroidManifest.xml
+@@ -6,7 +6,7 @@
+     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
+     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+     <application
+-        android:label="ScaledCircle"
++        android:label="Scaled Circle"
+         android:name="${applicationName}"
+         android:icon="@mipmap/ic_launcher"
+         android:allowBackup="true"

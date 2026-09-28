@@ -50,7 +50,7 @@ function quoteMath(input, quantity) {
   const printingCents = money(input.printingCents), postageCents = money(input.postageCents);
   const feeBaseCents=money(printingCents+postageCents);
   const fulfillmentCents = Math.floor((feeBaseCents*FEE_POLICY.rateBps+5000)/10000), taxCents = money(input.taxCents || 0);
-  if(input.fulfillmentCents!=null && input.fulfillmentCents!==fulfillmentCents)fail('The ScaledCircle Fulfillment & Creative fee is calculated as 20% of printing plus postage.');
+  if(input.fulfillmentCents!=null && input.fulfillmentCents!==fulfillmentCents)fail('The Scaled Circle Fulfillment & Creative fee is calculated as 20% of printing plus postage.');
   const printCostCents = money(input.printCostCents), postageCostCents = money(input.postageCostCents);
   const handlingCostCents = money(input.handlingCostCents || 0);
   const rateCents = money(input.postageRateCents);
@@ -67,7 +67,7 @@ function createPostcardService({db, FieldValue, bucket, physicalService, stripe,
   async function owned(orderId, actor, admin = false) { actorCheck(actor, admin); const ref = orders.doc(id(orderId)), snap = await ref.get(); if (!snap.exists || (!admin && snap.data().businessId !== actor.uid)) fail("This postcard order is not available.", "permission-denied"); return {ref, order: snap.data()}; }
   function publicOrder(order) { const out = {...order, customerStatus: order.status==='REFUNDED' && order.refundCents<order.paidCents ? 'Partially refunded' : CUSTOMER_STATUS[order.status] || "Under review"}; for (const key of ["createdAt", "updatedAt", "paidAt", "mailedAt"]) out[key] = iso(out[key]); return out; }
   function notify(tx, order, kind) {
-    const messages = {approved: ["Postcard approved", "Your approved postcard campaign is ready for fulfillment."], printing: ["Printing started", "ScaledCircle is preparing your approved postcard campaign."], mailed: ["Postcard campaign mailed", "Your ScaledCircle postcard campaign has been mailed."]};
+    const messages = {approved: ["Postcard approved", "Your approved postcard campaign is ready for fulfillment."], printing: ["Printing started", "Scaled Circle is preparing your approved postcard campaign."], mailed: ["Postcard campaign mailed", "Your Scaled Circle postcard campaign has been mailed."]};
     const [title, body] = messages[kind];
     tx.set(db.doc(`notifications/postcard_${order.orderId}_${kind}`), {userId: order.businessId, type: "postcard_fulfillment", title: order.simulation ? `TEST simulation: ${title}` : title, body: order.simulation ? `Software certification only. ${body} No physical mailing is claimed.` : body, read: false, campaignId: order.campaignId, orderId: order.orderId, createdAt: FieldValue.serverTimestamp()});
   }

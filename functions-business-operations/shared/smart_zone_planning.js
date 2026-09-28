@@ -255,7 +255,7 @@ function compensationRecommendation({estimatedMinutes, workerBasePayCents = null
     attractiveness: validEnteredBase === null ? "review_compensation" :
       belowRecommendedFloor ? "below_scaledcircle_recommendation" : "competitive",
     displayFlag: belowRecommendedFloor ?
-      "Below ScaledCircle recommended compensation" : null,
+      "Below Scaled Circle recommended compensation" : null,
     suggestions: validEnteredBase === null ? ["review_compensation"] :
       belowRecommendedFloor ?
         ["use_recommended_pay", "add_completion_bonus", "reduce_zone_size"] : [],

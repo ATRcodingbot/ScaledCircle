@@ -9,7 +9,7 @@ class ScalerFunnelScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) => FunnelPage(
     accent: scalerBlue,
-    semanticsLabel: 'ScaledCircle for Scalers',
+    semanticsLabel: 'Scaled Circle for Scalers',
     children: [
       FunnelHero(
         eyebrow: 'FOR SCALERS',
@@ -229,7 +229,7 @@ class _AlertsBand extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          ProductLine('In ScaledCircle', 'On', color: scalerBlue),
+          ProductLine('In Scaled Circle', 'On', color: scalerBlue),
           ProductLine('Email alerts', 'Optional'),
           ProductLine('Push', 'Coming Soon'),
         ],
@@ -318,7 +318,7 @@ class _ZoneVisual extends StatelessWidget {
         ProductLine('Coverage', 'Recording'),
         SizedBox(height: 8),
         Text(
-          'Your assigned Zone stays visible while ScaledCircle records GPS evidence during active work.',
+          'Your assigned Zone stays visible while Scaled Circle records GPS evidence during active work.',
           style: TextStyle(color: publicMuted, fontSize: 12, height: 1.35),
         ),
       ],

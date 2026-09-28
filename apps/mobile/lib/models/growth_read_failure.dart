@@ -8,7 +8,7 @@ String growthReadFailure(Object error, {bool privateWorkspace = false}) {
         return 'Sign in to load this workspace, then retry.';
       case 'permission-denied':
         return privateWorkspace
-            ? 'This account cannot access the private ScaledCircle workspace. Use your authorized ScaledCircle account.'
+            ? 'This account cannot access the private Scaled Circle workspace. Use your authorized Scaled Circle account.'
             : 'This account cannot access this Business workspace. Select your authorized Business account.';
       case 'not-found':
         return 'This workspace is unavailable. Check your selected Business, then retry.';

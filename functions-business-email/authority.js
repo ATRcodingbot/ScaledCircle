@@ -23,21 +23,21 @@ function createAuthority({db,auth,FieldValue,Timestamp,project,beta={},configure
     const connectionAction=['connect','connectOther','callback','disconnect','checkConnection','preferences'].includes(operation);
     if(config.kind==='internal') {
       config.canManageConnection=true;
-      if(config.ownerUid!==uid)deny('Use the maintained internal ScaledCircle workspace.');
+      if(config.ownerUid!==uid)deny('Use the maintained internal Scaled Circle workspace.');
       const user=await db.doc('users/'+uid).get();
       if(project==='scaled-circle') {
         // Production's existing Admin is the authenticated controller of the
         // internal Growth bridge. Do not copy its staging registry or mailbox.
-        if(businessId!==uid)deny('Use the maintained internal ScaledCircle workspace.');
+        if(businessId!==uid)deny('Use the maintained internal Scaled Circle workspace.');
         const identity=await auth.getUser(uid);
         try{internalBridge.authorizeProductionActor({expectedUid:internalAdminUid,uid,
           tokenVerified:identity.emailVerified,user:user.data(),identity});}
-        catch(_){deny('Use the maintained internal ScaledCircle workspace.');}
+        catch(_){deny('Use the maintained internal Scaled Circle workspace.');}
       }else {
         const registry=await db.doc('internalGrowthWorkspaces/'+businessId).get();
         if((project!=='scaledcircle-staging'&&!project?.startsWith('demo-'))||user.data()?.role!=='admin'||user.data()?.active!==true||
           registry.data()?.kind!=='internal_admin_dogfood'||registry.data()?.namespace!==businessId||registry.data()?.ownerUid!==uid)
-          deny('Use the maintained internal ScaledCircle workspace.');
+          deny('Use the maintained internal Scaled Circle workspace.');
       }
     } else {
       const a=await ws.authority({uid,businessId,permission:readOnly||operation==='reconcile'?'communicationsRead':'communicationsSend'});

@@ -40,7 +40,7 @@ class LegalDocumentScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final document = _document(kind);
     return Title(
-      title: '${document.title} · ScaledCircle',
+      title: '${document.title} · Scaled Circle',
       color: const Color(0xFF0A58CA),
       child: Scaffold(
         backgroundColor: const Color(0xFFF7FAFC),
@@ -219,12 +219,12 @@ class _Section {
 _Document _document(LegalDocumentKind kind) => switch (kind) {
   LegalDocumentKind.hub => const _Document(
     'Legal & Trust',
-    'Plain-language information about ScaledCircle, your choices, and the records used to operate the service.',
+    'Plain-language information about Scaled Circle, your choices, and the records used to operate the service.',
     [
       _Section(
-        'ScaledCircle',
+        'Scaled Circle',
         [
-          'ScaledCircle is operated by Scaled Circle LLC. We provide tools for Businesses to fund and manage mapped field campaigns and for approved Scalers to apply for and complete assigned work.',
+          'Scaled Circle is operated by Scaled Circle LLC. We provide tools for Businesses to fund and manage mapped field campaigns and for approved Scalers to apply for and complete assigned work.',
         ],
         links: [
           ('Terms of Service', AppRoutes.terms),
@@ -244,7 +244,7 @@ _Document _document(LegalDocumentKind kind) => switch (kind) {
       _Section(
         'Questions or requests',
         [
-          'Contact the approved ScaledCircle support channel for account, privacy, payment, campaign, or work questions.',
+          'Contact the approved Scaled Circle support channel for account, privacy, payment, campaign, or work questions.',
         ],
         links: [('Support', AppRoutes.support)],
       ),
@@ -252,13 +252,13 @@ _Document _document(LegalDocumentKind kind) => switch (kind) {
   ),
   LegalDocumentKind.terms => const _Document(
     'Terms of Service',
-    'The core rules for using ScaledCircle as a Business, Scaler, or other authorized participant.',
+    'The core rules for using Scaled Circle as a Business, Scaler, or other authorized participant.',
     [
       _Section('The service', [
-        'ScaledCircle helps Businesses plan, fund, publish, and review mapped field campaigns. Approved Scalers may choose to apply for available assignments. Access to a feature may depend on account role, approval, location, campaign state, or launch readiness.',
+        'Scaled Circle helps Businesses plan, fund, publish, and review mapped field campaigns. Approved Scalers may choose to apply for available assignments. Access to a feature may depend on account role, approval, location, campaign state, or launch readiness.',
       ]),
       _Section('Accounts and acceptable use', [
-        'Account holders must be at least 18 years old. A Business account holder must also be authorized to act for and bind the Business represented by the account. Provide accurate account information, protect your login, and use only your authoritative role. Do not impersonate another person, manipulate campaign, tracking, evidence, payment, earning, or referral records, or use ScaledCircle for unlawful, deceptive, abusive, or fraudulent activity. Age, capacity, and worker-classification wording remains subject to professional legal review before official broad public launch.',
+        'Account holders must be at least 18 years old. A Business account holder must also be authorized to act for and bind the Business represented by the account. Provide accurate account information, protect your login, and use only your authoritative role. Do not impersonate another person, manipulate campaign, tracking, evidence, payment, earning, or referral records, or use Scaled Circle for unlawful, deceptive, abusive, or fraudulent activity. Age, capacity, and worker-classification wording remains subject to professional legal review before official broad public launch.',
       ]),
       _Section(
         'Business campaigns',
@@ -275,10 +275,10 @@ _Document _document(LegalDocumentKind kind) => switch (kind) {
         links: [('Scaler Work & Earnings', AppRoutes.scalerTerms)],
       ),
       _Section('Service limits and review', [
-        'Some beta, provider-dependent, mailing, advertising, intelligence, affiliate, payout, or automation features may be unavailable or separately gated. ScaledCircle does not guarantee campaign, advertising, postal, lead, or business outcomes. Fraud, misuse, security risk, or policy violations may result in restriction or suspension.',
+        'Some beta, provider-dependent, mailing, advertising, intelligence, affiliate, payout, or automation features may be unavailable or separately gated. Scaled Circle does not guarantee campaign, advertising, postal, lead, or business outcomes. Fraud, misuse, security risk, or policy violations may result in restriction or suspension.',
       ]),
       _Section('Content and intellectual property', [
-        'You retain responsibility for content you provide and must have the rights needed to use it. The ScaledCircle product, brand, software, and approved logo assets belong to their respective rights holders and may not be misused.',
+        'You retain responsibility for content you provide and must have the rights needed to use it. The Scaled Circle product, brand, software, and approved logo assets belong to their respective rights holders and may not be misused.',
       ]),
       _Section(
         'Privacy and contact',
@@ -294,20 +294,20 @@ _Document _document(LegalDocumentKind kind) => switch (kind) {
   ),
   LegalDocumentKind.privacy => const _Document(
     'Privacy Policy',
-    'How ScaledCircle uses account, campaign, work, payment, support, and Sales information to operate the product.',
+    'How Scaled Circle uses account, campaign, work, payment, support, and Sales information to operate the product.',
     [
       _Section('Information we handle', [
         'Account data may include name, email, contact details, role, verification, approval, and profile information. Business data may include service areas, campaign targets, content, Zones, materials, logistics, and participant records. Scaler data may include preferences, applications, assignments, work areas, tracking routes, checkpoints, photos, completion evidence, earnings, and Wallet records.',
       ]),
       _Section('Payments and providers', [
-        'Stripe processes Business payment and refund activity and may support later worker-transfer workflows. ScaledCircle stores operational payment identifiers and reconciled payment, refund, earning, and transfer-status records; it does not expose payment-method secrets in the app. Other providers may support email, storage, maps, analytics, hosting, or campaign services.',
+        'Stripe processes Business payment and refund activity and may support later worker-transfer workflows. Scaled Circle stores operational payment identifiers and reconciled payment, refund, earning, and transfer-status records; it does not expose payment-method secrets in the app. Other providers may support email, storage, maps, analytics, hosting, or campaign services.',
       ]),
       _Section(
         'Website traffic statistics',
         [
           'On scaledcircle.com, we use Google Analytics 4 to understand visitor counts, pages visited, referral sources, campaign links, and approximate geographic areas. Analytics runs during normal browsing unless you turn it off or your browser sends a Global Privacy Control or Do Not Track signal. Analytics cookies help distinguish visits. Advertising personalization and Google signals are disabled by this integration.',
           'We limit the page addresses sent to Google to named public pages or a general App category. We include only bounded campaign tags from links; we do not intentionally send account identifiers, form entries, checkout tokens, Gmail content, or work locations in analytics events. Google receives browser and device information and your IP address when your browser contacts its service. This website analytics integration does not record your screen, camera, or microphone.',
-          'You can turn website analytics off using Website privacy settings below without losing access to ScaledCircle. The preference is saved in your browser and is separate from account agreements and marketing email. Website analytics are not enabled for local or staging environments by this integration.',
+          'You can turn website analytics off using Website privacy settings below without losing access to Scaled Circle. The preference is saved in your browser and is separate from account agreements and marketing email. Website analytics are not enabled for local or staging environments by this integration.',
         ],
         links: [
           (
@@ -318,14 +318,14 @@ _Document _document(LegalDocumentKind kind) => switch (kind) {
       ),
       _Section('Connected Google Business Email', [
         'Owners may explicitly authorize future Inbox monitoring, selected-label intake, or existing-conversation monitoring. Inbox monitoring excludes archived-only mail, Sent, Spam, Trash and attachments. No automatic historical Inbox backfill occurs. Bounded non-model screening skips automated or unrelated mail and retains relevant inquiry/conversation context rather than a general mailbox copy. Monitoring does not authorize sending, external-model processing or appointment booking. Existing narrower coverage remains unchanged until the owner authorizes a change.',
-        'When you connect Google Business Email, ScaledCircle uses your Google account identifier and email address to identify the authorized mailbox. With Read permission, we read relevant conversations, including participants, subjects, message text, dates, and message identifiers, to show inquiries and replies, review historical contact context and opt-out requests, and reconcile approved outreach. Relevant conversation excerpts, replies, contact records, and campaign records are stored in your Business workspace.',
-        'With Send permission, ScaledCircle sends messages you explicitly approve, including campaigns approved for later delivery. While connected, background checks can update replies and process approved campaigns. Connecting a mailbox does not itself approve a message or campaign.',
-        'Connection credentials are encrypted on our servers. Disconnecting removes ScaledCircle\'s stored connection credential and disables new operations using that credential; it does not delete previously saved records or revoke permission in your Google Account. You can separately manage ScaledCircle access in your Google Account. Contact support to request deletion of stored information, subject to applicable retention requirements.',
+        'When you connect Google Business Email, Scaled Circle uses your Google account identifier and email address to identify the authorized mailbox. With Read permission, we read relevant conversations, including participants, subjects, message text, dates, and message identifiers, to show inquiries and replies, review historical contact context and opt-out requests, and reconcile approved outreach. Relevant conversation excerpts, replies, contact records, and campaign records are stored in your Business workspace.',
+        'With Send permission, Scaled Circle sends messages you explicitly approve, including campaigns approved for later delivery. While connected, background checks can update replies and process approved campaigns. Connecting a mailbox does not itself approve a message or campaign.',
+        'Connection credentials are encrypted on our servers. Disconnecting removes Scaled Circle\'s stored connection credential and disables new operations using that credential; it does not delete previously saved records or revoke permission in your Google Account. You can separately manage Scaled Circle access in your Google Account. Contact support to request deletion of stored information, subject to applicable retention requirements.',
       ]),
       _Section(
         'Google API data and Limited Use',
         [
-          'ScaledCircle\'s use and transfer of information received from Google APIs adheres to the Google API Services User Data Policy, including its Limited Use requirements. These limits also apply to information derived from Google data.',
+          'Scaled Circle\'s use and transfer of information received from Google APIs adheres to the Google API Services User Data Policy, including its Limited Use requirements. These limits also apply to information derived from Google data.',
           'We use Gmail data to provide the connected Business Email features you choose: readable conversations, approved messages, reply reconciliation, contact history, suppression and Business-specific campaign results. Selected message text and reply bodies are saved with their conversation, contact and campaign records in your Business workspace, using Google Cloud and Firebase infrastructure in the United States.',
           'We retain saved Business communication history while it is needed for those features, your requests, security, disputes or legal obligations. There is no fixed automatic expiry for this history. Disconnecting does not erase it. Deleting an individual account does not automatically delete the Business workspace or its communication history. Contact support to request deletion of saved Gmail data; we review workspace ownership and any required retention before removing records.',
           'Google processes mailbox authorization, retrieval and delivery. Our hosting and storage service providers process data to operate these features. We limit other transfers to providing or improving the appropriate user-facing features with your consent, security, applicable law, or a business transfer with your explicit prior consent. We do not sell Gmail data, provide it to data brokers, use it to target advertisements, or build unrelated or cross-Business marketing profiles.',
@@ -348,7 +348,7 @@ _Document _document(LegalDocumentKind kind) => switch (kind) {
         'Support cases retain the context needed to investigate requests. Admin-scoped Sales records may include lawful Business prospect contact, source, follow-up, suppression, and conversion information. Referral and affiliate records may retain attribution and enrollment state. Transactional account, verification, payment, refund, campaign, assignment, and support messages are separate from optional marketing communications. Future autonomous outreach is not implemented.',
       ]),
       _Section('Retention and security', [
-        'Records are retained as reasonably necessary for service operation, work verification, support, disputes, security, accounting, and legal obligations. Precise retention periods require policy and legal review. ScaledCircle uses role-based access, server-authoritative functions, and provider security controls, but no system can promise absolute security.',
+        'Records are retained as reasonably necessary for service operation, work verification, support, disputes, security, accounting, and legal obligations. Precise retention periods require policy and legal review. Scaled Circle uses role-based access, server-authoritative functions, and provider security controls, but no system can promise absolute security.',
       ]),
       _Section(
         'Your choices and requests',
@@ -364,7 +364,7 @@ _Document _document(LegalDocumentKind kind) => switch (kind) {
     'The public summary of the current campaign-funding and cancellation lifecycle.',
     [
       _Section('Business payments', [
-        'Business campaign funding uses Stripe and real currency. For field campaigns, the reviewed platform fee is 20% of worker compensation and is added to the worker allocation. For direct-mail/postcard work, the current approved platform fee is 20%; printing, postage, and vendor costs are separate where applicable. Social advertising spend has a 0% percentage markup; any separate subscription or service charge remains distinct. Gross customer payment is not the same as ScaledCircle revenue.',
+        'Business campaign funding uses Stripe and real currency. For field campaigns, the reviewed platform fee is 20% of worker compensation and is added to the worker allocation. For direct-mail/postcard work, the current approved platform fee is 20%; printing, postage, and vendor costs are separate where applicable. Social advertising spend has a 0% percentage markup; any separate subscription or service charge remains distinct. Gross customer payment is not the same as Scaled Circle revenue.',
       ]),
       _Section('Eligible self-service cancellation', [
         'A funded campaign may receive a full campaign-payment refund only when the server confirms it is unassigned and unstarted and all authoritative eligibility checks pass. The marketplace closes, Stripe refund authority is reconciled, and the campaign becomes canceled, refunded, and softly archived. Applications alone do not create worker earning authority.',
@@ -375,7 +375,7 @@ _Document _document(LegalDocumentKind kind) => switch (kind) {
       _Section(
         'Refund timing and fees',
         [
-          'Refund status is authoritative only after server and Stripe reconciliation. Bank timing can vary. ScaledCircle does not promise that Stripe returns its processing fees to ScaledCircle, and this page does not promise outcomes unsupported by the authoritative campaign and payment state.',
+          'Refund status is authoritative only after server and Stripe reconciliation. Bank timing can vary. Scaled Circle does not promise that Stripe returns its processing fees to Scaled Circle, and this page does not promise outcomes unsupported by the authoritative campaign and payment state.',
         ],
         links: [('Support', AppRoutes.support)],
       ),
@@ -391,23 +391,23 @@ _Document _document(LegalDocumentKind kind) => switch (kind) {
       _Section(
         'Materials, tracking, and evidence',
         [
-          'Follow the campaign, Zone, material handoff, coordination, checkpoint, photo, and completion requirements shown for the assignment. Location is collected during an active tracked job session for route and work verification. The foreground service may continue while the screen is locked or another app is open, and stops at completion, cancellation, or another terminal state. ScaledCircle does not request permanent camera access merely to use the maintained system capture/picker flow.',
+          'Follow the campaign, Zone, material handoff, coordination, checkpoint, photo, and completion requirements shown for the assignment. Location is collected during an active tracked job session for route and work verification. The foreground service may continue while the screen is locked or another app is open, and stops at completion, cancellation, or another terminal state. Scaled Circle does not request permanent camera access merely to use the maintained system capture/picker flow.',
         ],
         links: [('Privacy Policy', AppRoutes.privacy)],
       ),
       _Section('Completion and earnings', [
-        'Starting work or submitting incomplete evidence does not itself establish earnings. Compensation becomes earned only after the maintained server-authoritative completion and review process approves verified work. Base compensation may be prorated under the reviewed completion policy, and a completion bonus is earned only when its authoritative qualification threshold is satisfied. ScaledCircle does not charge workers a platform fee under the current policy.',
+        'Starting work or submitting incomplete evidence does not itself establish earnings. Compensation becomes earned only after the maintained server-authoritative completion and review process approves verified work. Base compensation may be prorated under the reviewed completion policy, and a completion bonus is earned only when its authoritative qualification threshold is satisfied. Scaled Circle does not charge workers a platform fee under the current policy.',
       ]),
       _Section('Payout is separate', [
         'An earned Wallet amount and provider payout are separate lifecycle states. Production payout and self-service cash-out remain gated pending final operating, physical-device, KYC, tax, and provider review. No bank payout date is promised, and a provider delay must not be described as erasing legitimately established earnings.',
       ]),
       _Section('Affiliate enrollment', [
-        'Referral participation is optional and separately accepted. Business referrals earn 10% of qualifying retained recurring subscription revenue. Scaler referrals earn 1% of final approved completed-work compensation, funded separately by ScaledCircle and never deducted from worker pay. Rewards are subject to eligibility, refunds, reversals and the Referral Program terms. Referral rewards are tracked while initial payments receive manual review; automatic payouts are off and no payment date is promised.',
+        'Referral participation is optional and separately accepted. Business referrals earn 10% of qualifying retained recurring subscription revenue. Scaler referrals earn 1% of final approved completed-work compensation, funded separately by Scaled Circle and never deducted from worker pay. Rewards are subject to eligibility, refunds, reversals and the Referral Program terms. Referral rewards are tracked while initial payments receive manual review; automatic payouts are off and no payment date is promised.',
       ]),
       _Section(
         'Status and legal review',
         [
-          'Scaler account holders must be at least 18 years old. ScaledCircle intends role-specific participation rather than employment promises, but age/capacity wording and worker classification, tax, and contractor terms require professional legal review before official broad public launch. Nothing here guarantees jobs, hours, income, assignment volume, or payout timing.',
+          'Scaler account holders must be at least 18 years old. Scaled Circle intends role-specific participation rather than employment promises, but age/capacity wording and worker classification, tax, and contractor terms require professional legal review before official broad public launch. Nothing here guarantees jobs, hours, income, assignment volume, or payout timing.',
         ],
         links: [('Support', AppRoutes.support)],
       ),
@@ -415,9 +415,9 @@ _Document _document(LegalDocumentKind kind) => switch (kind) {
   ),
   LegalDocumentKind.support => const _Document(
     'Support & Contact',
-    'Help with accounts, campaigns, payments, tracked work, privacy requests, or other ScaledCircle questions.',
+    'Help with accounts, campaigns, payments, tracked work, privacy requests, or other Scaled Circle questions.',
     [
-      _Section('Contact ScaledCircle', [
+      _Section('Contact Scaled Circle', [
         'Email support@scaledcircle.com. Do not include passwords, complete payment-card information, tax identifiers, or other unnecessary sensitive information. Include the campaign or issue context needed to help, but avoid sending precise location history unless Support asks for evidence through an authorized workflow.',
       ], email: true),
       _Section(

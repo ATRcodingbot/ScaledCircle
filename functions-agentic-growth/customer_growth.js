@@ -110,7 +110,7 @@ function createService({db,auth,FieldValue,Timestamp,project,readSource,dogfoodB
     result.social={planCount:plans.size,plans:plans.docs.map(d=>({id:d.id,...d.data()})),
       baselines:snapshots.docs.filter(d=>d.data().schemaVersion==='MetaBaselineV1').map(d=>({id:d.id,...d.data()})),
       connections:connections.docs.map(d=>({provider:d.id,status:d.data().status,name:d.data().accountDisplayName})),
-      attribution:'Existing provider history is not evidence of ScaledCircle publication.',approvalMode:'approval_required'};
+      attribution:'Existing provider history is not evidence of Scaled Circle publication.',approvalMode:'approval_required'};
     const socialJobs=await db.collection('socialGrowthJobs').where('businessUid','==',a.businessId).limit(100).get();
     result.social.plans=require('./social_customer_post_projection').overlay(result.social.plans,socialJobs.docs.map(d=>d.data()));
     result.social.performance=require('./social_performance_presentation').project(snapshots.docs.map(d=>d.data()),result.social.plans,

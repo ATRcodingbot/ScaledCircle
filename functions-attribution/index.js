@@ -12954,7 +12954,7 @@ exports.resolveTrackedResponse = onRequest(
       });
       response.status(code === "response_asset_inactive" ? 410 : 404).
       set("Cache-Control", "no-store").
-      send("This ScaledCircle response link is unavailable.");
+      send("This Scaled Circle response link is unavailable.");
     }
   }
 );

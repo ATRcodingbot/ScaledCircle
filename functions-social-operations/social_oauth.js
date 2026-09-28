@@ -727,10 +727,10 @@ function callbackHtml({success, message}) {
     "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;",
   })[char]);
   return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" ` +
-    `content="width=device-width"><title>ScaledCircle Social Connection</title></head>` +
+    `content="width=device-width"><title>Scaled Circle Social Connection</title></head>` +
     `<body style="font:16px system-ui;padding:32px;max-width:640px;margin:auto">` +
     `<h1>${success ? "Connection ready to confirm" : "Connection needs attention"}</h1>` +
-    `<p>${safe}</p><p>You may close this window and return to ScaledCircle.</p></body></html>`;
+    `<p>${safe}</p><p>You may close this window and return to Scaled Circle.</p></body></html>`;
 }
 
 async function refreshTokens({provider, tokens, config, clientSecret, fetchImpl = globalThis.fetch}) {

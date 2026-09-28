@@ -98,7 +98,7 @@ function createService({db, auth, FieldValue, environment}) {
           businessId:account.uid, performedBy:actor.uid, environment, occurredAt:at,
           previousState:{active:user.active, betaAccess:user.betaAccess}, resultingState:{active:true, betaAccess:'approved'}});
         tx.create(notificationRef, {schemaVersion:2, id:notificationId, userId:account.uid, type:'business_access_approved',
-          title:'Business account approved', message:'Your ScaledCircle Business account has been approved. You can now enter your Business workspace. Paid plans are managed separately in Billing.',
+          title:'Business account approved', message:'Your Scaled Circle Business account has been approved. You can now enter your Business workspace. Paid plans are managed separately in Billing.',
           read:false, channel:'in_app', emailRequested:false, pushRequested:false, createdAt:at, updatedAt:at});
         return {...view, eligible:false, approved:true, state:'Approved', changed:true, auditId, notificationId};
       });

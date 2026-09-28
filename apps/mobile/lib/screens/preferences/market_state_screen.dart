@@ -25,8 +25,8 @@ String marketStatusMessage(
     return 'New marketplace work is paused in your state. Your profile and existing work history are preserved.';
   }
   return business
-      ? 'ScaledCircle marketplace campaigns are not active in this state yet. Finish your profile and choose whether to receive launch updates.'
-      : "ScaledCircle isn't active in your state yet. Finish your profile and choose launch updates to hear when opportunities launch in your area. Jobs will appear as Businesses post work.";
+      ? 'Scaled Circle marketplace campaigns are not active in this state yet. Finish your profile and choose whether to receive launch updates.'
+      : "Scaled Circle isn't active in your state yet. Finish your profile and choose launch updates to hear when opportunities launch in your area. Jobs will appear as Businesses post work.";
 }
 
 class MarketStateScreen extends StatefulWidget {
@@ -124,7 +124,7 @@ class _MarketStateScreenState extends State<MarketStateScreen> {
             ),
             const SizedBox(height: 12),
             const Text(
-              'This helps ScaledCircle open markets and understand demand. No home address is needed. Your state does not subscribe you to statewide job alerts.',
+              'This helps Scaled Circle open markets and understand demand. No home address is needed. Your state does not subscribe you to statewide job alerts.',
             ),
             const SizedBox(height: 20),
             if (_value != null) ...[

@@ -481,7 +481,7 @@ function legalConsentError(error, message) {
   if (error?.message !== "legal_consent_required") return null;
   return new HttpsError(
     "failed-precondition",
-    message || "Review and accept the current ScaledCircle agreements to continue.",
+    message || "Review and accept the current Scaled Circle agreements to continue.",
     {
       reason: "LEGAL_CONSENT_REQUIRED",
       missing: Array.isArray(error.missing) ? error.missing : []

@@ -73,7 +73,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                   const Flexible(child: ScaledCircleBrand(compact: true)),
                   if (MediaQuery.sizeOf(context).width >= 720) ...[
                     const SizedBox(width: 12),
-                    const Text('ScaledCircle Launch Operations'),
+                    const Text('Scaled Circle Launch Operations'),
                   ],
                 ],
               ),

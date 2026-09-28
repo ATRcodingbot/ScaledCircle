@@ -451,10 +451,10 @@ function outreachDraft({businessUid, prospect, qualification, purpose, now = Dat
   }
   const prospectType = cleanText(prospect.prospectType, 40);
   const introduction = prospectType === "scaler" ?
-    "ScaledCircle is preparing clearly defined local campaign opportunities for Scalers in Maryland." :
-    "ScaledCircle helps local Businesses plan focused campaigns and connect responses back to the work.";
+    "Scaled Circle is preparing clearly defined local campaign opportunities for Scalers in Maryland." :
+    "Scaled Circle helps local Businesses plan focused campaigns and connect responses back to the work.";
   const draftSource = {businessUid: uid, prospectId: prospect.prospectId,
-    purpose: cleanText(purpose, 240) || "Introduce ScaledCircle truthfully",
+    purpose: cleanText(purpose, 240) || "Introduce Scaled Circle truthfully",
     qualificationScore: qualification.score, prospectType};
   return {id: `outreach_draft_${digest(draftSource).slice(0, 40)}`, record: {
     schemaVersion: SCHEMA_VERSION, ...draftSource, introduction,

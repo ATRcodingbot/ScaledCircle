@@ -55,7 +55,7 @@ exports.queueCustomerGrowthReportEmailV1 = onDocumentCreated({document:'agentRep
     if(kind==='important'&&!active.some(p=>p.approvalState==='awaiting_approval'))return;
     const s=report.summary;
     const presentation=require('./growth_report_presentation').renderGrowthReport({report,reportId:event.params.reportId,kind,prospects,customer:true,opportunityPreferences:focus});
-    tx.create(ref,{businessUid:uid,to:account.email,fromAddress:'support@scaledcircle.com',fromName:'ScaledCircle',replyTo:'support@scaledcircle.com',
+    tx.create(ref,{businessUid:uid,to:account.email,fromAddress:'support@scaledcircle.com',fromName:'Scaled Circle',replyTo:'support@scaledcircle.com',
       ...presentation,
       template:'growth_agent_report_v1',growthPreferenceRevision:prefs.updatedAt?.toMillis?.()??0,preferenceKind:kind,reportId:event.params.reportId,status:'queued',attempts:0,createdAt:FieldValue.serverTimestamp()});
   });
@@ -65,7 +65,7 @@ function growthService({scheduled=false}={}) {return growth.createService({db,Fi
   publicResearch:scheduled?require('./research_runtime_client').create({db,project:process.env.GCLOUD_PROJECT||process.env.GOOGLE_CLOUD_PROJECT,businessUid:process.env.GROWTH_DOGFOOD_UID,auth:new GoogleAuth(),publicProfile:{servicesOffered:[...new Set(require('./growth_sources').map(s=>s.industry).filter(Boolean))]}}):null,
   project:process.env.GCLOUD_PROJECT||process.env.GOOGLE_CLOUD_PROJECT,target:process.env.GROWTH_DOGFOOD_UID,areaPriorityIds:(process.env.GROWTH_RESEARCH_AREA_PRIORITY_IDS||'').split(',').filter(Boolean)});}
 async function growthActor(request) {
-  if(!request.auth)throw new HttpsError('unauthenticated','Sign in to inspect ScaledCircle agents.');
+  if(!request.auth)throw new HttpsError('unauthenticated','Sign in to inspect Scaled Circle agents.');
   const user=(await db.doc('users/'+request.auth.uid).get()).data();
   const identity=await getAuth().getUser(request.auth.uid);
   if((process.env.GCLOUD_PROJECT||process.env.GOOGLE_CLOUD_PROJECT)==='scaled-circle') {
@@ -102,7 +102,7 @@ async function configureGrowthWorkspace(actor,input) {
 }
 exports.configureInternalGrowthWorkspaceV1=growthEndpoint(request=>configureGrowthWorkspace({uid:request.auth.uid,role:'admin',verified:true,active:true},request.data||{}),'configure');
 exports.runGrowthDogfoodResearchV1=growthEndpoint((request,service)=>{
-  if(Object.keys(request.data||{}).length)throw new HttpsError('invalid-argument','The research scope is maintained by ScaledCircle.');return service.run();},'research');
+  if(Object.keys(request.data||{}).length)throw new HttpsError('invalid-argument','The research scope is maintained by Scaled Circle.');return service.run();},'research');
 exports.updateGrowthCommunicationPreferencesV1=growthEndpoint((request,service)=>service.savePreferences(request.data),'preferences');
 exports.reviewGrowthProspectV1=growthEndpoint((request,service)=>service.review(request.data||{}),'review');
 exports.internalGrowthWorkspaceBridgeV1=onRequest({invoker:process.env.GROWTH_PRODUCTION_PROXY_ACCOUNT||'private',maxInstances:2,timeoutSeconds:180},async(req,res)=>{
@@ -168,7 +168,7 @@ exports.queueGrowthReportEmailV1=onDocumentCreated({document:'agentReports/{repo
     const presentation=require('./growth_report_presentation').renderGrowthReport({report,reportId:event.params.reportId,kind,prospects,customer:false,opportunityPreferences:focus});
     const byArea=(s.discoveryByServiceArea||[]).map(g=>`${g.serviceArea}: ${g.businesses} Business prospects, ${g.partners} organization partners, ${g.individualScalers} individual Scalers`).join('\n');
     if(kind==='important'&&!s.newApprovalsToday)return;
-    tx.create(ref,{businessUid:uid,to:account.email,fromAddress:'support@scaledcircle.com',fromName:'ScaledCircle',replyTo:'support@scaledcircle.com',
+    tx.create(ref,{businessUid:uid,to:account.email,fromAddress:'support@scaledcircle.com',fromName:'Scaled Circle',replyTo:'support@scaledcircle.com',
       ...presentation,
       template:'growth_agent_report_v1',growthPreferenceRevision:prefs.updatedAt?.toMillis?.()??0,preferenceKind:kind,reportId:event.params.reportId,status:'queued',attempts:0,createdAt:FieldValue.serverTimestamp()});
   });

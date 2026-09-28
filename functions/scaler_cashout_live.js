@@ -104,7 +104,7 @@ function createRuntime({
         status: 'setup_unavailable',
         ready: false,
         setupRetryAllowed: false,
-        setupMessage: "We couldn't start payout setup. ScaledCircle needs to resolve an activation issue with its payout provider. Your earnings are unchanged."
+        setupMessage: "We couldn't start payout setup. Scaled Circle needs to resolve an activation issue with its payout provider. Your earnings are unchanged."
       };
       if (!r?.setupStartedAt) return {
         status: 'not_setup',

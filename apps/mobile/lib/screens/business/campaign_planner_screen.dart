@@ -695,7 +695,7 @@ class _CampaignPlannerScreenState extends State<CampaignPlannerScreen> {
         children: [
           RadioListTile(
             value: 'marketplace',
-            title: Text('ScaledCircle Scalers'),
+            title: Text('Scaled Circle Scalers'),
             subtitle: Text(
               'Review compensation and fund marketplace work after planning.',
             ),
@@ -929,13 +929,13 @@ class _CampaignPlannerScreenState extends State<CampaignPlannerScreen> {
         ),
         DropdownMenuItem(
           value: 'scaled_circle_generated',
-          child: Text('My ScaledCircle materials'),
+          child: Text('My Scaled Circle materials'),
         ),
       ],
       onChanged: _busy ? null : (v) => setState(() => _materialSource = v!),
     ),
     const Text(
-      'ScaledCircle printing and planner uploads are not yet available. Arrange printing with your supplier and record the requirements below.',
+      'Scaled Circle printing and planner uploads are not yet available. Arrange printing with your supplier and record the requirements below.',
     ),
     TextField(
       controller: _printNotes,
@@ -1016,7 +1016,7 @@ class _CampaignPlannerScreenState extends State<CampaignPlannerScreen> {
     ),
     Text(_name.text, style: Theme.of(context).textTheme.titleLarge),
     Text(
-      _ownTeam ? 'Execution: My Own Team' : 'Execution: ScaledCircle Scalers',
+      _ownTeam ? 'Execution: My Own Team' : 'Execution: Scaled Circle Scalers',
     ),
     Text('Status: ${_campaign['status'] ?? 'draft'}'),
     Text(

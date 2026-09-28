@@ -39,11 +39,11 @@ function decision({userId,job,preferences,entitled,owner,event:current,matches,n
 }
 function content({event:e,matches,timeZone,url,preferencesUrl}){
  const fmt=t=>new Intl.DateTimeFormat('en-US',{timeZone,dateStyle:'medium',timeStyle:'long'}).format(t);
- return {subject:`[ScaledCircle Weather] ${e.event} — ${e.status}`,
+ return {subject:`[Scaled Circle Weather] ${e.event} — ${e.status}`,
    text:[`${e.event} — ${e.status}`,`Source: ${e.source}`,
      ...matches.map(m=>`${m.name}: ${m.reason}${m.partial?' Only part of this saved area intersects the official coverage.':''}`),
      `Issued: ${fmt(e.issuedAt)}`,`Effective: ${fmt(e.effectiveAt)}`,`Expires: ${fmt(e.expiresAt)}`,
      '',e.description,e.instructions,'',`Official alert: ${e.officialUrl}`,`Review alert: ${url}`,
-     `Weather email preferences: ${preferencesUrl}`,'ScaledCircle is not your sole source of emergency warnings. Follow official instructions.'].join('\n')};
+     `Weather email preferences: ${preferencesUrl}`,'Scaled Circle is not your sole source of emergency warnings. Follow official instructions.'].join('\n')};
 }
 module.exports={event,quietUntil,decision,content,hash};

@@ -36,7 +36,7 @@ function prepare({uid, planId, profile, scope, connections, now = Date.now()}) {
     timingBasis:'Initial experiment at noon Eastern for this draft window; not claimed to be a proven best time. Owner reviews all proposed times.',
     geography:scope.areas.map(a=>a.label),services,objective:'Measure qualified estimate inquiries, not assumed revenue.',
     measurement:'Capture the current provider baseline. After separately approved publication, measure at 24 hours and 7 days; attribute traffic/leads only with actual response evidence.',
-    creativeState:'Briefs prepared; final media requires owner approval.',historyAttribution:'Existing provider posts are not ScaledCircle publications.',
+    creativeState:'Briefs prepared; final media requires owner approval.',historyAttribution:'Existing provider posts are not Scaled Circle publications.',
     nextAction:'Review copy, proposed dates, service claims, destination and creative. Nothing is scheduled for publication.'};
   return plan;
 }

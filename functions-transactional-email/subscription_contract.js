@@ -8,7 +8,7 @@ const ADDONS={business_assistant:{cents:39900,name:'Business Assistant — Beta'
 const BUNDLE='growth_department';
 const ITEMS=Object.freeze({...Object.fromEntries(Object.entries(PLANS).map(([id,p])=>[id,{...p,kind:'BASE_PLAN',entitlements:[id]}])),
  ...Object.fromEntries(Object.entries(ADDONS).map(([id,p])=>[id,{...p,seats:0,kind:'ADD_ON',entitlements:[id]}])),
- [BUNDLE]:{cents:200000,seats:10,name:'ScaledCircle Growth Department',kind:'BUNDLE',entitlements:['managed_growth','business_assistant','lead_generation_research']}});
+ [BUNDLE]:{cents:200000,seats:10,name:'Scaled Circle Growth Department',kind:'BUNDLE',entitlements:['managed_growth','business_assistant','lead_generation_research']}});
 function selection(input) {
  if(!input||typeof input!=='object'||Array.isArray(input))throw Error('subscription_selection_required');
  const bundle=input.bundle||null,addons=input.addons||[];

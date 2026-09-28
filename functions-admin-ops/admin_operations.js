@@ -181,8 +181,8 @@ function createAdminOperationsService({db, auth, FieldValue, now = () => Date.no
       if (ACTIONABLE_SEVERITIES.has(severity)) {
         transaction.create(emailRef, {
           to: SUPPORT_EMAIL, fromAddress: SUPPORT_EMAIL, fromName: "Scaled Circle Support",
-          replyTo: SUPPORT_EMAIL, subject: "ScaledCircle — Admin action required",
-          text: "ScaledCircle requires your attention.\nLog in to the Admin Dashboard to review the issue.\n\nhttps://scaledcircle.com/#/admin",
+          replyTo: SUPPORT_EMAIL, subject: "Scaled Circle — Admin action required",
+          text: "Scaled Circle requires your attention.\nLog in to the Admin Dashboard to review the issue.\n\nhttps://scaledcircle.com/#/admin",
           template: "support_admin_issue", eventType: "admin.issue.action_required",
           metadata: {issueId, severity, type}, status: "queued", createdAt: at, updatedAt: at,
         });

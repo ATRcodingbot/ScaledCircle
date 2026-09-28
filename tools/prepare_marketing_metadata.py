@@ -6,17 +6,17 @@ from pathlib import Path
 import re
 
 ROUTES = {
-    '/': ('ScaledCircle: Run Your Business. Grow Locally.',
+    '/': ('Scaled Circle: Run Your Business. Grow Locally.',
           'Organize customers, schedule, jobs and your team. Choose local growth tools and track what worked.'),
-    '/businesses': ('Customers, Schedule and Local Growth — ScaledCircle',
+    '/businesses': ('Customers, Schedule and Local Growth — Scaled Circle',
                     'Keep customers, leads, estimates, jobs and team responsibilities together. Choose growth tools with clear costs and permissions.'),
-    '/scalers': ('Scaler Field Work in Maryland — ScaledCircle',
-                 'Explore local field assignments, agreed compensation, job evidence, and earnings with ScaledCircle.'),
-    '/how-it-works': ('How ScaledCircle Works',
+    '/scalers': ('Scaler Field Work in Maryland — Scaled Circle',
+                 'Explore local field assignments, agreed compensation, job evidence, and earnings with Scaled Circle.'),
+    '/how-it-works': ('How Scaled Circle Works',
                       'Choose a local market, build a campaign, coordinate Scalers and connect execution with mapping, response tracking and growth intelligence.'),
-    '/pricing': ('ScaledCircle Pricing',
-                 'Compare ScaledCircle Business tools and plans. Review subscription options separately from campaign fulfillment costs.'),
-    '/referrals': ('ScaledCircle Referral Program',
+    '/pricing': ('Scaled Circle Pricing',
+                 'Compare Scaled Circle Business tools and plans. Review subscription options separately from campaign fulfillment costs.'),
+    '/referrals': ('Scaled Circle Referral Program',
                    'Refer Businesses and Scalers. Learn how qualifying economic events create rewards without reducing Scaler pay.'),
 }
 
@@ -39,7 +39,7 @@ def render(template, route):
     replace(r'<link rel="canonical" href="[^"]*">', f'<link rel="canonical" href="{canonical}">')
     schema = {'@context': 'https://schema.org', '@type': 'WebPage', 'name': title,
               'description': description, 'url': canonical,
-              'isPartOf': {'@type': 'WebSite', 'name': 'ScaledCircle', 'url': 'https://scaledcircle.com/'}}
+              'isPartOf': {'@type': 'WebSite', 'name': 'Scaled Circle', 'url': 'https://scaledcircle.com/'}}
     replace(r'<script type="application/ld\+json">.*?</script>',
             '<script type="application/ld+json">' + json.dumps(schema, ensure_ascii=False) + '</script>')
     return template

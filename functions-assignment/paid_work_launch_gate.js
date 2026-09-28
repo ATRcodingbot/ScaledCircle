@@ -4,7 +4,7 @@
 // This gate is never used on existing work, settlements or reconciliation.
 function assertNewPaidWork({project, enabled=process.env.LIVE_PAID_WORK_ACTIVATION_ENABLED}={}) {
   if (project==='scaled-circle' && enabled!=='true') {
-    const error=Error('Paid work is not open yet. You can save your campaign draft while ScaledCircle completes payout readiness.');
+    const error=Error('Paid work is not open yet. You can save your campaign draft while Scaled Circle completes payout readiness.');
     error.code='failed-precondition'; error.reason='LIVE_PAYOUT_READINESS_REQUIRED'; throw error;
   }
   if (!['scaled-circle','scaledcircle-staging'].includes(project) && !/^demo-/.test(project||'')) {

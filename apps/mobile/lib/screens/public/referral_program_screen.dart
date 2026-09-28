@@ -7,7 +7,7 @@ class ReferralProgramScreen extends StatelessWidget {
   static const policyVersion = 'referral-launch-v2-2026-09-10';
   static const scalerProtection = "This does not come out of the Scaler's pay.";
   static const platformFunding =
-      'ScaledCircle pays referral rewards separately from its own platform economics. '
+      'Scaled Circle pays referral rewards separately from its own platform economics. '
       'The referred Scaler keeps the full compensation they earned under their job terms.';
 
   @override
@@ -36,7 +36,7 @@ class ReferralProgramScreen extends StatelessWidget {
               style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
             ),
             Text(
-              'Earn 10% of qualifying retained recurring ScaledCircle subscription revenue.',
+              'Earn 10% of qualifying retained recurring Scaled Circle subscription revenue.',
             ),
             SizedBox(height: 24),
             Text(
@@ -61,7 +61,7 @@ class ReferralProgramScreen extends StatelessWidget {
               'For Scaler referrals, the amount is based on final approved compensation, including earned bonuses. Platform fees, taxes and returned reserves are excluded.',
             ),
             Text(
-              r'Example: a Scaler earns $100 under their job terms. Your separate referral reward is $1, funded by ScaledCircle. The Scaler still earns $100. The Business receives no extra referral charge.',
+              r'Example: a Scaler earns $100 under their job terms. Your separate referral reward is $1, funded by Scaled Circle. The Scaler still earns $100. The Business receives no extra referral charge.',
             ),
             SizedBox(height: 16),
             Text(
@@ -69,7 +69,7 @@ class ReferralProgramScreen extends StatelessWidget {
               style: TextStyle(fontWeight: FontWeight.bold),
             ),
             Text(
-              'Business rewards have a 30-calendar-day review window after a qualifying paid invoice. Scaler rewards have a 7-calendar-day review window after qualifying approved compensation is settled. During Private Beta, rewards remain Pending or Under Review while ScaledCircle verifies the economics and manually reviews payment. An elapsed window does not schedule a payment. Automatic payouts are off. No income or payment date is guaranteed.',
+              'Business rewards have a 30-calendar-day review window after a qualifying paid invoice. Scaler rewards have a 7-calendar-day review window after qualifying approved compensation is settled. During Private Beta, rewards remain Pending or Under Review while Scaled Circle verifies the economics and manually reviews payment. An elapsed window does not schedule a payment. Automatic payouts are off. No income or payment date is guaranteed.',
             ),
             Text(
               'Rewards remain subject to eligibility, valid attribution and authoritative economic reconciliation. Refunds, reversals and disputes may prevent or reverse a reward. Worker pay is never reduced to fund it.',

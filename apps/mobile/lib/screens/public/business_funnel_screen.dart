@@ -17,7 +17,7 @@ class BusinessFunnelScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) => FunnelPage(
     accent: businessGreen,
-    semanticsLabel: 'ScaledCircle for Local Businesses',
+    semanticsLabel: 'Scaled Circle for Local Businesses',
     children: [
       FunnelHero(
         eyebrow: 'FOR LOCAL BUSINESSES',
@@ -130,7 +130,7 @@ class BusinessFunnelScreen extends StatelessWidget {
         accent: businessGreen,
         supportingCopy: kIsWeb
             ? 'Starter, Growth and Scale are available now. Campaign funding and work eligibility are checked separately.'
-            : 'Create your ScaledCircle account now. Marketplace access is being rolled out in stages.',
+            : 'Create your Scaled Circle account now. Marketplace access is being rolled out in stages.',
         waitlistLabel: kIsWeb ? 'Compare Core Plans' : 'Join Business Waitlist',
         onPrimary: () => openPublicAccountRegistration(context, 'business'),
         onWaitlist: () => kIsWeb
@@ -541,7 +541,7 @@ class _WeatherVisual extends StatelessWidget {
         ProductLine('Official fact status', 'Sample scenario only'),
         SizedBox(height: 10),
         Text(
-          'ScaledCircle can qualify what an official event could mean for broad local marketing. It does not claim individual property damage or need.',
+          'Scaled Circle can qualify what an official event could mean for broad local marketing. It does not claim individual property damage or need.',
           style: TextStyle(color: publicMuted, fontSize: 12, height: 1.4),
         ),
       ],
@@ -621,9 +621,9 @@ class _ManagedGrowthBand extends StatelessWidget {
   Widget build(BuildContext context) => const FunnelSection(
     key: Key('business-managed-growth'),
     step: 'MANAGED GROWTH',
-    title: 'WANT SCALEDCIRCLE TO HELP PREPARE THE MARKETING?',
+    title: 'WANT SCALED CIRCLE TO HELP PREPARE THE MARKETING?',
     body:
-        'ScaledCircle helps prepare ongoing marketing from your Business Profile, Service Areas, goals, and local intelligence. You keep review and approval control.',
+        'Scaled Circle helps prepare ongoing marketing from your Business Profile, Service Areas, goals, and local intelligence. You keep review and approval control.',
     accent: businessGreen,
     visual: ProductPanel(
       child: Column(
@@ -729,7 +729,7 @@ class _BusinessPricing extends StatelessWidget {
     'growth': 'Core Business OS. 3 total seats, including the owner.',
     'scale':
         'Core Business OS plus Property and supported Weather Intelligence. 5 total seats, including the owner.',
-    'managed_growth': 'Have ScaledCircle help prepare ongoing marketing.',
+    'managed_growth': 'Have Scaled Circle help prepare ongoing marketing.',
   };
 }
 

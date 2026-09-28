@@ -233,7 +233,7 @@ class _ScalerAffiliateScreenState extends State<ScalerAffiliateScreen> {
                 ),
                 if (role == 'scaler')
                   const Text(
-                    "Paid by ScaledCircle — never deducted from the Scaler's earnings.",
+                    "Paid by Scaled Circle — never deducted from the Scaler's earnings.",
                   ),
                 for (final r in d.referrals.where(
                   (r) => r['referredRole'] == role,
@@ -246,7 +246,7 @@ class _ScalerAffiliateScreenState extends State<ScalerAffiliateScreen> {
             ],
             const SizedBox(height: 20),
             const Text(
-              'Signed up: attribution recorded, no cash reward.\nPending: qualifying reward in its review window.\nUnder Review: ScaledCircle is checking the source economics before a manual payment.\nPaid: payout confirmed. Earned does not mean paid.',
+              'Signed up: attribution recorded, no cash reward.\nPending: qualifying reward in its review window.\nUnder Review: Scaled Circle is checking the source economics before a manual payment.\nPaid: payout confirmed. Earned does not mean paid.',
             ),
           ],
         ),

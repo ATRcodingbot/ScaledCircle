@@ -381,7 +381,7 @@ class _SocialApprovalScreenState extends State<SocialApprovalScreen> {
     builder: (context) => AlertDialog(
       title: const Text('Connection requires approval'),
       content: const Text(
-        'Social publishing is not enabled yet. You can review, edit, save, copy, or export these posts while ScaledCircle completes provider approval.',
+        'Social publishing is not enabled yet. You can review, edit, save, copy, or export these posts while Scaled Circle completes provider approval.',
       ),
       actions: [
         TextButton(
@@ -441,7 +441,7 @@ class _SocialApprovalScreenState extends State<SocialApprovalScreen> {
               leading: const Icon(Icons.photo_library_outlined),
               title: const Text('My Photos'),
               subtitle: const Text(
-                'Use your own project photos. ScaledCircle uses only details you provide.',
+                'Use your own project photos. Scaled Circle uses only details you provide.',
               ),
               trailing: Wrap(
                 spacing: 4,

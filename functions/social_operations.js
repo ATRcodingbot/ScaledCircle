@@ -246,7 +246,7 @@ function weeklyLearning({businessUid, snapshots = [], minimumSample = 3, now = D
   const owned = [...latest.values()];
   if (owned.length < minimumSample) return {schemaVersion: LEARNING_VERSION, businessUid,
     status: "insufficient_evidence", sampleSize: owned.length,
-    summary: "More published-content evidence is needed before ScaledCircle recommends changes.",
+    summary: "More published-content evidence is needed before Scaled Circle recommends changes.",
     recommendations: [], createdAt: now};
   const scored = owned.map((item) => ({item,
     score: ["engagements", "clicks", "landingPageVisits", "leads", "conversions"]

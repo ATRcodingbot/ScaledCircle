@@ -79,7 +79,7 @@ class _BusinessAttributionScreenState extends State<BusinessAttributionScreen> {
               ),
               const SizedBox(height: 6),
               const Text(
-                'QR codes and tracked links use the same first-party ScaledCircle response path.',
+                'QR codes and tracked links use the same first-party Scaled Circle response path.',
               ),
               const SizedBox(height: 6),
               const Text(
@@ -230,7 +230,7 @@ class _BusinessAttributionScreenState extends State<BusinessAttributionScreen> {
               ),
               const SizedBox(height: 12),
               const Text(
-                'ScaledCircle will create one tracked link and a QR code containing that exact link.',
+                'Scaled Circle will create one tracked link and a QR code containing that exact link.',
               ),
             ],
           ),

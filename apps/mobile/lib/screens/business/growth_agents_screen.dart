@@ -582,7 +582,7 @@ class _GrowthAgentsScreenState extends State<GrowthAgentsScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'ScaledCircle research activity',
+              'Scaled Circle research activity',
               style: Theme.of(context).textTheme.titleMedium,
             ),
             _line('Status', status),
@@ -779,7 +779,7 @@ class _GrowthAgentsScreenState extends State<GrowthAgentsScreen> {
         Text(
           widget.customer
               ? '${d['businessContext']?['businessName'] ?? 'Your Business'} · Private Beta'
-              : 'ScaledCircle · Private dogfood',
+              : 'Scaled Circle · Private dogfood',
           style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
         ),
         const SizedBox(height: 12),
@@ -1277,7 +1277,7 @@ class _GrowthAgentsScreenState extends State<GrowthAgentsScreen> {
       ),
       SocialPerformancePanel(data: social['performance'] as Map? ?? {}),
       const Text(
-        'Existing account history belongs to your Business. It is not counted as ScaledCircle publication.',
+        'Existing account history belongs to your Business. It is not counted as Scaled Circle publication.',
       ),
       OutlinedButton(
         onPressed: () => AppNavigation.push(

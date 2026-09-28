@@ -34,7 +34,7 @@ class ResponseTrackingFeatureCard extends StatelessWidget {
             const SizedBox(height: 8),
             Text(
               available
-                  ? 'Add a tracked ScaledCircle link and QR code to measure responses.'
+                  ? 'Add a tracked Scaled Circle link and QR code to measure responses.'
                   : 'Tracked links and QR response measurement are not available yet.',
             ),
             const SizedBox(height: 12),

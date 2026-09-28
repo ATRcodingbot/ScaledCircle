@@ -747,7 +747,7 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 const Text(
-                  'This upgrade allows ScaledCircle to publish only the exact post you approve. It does not enable automatic posting.',
+                  'This upgrade allows Scaled Circle to publish only the exact post you approve. It does not enable automatic posting.',
                 ),
                 const SizedBox(height: 12),
                 for (final candidate in candidates)
@@ -794,7 +794,7 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
         title: const Text('Approve this exact X post?'),
         content: const SingleChildScrollView(
           child: Text(
-            'Smart Mapping helps a Maryland Business focus a local campaign street by street. Choose the neighborhoods you can serve, connect each response to the campaign, and review what happened before expanding the map.\n\nSee ScaledCircle work: https://scaledcircle.com/#/businesses\n\n#MarylandBusiness\n\nSmart Mapping media and the tracked destination are locked to this approval. Nothing else is approved.',
+            'Smart Mapping helps a Maryland Business focus a local campaign street by street. Choose the neighborhoods you can serve, connect each response to the campaign, and review what happened before expanding the map.\n\nSee Scaled Circle work: https://scaledcircle.com/#/businesses\n\n#MarylandBusiness\n\nSmart Mapping media and the tracked destination are locked to this approval. Nothing else is approved.',
           ),
         ),
         actions: [
@@ -1072,7 +1072,7 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
                 state == 'scheduled'
                     ? 'Nothing scheduled. Authorize automatic publishing for routine posts, or schedule a finished post individually.'
                     : state == 'published'
-                    ? 'No ScaledCircle-published posts recorded yet.'
+                    ? 'No Scaled Circle-published posts recorded yet.'
                     : 'No posts in this state.',
               ),
             ]
@@ -1261,7 +1261,7 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
       builder: (context) => AlertDialog(
         title: const Text('Enable Managed Publishing'),
         content: const Text(
-          'Allow ScaledCircle to schedule and publish Social content according to your approval settings. You will review permissions with Facebook. No content will be published by connecting. Your current setting requires approval for each plan.',
+          'Allow Scaled Circle to schedule and publish Social content according to your approval settings. You will review permissions with Facebook. No content will be published by connecting. Your current setting requires approval for each plan.',
         ),
         actions: [
           TextButton(
@@ -1431,7 +1431,7 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
             ),
             const SizedBox(height: 8),
             const Text(
-              'Smart Mapping helps a Maryland Business focus a local campaign street by street. Choose the neighborhoods you can serve, connect each response to the campaign, and review what happened before expanding the map.\n\nSee ScaledCircle work: scaledcircle.com/#/businesses\n\n#MarylandBusiness',
+              'Smart Mapping helps a Maryland Business focus a local campaign street by street. Choose the neighborhoods you can serve, connect each response to the campaign, and review what happened before expanding the map.\n\nSee Scaled Circle work: scaledcircle.com/#/businesses\n\n#MarylandBusiness',
             ),
             const SizedBox(height: 8),
             Wrap(
@@ -1513,7 +1513,7 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
                     child: Text(
                       connectionNeedsAttention
                           ? 'Start fresh X authorization'
-                          : 'Allow ScaledCircle to publish this approved post',
+                          : 'Allow Scaled Circle to publish this approved post',
                     ),
                   ),
                 if (prepared &&
@@ -2135,7 +2135,7 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
               leading: const Icon(Icons.verified_outlined),
               title: Text(
                 migrationAvailable
-                    ? 'Existing ScaledCircle plan is ready to align'
+                    ? 'Existing Scaled Circle plan is ready to align'
                     : 'Staging plan alignment verified',
               ),
               subtitle: Text(

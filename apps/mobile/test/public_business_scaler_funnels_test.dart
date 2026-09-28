@@ -228,14 +228,14 @@ void main() {
     final businessLayoutError = tester.takeException();
     expect(businessLayoutError, isNull);
     expect(
-      find.bySemanticsLabel(RegExp('ScaledCircle for Local Businesses')),
+      find.bySemanticsLabel(RegExp('Scaled Circle for Local Businesses')),
       findsOneWidget,
     );
 
     await tester.pumpWidget(app(home: const ScalerFunnelScreen()));
     expect(tester.takeException(), isNull);
     expect(
-      find.bySemanticsLabel(RegExp('ScaledCircle for Scalers')),
+      find.bySemanticsLabel(RegExp('Scaled Circle for Scalers')),
       findsOneWidget,
     );
     semantics.dispose();
@@ -322,7 +322,7 @@ void main() {
       components,
       contains("'assets/brand/scaledcircle-lockup-dark-surface.png'"),
     );
-    expect(components, contains('How do you want to use ScaledCircle?'));
+    expect(components, contains('How do you want to use Scaled Circle?'));
     expect(business, contains('Selected Area'));
     expect(business, contains('Smart Zone A'));
     expect(business, contains('Route not verified'));
@@ -361,7 +361,7 @@ void main() {
     expect(
       html,
       contains(
-        'ScaledCircle — Local Growth Intelligence + Verified Field Campaigns',
+        'Scaled Circle — Local Growth Intelligence + Verified Field Campaigns',
       ),
     );
   });

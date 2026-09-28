@@ -825,7 +825,7 @@ class _CampaignZonesScreenState extends State<CampaignZonesScreen> {
                                   true) ...[
                                 const SizedBox(height: 12),
                                 Text(
-                                  'Below ScaledCircle recommended compensation',
+                                  'Below Scaled Circle recommended compensation',
                                   style: TextStyle(
                                     color: Theme.of(
                                       dialogContext,

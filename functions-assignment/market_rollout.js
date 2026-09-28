@@ -28,7 +28,7 @@ async function requireActiveBusiness(db, businessId, reader = {get:ref=>ref.get(
     reader.get(db.doc(`${PROFILES}/${businessId}`)), reader.get(db.doc(CONFIG))]);
   const view = profileProjection(profile.data(), config.data());
   if (!view.stateConfirmed) fail("failed-precondition", "Choose your Business state in Account before creating marketplace work.");
-  if (view.status !== "ACTIVE") fail("failed-precondition", "ScaledCircle marketplace campaigns are not active in this state yet.");
+  if (view.status !== "ACTIVE") fail("failed-precondition", "Scaled Circle marketplace campaigns are not active in this state yet.");
   return view;
 }
 async function requireActiveScaler(db, uid, reader = {get:ref=>ref.get()}) {
@@ -38,7 +38,7 @@ async function requireActiveScaler(db, uid, reader = {get:ref=>ref.get()}) {
     fail('permission-denied','An approved Scaler account is required for new work.');
   const view = profileProjection(profile.data(), config.data());
   if (!view.stateConfirmed) fail("failed-precondition", "Choose your state in Account before applying for work.");
-  if (view.status !== "ACTIVE") fail("failed-precondition", "ScaledCircle isn't active in your state yet.");
+  if (view.status !== "ACTIVE") fail("failed-precondition", "Scaled Circle isn't active in your state yet.");
   return view;
 }
 function demand({users, profiles, config}) {

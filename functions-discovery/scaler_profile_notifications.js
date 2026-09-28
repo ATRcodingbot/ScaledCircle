@@ -83,7 +83,7 @@ function scalerProfileCompletionJob({uid, authUser, profile, preferences, occurr
         `Crew Work: ${yesNo(preferences?.crewOptIn === true)}`,
         `Door-to-Door Outreach: ${yesNo(preferences?.outreachOptIn === true)}`,
         "", "JOB ALERTS",
-        `In ScaledCircle: ${alerts.inApp === false ? "Off" : "On"}`,
+        `In Scaled Circle: ${alerts.inApp === false ? "Off" : "On"}`,
         `Email: ${alerts.email === true ? "On" : "Off"}`, "Push: Coming Soon",
         "", "ACCOUNT", `Email Verified: ${yesNo(authUser?.emailVerified === true)}`,
         `Access Status: ${accessStatus(profile)}`, `Firebase UID: ${uid}`,

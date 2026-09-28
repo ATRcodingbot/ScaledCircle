@@ -206,7 +206,7 @@ function createAffiliateService({db, FieldValue, Timestamp, randomBytes = crypto
       });
       transaction.create(db.collection("notifications").doc(`referral_signup_${role}_${uid}`), {
         userId: affiliateUid, type: "referral_signed_up", title: "New referral",
-        message: `A new ${role === "business" ? "Business" : "Scaler"} joined ScaledCircle using your referral link. Signup does not create a monetary reward.`,
+        message: `A new ${role === "business" ? "Business" : "Scaler"} joined Scaled Circle using your referral link. Signup does not create a monetary reward.`,
         referralState: "SIGNED_UP", deepLink:{destination:'referrals'}, read: false, createdAt: timestamp,
       });
     });

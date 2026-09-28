@@ -85,7 +85,7 @@ class _GrowthTerritoriesDialogState extends State<GrowthTerritoriesDialog> {
           mainAxisSize: MainAxisSize.min,
           children: [
             const Text(
-              'These priorities apply only to ScaledCircle’s internal Growth Agents.',
+              'These priorities apply only to Scaled Circle’s internal Growth Agents.',
             ),
             for (var i = 0; i < _areas.length; i++)
               ListTile(

@@ -391,7 +391,7 @@ class _ManagedGrowthScreenState extends State<ManagedGrowthScreen> {
           controller: controller,
           keyboardType: TextInputType.emailAddress,
           decoration: const InputDecoration(
-            labelText: 'Where should ScaledCircle send generated files?',
+            labelText: 'Where should Scaled Circle send generated files?',
           ),
         ),
         actions: [
@@ -666,7 +666,7 @@ class _ManagedGrowthScreenState extends State<ManagedGrowthScreen> {
                   subtitle: Text(
                     _profile?.isReady == true
                         ? 'Profile version ${_profile!.profileVersion}. Saved context grounds every generation.'
-                        : "Tell ScaledCircle about your business once. We'll reuse it for relevant marketing drafts.",
+                        : "Tell Scaled Circle about your business once. We'll reuse it for relevant marketing drafts.",
                   ),
                   trailing: TextButton(
                     onPressed: _editProfile,

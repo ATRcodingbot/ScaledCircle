@@ -1256,7 +1256,7 @@ class _AssistanceState extends State<BusinessEmailAssistanceScreen> {
                           lines: 2,
                         ),
                         const Text(
-                          'One-time owner setup in Gmail: create the label above; open search options, enter the exact sender and subject shown in the filter, choose Create filter → Apply the label. Leave “Also apply to matching conversations” OFF. This routes future matching mail automatically; no manual labeling of each lead. ScaledCircle cannot inspect or change filters with its current scopes. Already-linked replies are checked independently even if their label changes.',
+                          'One-time owner setup in Gmail: create the label above; open search options, enter the exact sender and subject shown in the filter, choose Create filter → Apply the label. Leave “Also apply to matching conversations” OFF. This routes future matching mail automatically; no manual labeling of each lead. Scaled Circle cannot inspect or change filters with its current scopes. Already-linked replies are checked independently even if their label changes.',
                         ),
                         toggle(
                           'inquiryRoutingConfirmed',
@@ -1300,7 +1300,7 @@ class _AssistanceState extends State<BusinessEmailAssistanceScreen> {
                           ),
                           DropdownMenuItem(
                             value: 'prepared',
-                            child: Text('Let ScaledCircle prepare my messages'),
+                            child: Text('Let Scaled Circle prepare my messages'),
                           ),
                         ],
                         onChanged: busy

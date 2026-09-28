@@ -161,7 +161,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
               const SizedBox(height: 8),
 
-              const Text('Log in to continue to ScaledCircle.'),
+              const Text('Log in to continue to Scaled Circle.'),
 
               const SizedBox(height: 30),
 

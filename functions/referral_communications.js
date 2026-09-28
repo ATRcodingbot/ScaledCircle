@@ -13,8 +13,8 @@ async function queue({db,FieldValue,auth,project,milestoneId}){
     if(existing.exists)return {duplicate:true};const m=current.data();
     if(m.beneficiaryUid!==first.beneficiaryUid||m.type!==first.type)throw Error('referral_milestone_changed');
     const availability=m.holdUntilMillis?'\nExpected availability: '+new Date(m.holdUntilMillis).toISOString().slice(0,10)+'.':'';
-    tx.create(ref,{to:owner.email,fromAddress:SUPPORT_EMAIL,fromName:'ScaledCircle',replyTo:SUPPORT_EMAIL,
-      subject:m.title,text:m.message+availability+'\n\nReferral rewards are paid separately by ScaledCircle and do not reduce the referred Scaler\'s pay.\n\nView Referrals: '+URL,
+    tx.create(ref,{to:owner.email,fromAddress:SUPPORT_EMAIL,fromName:'Scaled Circle',replyTo:SUPPORT_EMAIL,
+      subject:m.title,text:m.message+availability+'\n\nReferral rewards are paid separately by Scaled Circle and do not reduce the referred Scaler\'s pay.\n\nView Referrals: '+URL,
       template:'referral_'+m.type+'_v1',sourceMilestoneId:milestoneId,beneficiaryUid:m.beneficiaryUid,
       status:'queued',attempts:0,createdAt:FieldValue.serverTimestamp(),updatedAt:FieldValue.serverTimestamp()});
     return {queued:true};

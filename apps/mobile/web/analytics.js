@@ -83,12 +83,12 @@
     gtag("config", measurementId, {
       send_page_view: false,
       page_location: pageLocation,
-      page_title: "ScaledCircle — " + (publicTitles[path] || "App"),
+      page_title: "Scaled Circle — " + (publicTitles[path] || "App"),
       page_referrer: referrer
     });
     gtag("event", "page_view", {
       page_location: pageLocation,
-      page_title: "ScaledCircle — " + (publicTitles[path] || "App"),
+      page_title: "Scaled Circle — " + (publicTitles[path] || "App"),
       page_referrer: referrer
     });
     lastPath = path;
@@ -118,7 +118,7 @@
       allow_google_signals: false,
       allow_ad_personalization_signals: false,
       page_location: safeLocation(route()),
-      page_title: "ScaledCircle — " + (publicTitles[route()] || "App"),
+      page_title: "Scaled Circle — " + (publicTitles[route()] || "App"),
       page_referrer: safeReferrer()
     });
     const script = document.createElement("script");

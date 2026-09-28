@@ -39,8 +39,8 @@ function changes(previous, current) {
 }
 function render({type,businessName,current,previous,invoice,environment,effectiveAt,changeFinancials}) {
   if (!TYPES.includes(type)) throw Error('billing_email_type_invalid');
-  const plan=NAMES[current.plan] || 'ScaledCircle membership', actions=links(environment);
-  const subjects={welcome:`Welcome to ScaledCircle ${plan}`,receipt:'Your ScaledCircle payment receipt',plan_changed:'Your ScaledCircle plan has changed',addons_changed:'Your ScaledCircle add-ons have changed',cancellation:'Your ScaledCircle membership is scheduled to cancel',reactivation:'Your ScaledCircle membership is active again',payment_failed:"We couldn't process your ScaledCircle payment",payment_action_required:'Your ScaledCircle payment needs attention',ended:'Your ScaledCircle membership has ended'};
+  const plan=NAMES[current.plan] || 'Scaled Circle membership', actions=links(environment);
+  const subjects={welcome:`Welcome to Scaled Circle ${plan}`,receipt:'Your Scaled Circle payment receipt',plan_changed:'Your Scaled Circle plan has changed',addons_changed:'Your Scaled Circle add-ons have changed',cancellation:'Your Scaled Circle membership is scheduled to cancel',reactivation:'Your Scaled Circle membership is active again',payment_failed:"We couldn't process your Scaled Circle payment",payment_action_required:'Your Scaled Circle payment needs attention',ended:'Your Scaled Circle membership has ended'};
   const rows=[['Business',businessName],['Plan',plan],['Recurring monthly total',money(current.monthlyCents)],['Seats',`${current.seats} total`],['Active add-ons',current.addons.map(a=>NAMES[a]).join(', ') || 'None']];
   if (['welcome','receipt'].includes(type)) {
     if (invoice?.status !== 'paid' || !Number.isSafeInteger(invoice.amount_paid) || invoice.amount_paid < 0) throw Error('billing_email_paid_invoice_required');
@@ -63,10 +63,10 @@ function render({type,businessName,current,previous,invoice,environment,effectiv
   else if (current.status==='canceled') rows.push(['Membership status','Ended']);
   else rows.push(['Next renewal',`${money(current.monthlyCents)} on ${date(current.end)}`],['Membership status',current.status==='active'?'Active':'Payment or membership needs attention']);
   const footer=type==='cancellation' ? 'Existing funded campaigns and accepted Scaler obligations are not canceled by subscription cancellation.' : '';
-  const labels={home:'Open ScaledCircle',billing:['payment_failed','payment_action_required'].includes(type)?'Update Payment Method / Manage Billing':'Manage Billing',upgrade:'Change or Upgrade Plan',addons:'Manage Add-ons',cancel:'Cancel Membership',history:'View Invoice / Billing History',...(current.cancel?{reactivate:'Reactivate Membership'}:{})};
+  const labels={home:'Open Scaled Circle',billing:['payment_failed','payment_action_required'].includes(type)?'Update Payment Method / Manage Billing':'Manage Billing',upgrade:'Change or Upgrade Plan',addons:'Manage Add-ons',cancel:'Cancel Membership',history:'View Invoice / Billing History',...(current.cancel?{reactivate:'Reactivate Membership'}:{})};
   const actionText=Object.entries(labels).map(([key,label])=>`${label}: ${actions[key]}`).join('\n');
   const text=`${subjects[type]}\n\n${rows.map(([key,value])=>`${key}: ${value}`).join('\n')}\n\n${footer}\n\n${actionText}\n\nSupport: ${SUPPORT_EMAIL}`;
-  const html=`<!doctype html><html><body style="margin:0;background:#f4f6f8;font-family:Arial,sans-serif;color:#17212b"><main style="max-width:600px;margin:auto;padding:24px;background:white"><h2>ScaledCircle</h2><h1 style="font-size:24px">${escapeHtml(subjects[type])}</h1>${rows.map(([key,value])=>`<p><strong>${escapeHtml(key)}</strong><br>${escapeHtml(String(value))}</p>`).join('')}<p>${escapeHtml(footer)}</p>${Object.entries(labels).map(([key,label])=>`<p><a href="${actions[key]}">${escapeHtml(label)}</a></p>`).join('')}<p>Questions? <a href="mailto:${SUPPORT_EMAIL}">${SUPPORT_EMAIL}</a></p></main></body></html>`;
+  const html=`<!doctype html><html><body style="margin:0;background:#f4f6f8;font-family:Arial,sans-serif;color:#17212b"><main style="max-width:600px;margin:auto;padding:24px;background:white"><h2>Scaled Circle</h2><h1 style="font-size:24px">${escapeHtml(subjects[type])}</h1>${rows.map(([key,value])=>`<p><strong>${escapeHtml(key)}</strong><br>${escapeHtml(String(value))}</p>`).join('')}<p>${escapeHtml(footer)}</p>${Object.entries(labels).map(([key,label])=>`<p><a href="${actions[key]}">${escapeHtml(label)}</a></p>`).join('')}<p>Questions? <a href="mailto:${SUPPORT_EMAIL}">${SUPPORT_EMAIL}</a></p></main></body></html>`;
   return {subject:subjects[type],text,html,trustedHtml:true,template:`billing_${type}_v1`};
 }
 async function reconcile({db,FieldValue,auth,event,subscription,invoice,environment,planForPrice}) {
@@ -98,7 +98,7 @@ async function reconcile({db,FieldValue,auth,event,subscription,invoice,environm
     messages.forEach((message,index)=>{
       if (existing[index].exists) return;
       tx.create(refs[index],{...render({...message,current,previous:old?.snapshot,invoice,changeFinancials,environment,effectiveAt:event.created,businessName:user.data()?.companyName || user.data()?.businessName || user.data()?.displayName || 'Your Business'}),
-        to:owner.email,fromAddress:SUPPORT_EMAIL,fromName:'ScaledCircle',replyTo:SUPPORT_EMAIL,businessId,subscriptionId:subscription.id,sourceEventId:event.id,
+        to:owner.email,fromAddress:SUPPORT_EMAIL,fromName:'Scaled Circle',replyTo:SUPPORT_EMAIL,businessId,subscriptionId:subscription.id,sourceEventId:event.id,
         status:'queued',attempts:0,createdAt:FieldValue.serverTimestamp(),updatedAt:FieldValue.serverTimestamp()});
     });
     if(newer) tx.set(stateRef,{businessId,snapshot:current,eventCreated:event.created,revision:(old?.revision||0)+(changes(old?.snapshot,current).length?1:0),updatedAt:FieldValue.serverTimestamp()});

@@ -169,7 +169,7 @@ class RouteRecoveryScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('ScaledCircle')),
+      appBar: AppBar(title: const Text('Scaled Circle')),
       body: Center(
         child: Padding(
           padding: const EdgeInsets.all(24),

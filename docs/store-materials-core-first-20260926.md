@@ -12,7 +12,7 @@ Play short description: **Manage customers, schedules, teams and local campaign 
 
 Apple / Play full description:
 
-ScaledCircle helps you organize your Business and plan local field campaigns.
+Scaled Circle helps you organize your Business and plan local field campaigns.
 
 Keep customers and leads, internal schedules, jobs, tasks and your team together in your existing Business workspace. Plan campaign territories and review the current status of work and compensation. Access follows your account role and plan.
 
@@ -29,7 +29,7 @@ Optional notifications help you return to account and work updates. Core does no
 - Account deletion: https://scaledcircle.com/account-deletion/
 - Business reviewer: attractiveremodel+appreview@gmail.com — isolated Business workspace, durable administratively revocable Scale-level Core access, five total seats including owner, no subscription purchase required.
 - Scaler reviewer: skotiatrades+appreview@gmail.com — isolated Maryland Scaler profile. Work availability still follows server eligibility; no fabricated assignments or earnings.
-- Use each account's existing ScaledCircle app password from the store console's protected credentials field. Passwords are intentionally absent here. Neither account grants Admin, connected mailbox, banking or unrelated customer access.
+- Use each account's existing Scaled Circle app password from the store console's protected credentials field. Passwords are intentionally absent here. Neither account grants Admin, connected mailbox, banking or unrelated customer access.
 - Open Log In, sign in, then use Business Home / Customers & Schedule / campaign types. For Scaler, sign out normally and use its account; verify account isolation. Do not fund a campaign or begin a location session merely to review navigation.
 - Native digital membership treatment remains status/cancellation only: no native digital purchase, upgrade, external billing portal or buy-on-web CTA. Premium native Growth tools remain excluded. A saved Daily Brief summary does not unlock those tools or trigger research.
 - Proposed campaign description above is for the compatible replacement pair; do not relabel older installed UI as containing its server-state presentation. Reconcile final notes with actual selected builds before submission.

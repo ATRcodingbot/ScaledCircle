@@ -29,7 +29,7 @@ async function preflightArtwork(files){
       if(parsed.isEncrypted||parsed.getPageCount()>2||parsed.getPageCount()<1)fail('Use an unlocked PDF containing just the front and optional back.');
       if(parsed.catalog.has(PDFName.of('AcroForm'))||parsed.catalog.has(PDFName.of('OpenAction'))||parsed.catalog.has(PDFName.of('AA')))fail('Export a flattened print PDF without forms or interactive actions.');
       for(const p of parsed.getPages()){
-        const s=p.getSize();if(Math.abs(s.width-810)>.25||Math.abs(s.height-450)>.25||p.getRotation().angle!==0)fail('The design needs a landscape 11 × 6 inch postcard with edge bleed. Export at 11.25 × 6.25 inches, or use a ScaledCircle template.');
+        const s=p.getSize();if(Math.abs(s.width-810)>.25||Math.abs(s.height-450)>.25||p.getRotation().angle!==0)fail('The design needs a landscape 11 × 6 inch postcard with edge bleed. Export at 11.25 × 6.25 inches, or use a Scaled Circle template.');
       }
       const library=await PDFiumLibrary.init();let document;
       try{
@@ -58,7 +58,7 @@ async function preflightArtwork(files){
     originals.push({bytes,contentType,sha256:crypto.createHash('sha256').update(bytes).digest('hex')});
   }
   if(pages.length>2)fail('Choose no more than two sides, in front then back order.');
-  if(pages[1]&&!await mailingPanelClear(pages[1]))fail('The back has artwork in the mailing area. Leave its right half clear, or upload only the front and let ScaledCircle prepare the back.');
+  if(pages[1]&&!await mailingPanelClear(pages[1]))fail('The back has artwork in the mailing area. Leave its right half clear, or upload only the front and let Scaled Circle prepare the back.');
   return {originals,pages,report:{version:'PostcardUploadPreflightV1',dimensions:'pass',bleed:'pass',orientation:'pass',integrity:'pass',outputDpi:300,sourceResolution:sourceRasterReview?'admin_review_required':'pass',safeArea:'visual_approval_required',mailingPanel:pages.length===1?'generated_back':'reserved_panel_verified',noStretch:true,originalPreserved:true}};
 }
 module.exports={preflightArtwork,mailingPanelClear,WIDTH,HEIGHT};

@@ -12,6 +12,6 @@ const campaignMaterialSourceOptions = <DropdownMenuItem<String>>[
   DropdownMenuItem(
     value: 'printed_by_scaled_circle',
     enabled: false,
-    child: Text('ScaledCircle Printing — Coming Soon'),
+    child: Text('Scaled Circle Printing — Coming Soon'),
   ),
 ];

@@ -110,7 +110,7 @@ class _BusinessEmailScreenState extends State<BusinessEmailScreen> {
       builder: (dialog) => AlertDialog(
         title: const Text('Disconnect email?'),
         content: Text(
-          'Disconnect $mailbox from ScaledCircle?\n\nFurther mailbox reading and sending will stop. Saved CRM and conversation history is retained under the existing policy. This does not cancel your Business subscription.\n\nScaledCircle removes its stored credentials. Google account permissions are not revoked here because revocation can affect the entire app grant. Messages already accepted by the provider cannot be recalled.',
+          'Disconnect $mailbox from Scaled Circle?\n\nFurther mailbox reading and sending will stop. Saved CRM and conversation history is retained under the existing policy. This does not cancel your Business subscription.\n\nScaled Circle removes its stored credentials. Google account permissions are not revoked here because revocation can affect the entire app grant. Messages already accepted by the provider cannot be recalled.',
         ),
         actions: [
           TextButton(
@@ -584,7 +584,7 @@ class _BusinessEmailScreenState extends State<BusinessEmailScreen> {
                           DropdownMenuItem(
                             value: 'account_notifications',
                             child: Text(
-                              'ScaledCircle account notifications only',
+                              'Scaled Circle account notifications only',
                             ),
                           ),
                           DropdownMenuItem(
@@ -1021,7 +1021,7 @@ class _DraftDialogState extends State<_DraftDialog> {
           old?['subject']?.toString() ??
           (widget.certification
               ? (widget.mailbox['certificationDraft']?['subject']?.toString() ??
-                    'ScaledCircle controlled Business Email check')
+                    'Scaled Circle controlled Business Email check')
               : 'A question for ${widget.prospect?['displayName'] ?? 'your team'}'),
     );
     _body = TextEditingController(

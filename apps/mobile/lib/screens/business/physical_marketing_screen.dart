@@ -430,7 +430,7 @@ class _PhysicalMarketingScreenState extends State<PhysicalMarketingScreen> {
                       title: const Text('Postcards — Coming Soon'),
                       subtitle: const Text(
                         AppEnvironmentConfig.isStaging
-                            ? 'Fulfilled by ScaledCircle. Review your design and confirmed quote before payment. Staging TEST orders only.'
+                            ? 'Fulfilled by Scaled Circle. Review your design and confirmed quote before payment. Staging TEST orders only.'
                             : 'Plan your territory-to-mail campaign. Coming soon — ordering is not available yet.',
                       ),
                       trailing: const Icon(Icons.chevron_right),
@@ -451,7 +451,7 @@ class _PhysicalMarketingScreenState extends State<PhysicalMarketingScreen> {
                               SizedBox(width: 12),
                               Expanded(
                                 child: Text(
-                                  'Add your Business name in Grow → Growth Plan → Set Up Your Growth Profile. ScaledCircle will never invent it for customer material.',
+                                  'Add your Business name in Grow → Growth Plan → Set Up Your Growth Profile. Scaled Circle will never invent it for customer material.',
                                 ),
                               ),
                             ],
@@ -715,7 +715,7 @@ class _MaterialCard extends StatelessWidget {
                   const Padding(
                     padding: EdgeInsets.only(bottom: 12),
                     child: Text(
-                      'Full-page door-hanger artwork isn’t supported yet. Upload your logo and images and ScaledCircle will place them safely within the verified template.',
+                      'Full-page door-hanger artwork isn’t supported yet. Upload your logo and images and Scaled Circle will place them safely within the verified template.',
                     ),
                   ),
 

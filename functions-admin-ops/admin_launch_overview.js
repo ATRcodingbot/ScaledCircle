@@ -82,7 +82,7 @@ async function load({db,now=Date.now(),paidWorkEnabled=null,project=null}) {
       cancellationScheduled:count(subscriptions,s=>s.cancelAtPeriodEnd===true||s.cancel_at_period_end===true),
       workspaceCount:workspaces?.length??null,
       reconciliationIssues:count(operations,o=>['failed','attention','review_required'].includes(o.state||o.status)),
-      moneySummary:'Customer payments, worker reserves and ScaledCircle revenue are separate. See each authoritative payment timeline; no gross-payment revenue total is inferred.'},
+      moneySummary:'Customer payments, worker reserves and Scaled Circle revenue are separate. See each authoritative payment timeline; no gross-payment revenue total is inferred.'},
     email:{mailboxes:mailboxes?.map(m=>({businessId:m.docId,status:label(m.status),health:label(m.health)}))??null,
       branding:project==='scaled-circle'?'verified_checkpoint':'unavailable',gmailReview:project==='scaled-circle'?'submitted_under_review':'unavailable',newCustomerOnboarding:'verify_configuration',demoVideo:project==='scaled-circle'?'recorded_submitted':'unavailable',
       evidenceKind:'September 20, 2026 Google verification checkpoint; data access under review, CASA not complete; not a live provider probe'},

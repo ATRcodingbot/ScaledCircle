@@ -345,7 +345,7 @@ function addPdfXMetadata(pdf, profile) {
   const outputIntent = context.obj({
     Type: PDFName.of("OutputIntent"), S: PDFName.of("GTS_PDFX"),
     OutputConditionIdentifier: PDFString.of("CMYK Print Profile"),
-    Info: PDFString.of("ScaledCircle provider-neutral CMYK output intent"),
+    Info: PDFString.of("Scaled Circle provider-neutral CMYK output intent"),
     RegistryName: PDFString.of("https://www.color.org"), DestOutputProfile: profileRef,
   });
   pdf.catalog.set(PDFName.of("OutputIntents"), context.obj([outputIntent]));
@@ -483,8 +483,8 @@ async function renderDoorHangerPrintMaster({version, trackedUrl, mediaBuffer, lo
   const bold = await pdf.embedFont(fs.readFileSync(FONT_BOLD), {subset: true});
   const fixedDate = new Date("2000-01-01T00:00:00.000Z");
   pdf.setTitle(`${business.businessName || "Business"} - ${spec.label} - ${draft.headline}`);
-  pdf.setAuthor("ScaledCircle"); pdf.setCreator("ScaledCircle Physical Marketing Execution V1");
-  pdf.setProducer("ScaledCircle"); pdf.setCreationDate(fixedDate); pdf.setModificationDate(fixedDate);
+  pdf.setAuthor("Scaled Circle"); pdf.setCreator("Scaled Circle Physical Marketing Execution V1");
+  pdf.setProducer("Scaled Circle"); pdf.setCreationDate(fixedDate); pdf.setModificationDate(fixedDate);
   addPdfXMetadata(pdf, await cmykOutputProfile());
   const placement = doorHangerMediaPlacement(spec);
   const normalizedMedia = await normalizePlacedImage(mediaBuffer, placement);
@@ -667,8 +667,8 @@ async function renderPrintMaster({version, trackedUrl, mediaBuffer, logoBuffer,a
   const bold = await pdf.embedFont(fs.readFileSync(FONT_BOLD), {subset: true});
   const fixedDate = new Date("2000-01-01T00:00:00.000Z");
   pdf.setTitle(`${spec.label} - ${draft.headline}`);
-  pdf.setAuthor("ScaledCircle"); pdf.setCreator("ScaledCircle Physical Marketing Execution V1");
-  pdf.setProducer("ScaledCircle"); pdf.setCreationDate(fixedDate); pdf.setModificationDate(fixedDate);
+  pdf.setAuthor("Scaled Circle"); pdf.setCreator("Scaled Circle Physical Marketing Execution V1");
+  pdf.setProducer("Scaled Circle"); pdf.setCreationDate(fixedDate); pdf.setModificationDate(fixedDate);
   addPdfXMetadata(pdf, await cmykOutputProfile());
   const primary = hexToCmyk(draft.primaryColor);
   const secondary = hexToCmyk(draft.secondaryColor);
@@ -758,7 +758,7 @@ async function renderEddmPrintMaster({version, trackedUrl, mediaBuffer,logoBuffe
   const regular = await pdf.embedFont(fs.readFileSync(FONT_REGULAR), {subset:true});
   const bold = await pdf.embedFont(fs.readFileSync(FONT_BOLD), {subset:true});
   pdf.setTitle(`${version.brandSnapshot?.businessName || "Business"} - Neighborhood Mail`);
-  pdf.setAuthor("ScaledCircle"); pdf.setCreator("ScaledCircle Physical Marketing");
+  pdf.setAuthor("Scaled Circle"); pdf.setCreator("Scaled Circle Physical Marketing");
   pdf.setCreationDate(new Date("2000-01-01T00:00:00Z")); pdf.setModificationDate(new Date("2000-01-01T00:00:00Z"));
   addPdfXMetadata(pdf,await cmykOutputProfile());
   const bleed=9,width=810,height=450,left=27,top=423,bottom=27;
@@ -1262,7 +1262,7 @@ function createPhysicalMarketingService({db, FieldValue, bucket, createResponseA
     if(!draft.artworkUploadId)return {snapshot:null,pages:[]};
     const record=await db.doc(`postcardArtworkUploads/${draft.artworkUploadId}`).get(),data=record.data()||{};
     if(!record.exists||data.businessUid!==uid||data.campaignId!==draft.campaignId||draft.productSpecId!=='postcard_eddm_6x11')throw postcardInputError('This uploaded artwork is not available to this campaign.');
-    if(data.pageCount===2&&!draft.replaceUploadedBack&&(draft.qrEnabled||draft.trackingPhoneAssetId||draft.includeBusinessPhone))throw postcardInputError('Your uploaded back is fixed artwork. Choose a ScaledCircle back to add a new phone or QR code, or keep the existing artwork without new attribution.');
+    if(data.pageCount===2&&!draft.replaceUploadedBack&&(draft.qrEnabled||draft.trackingPhoneAssetId||draft.includeBusinessPhone))throw postcardInputError('Your uploaded back is fixed artwork. Choose a Scaled Circle back to add a new phone or QR code, or keep the existing artwork without new attribution.');
     const pages=[];
     for(const page of data.pages.slice(0,draft.replaceUploadedBack?1:2)){
       const [bytes]=await bucket().file(page.storagePath).download();

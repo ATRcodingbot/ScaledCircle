@@ -8,7 +8,7 @@ function createEnrollment({db,now=Date.now,workspaces=WORKSPACES,mailboxes=MAILB
  const grantRef=db.doc('emailAssistanceOperatingGrants/'+GRANT);
  const access=b=>db.doc(`agentPermissions/${b}_lead_generator/authorizations/business_email_pilot_grant`);
  async function prepare(a,input){
-  if(a.businessId!==workspaces[0]||a.actorUid!==workspaces[0]||a.beta.kind!=='internal'||!a.beta.canManageConnection||input?.confirm!==true||Object.keys(input).some(k=>k!=='confirm'))fail('Use the verified ScaledCircle Admin to prepare the exact approved pilot.');
+  if(a.businessId!==workspaces[0]||a.actorUid!==workspaces[0]||a.beta.kind!=='internal'||!a.beta.canManageConnection||input?.confirm!==true||Object.keys(input).some(k=>k!=='confirm'))fail('Use the verified Scaled Circle Admin to prepare the exact approved pilot.');
   return db.runTransaction(async tx=>{
    const old=await tx.get(grantRef);if(old.exists)return {prepared:true,status:old.data().status,startsAt:old.data().startsAt||null,expiresAt:old.data().expiresAt||null,reused:true};
    const boxes=await Promise.all(workspaces.map(b=>tx.get(db.doc('businessMailboxes/'+b))));
@@ -23,7 +23,7 @@ function createEnrollment({db,now=Date.now,workspaces=WORKSPACES,mailboxes=MAILB
   });
  }
  async function recordDataReview(a,input){
-  if(a.businessId!==workspaces[0]||a.actorUid!==workspaces[0]||a.beta.kind!=='internal'||!a.beta.canManageConnection)fail('Use the verified production ScaledCircle Admin.');
+  if(a.businessId!==workspaces[0]||a.actorUid!==workspaces[0]||a.beta.kind!=='internal'||!a.beta.canManageConnection)fail('Use the verified production Scaled Circle Admin.');
   if(input?.confirm!==true||Object.keys(input).some(k=>!['confirm','sourceSha','amendmentReference'].includes(k))||!(/^[a-f0-9]{40}$/.test(input.sourceSha||''))||typeof input.amendmentReference!=='string'||input.amendmentReference.trim().length<12||input.amendmentReference.length>1000)fail('Record the actual implementation and sent Google-review amendment reference. This is not Google approval.');
   const {ORGANIZATION,PROJECT}=require('./provider_review');
   const value={status:'verified',organization:ORGANIZATION,project:PROJECT,implementationVersion:'email_pilot_v1',implementationSource:input.sourceSha,

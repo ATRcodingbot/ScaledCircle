@@ -226,13 +226,13 @@ class AuthenticatedAppBar extends StatelessWidget
       title: Row(
         children: [
           Semantics(
-            label: 'ScaledCircle Home',
+            label: 'Scaled Circle Home',
             button: true,
             container: true,
             onTap: () => open(home),
             excludeSemantics: true,
             child: Tooltip(
-              message: 'ScaledCircle Home',
+              message: 'Scaled Circle Home',
               excludeFromSemantics: true,
               child: InkWell(
                 onTap: () => open(home),
