@@ -72,42 +72,49 @@ void main() {
     expect(find.text('Analyze Main Service Area'), findsOneWidget);
   });
 
-  testWidgets('homepage uses an illustrative map without unsupported metrics', (
-    tester,
-  ) async {
-    final semantics = tester.ensureSemantics();
-    await tester.pumpWidget(app());
-    expect(find.text('Run your business.\nGrow locally.'), findsOneWidget);
-    expect(
-      find.textContaining('Connect with local gig workers—called Scalers'),
-      findsOneWidget,
-    );
-    expect(find.textContaining('Results you can review'), findsOneWidget);
-    expect(
-      find.bySemanticsLabel(RegExp('Illustrative campaign boundary')),
-      findsOneWidget,
-    );
-    expect(find.bySemanticsLabel(RegExp('validated Smart Zone')), findsNothing);
-    expect(find.text('Example campaign area'), findsOneWidget);
-    expect(find.textContaining('225 estimated homes'), findsNothing);
-    expect(find.textContaining('5-hour'), findsNothing);
-    expect(find.textContaining('Validated demo'), findsNothing);
-    expect(find.text('VALIDATED SMART ZONE • DEMO'), findsNothing);
-    expect(
-      find.text('Illustrative boundary • Baltimore, Maryland'),
-      findsOneWidget,
-    );
-    expect(find.text('How Scaled Circle works'), findsOneWidget);
-    expect(find.text('Plan your local campaign'), findsOneWidget);
-    expect(find.byKey(const Key('homepage-cost-separation')), findsOneWidget);
-    expect(
-      find.textContaining('Planning estimates—not verified deliveries'),
-      findsOneWidget,
-    );
-    expect(find.text('Get Started for Business'), findsWidgets);
-    expect(find.text('Join as a Scaler'), findsWidgets);
-    semantics.dispose();
-  });
+  testWidgets(
+    'homepage matches the Business workflow illustration without numeric claims',
+    (tester) async {
+      final semantics = tester.ensureSemantics();
+      await tester.pumpWidget(app());
+      expect(find.text('Run your business.\nGrow locally.'), findsOneWidget);
+      expect(
+        find.textContaining('Connect with local gig workers—called Scalers'),
+        findsOneWidget,
+      );
+      expect(find.textContaining('Results you can review'), findsOneWidget);
+      expect(
+        find.bySemanticsLabel(
+          RegExp('Workflow illustration of an assigned area'),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.bySemanticsLabel(RegExp('validated Smart Zone')),
+        findsNothing,
+      );
+      expect(find.text('One connected campaign'), findsOneWidget);
+      expect(find.text('Example campaign area'), findsNothing);
+      expect(find.textContaining('225 estimated homes'), findsNothing);
+      expect(find.textContaining('5-hour'), findsNothing);
+      expect(find.textContaining('Validated demo'), findsNothing);
+      expect(find.text('VALIDATED SMART ZONE • DEMO'), findsNothing);
+      expect(
+        find.text('Illustrative boundary • Baltimore, Maryland'),
+        findsNothing,
+      );
+      expect(find.text('How Scaled Circle works'), findsOneWidget);
+      expect(find.text('Plan your local campaign'), findsOneWidget);
+      expect(find.byKey(const Key('homepage-cost-separation')), findsOneWidget);
+      expect(
+        find.textContaining('Workflow illustration · not a live campaign'),
+        findsOneWidget,
+      );
+      expect(find.text('Get Started for Business'), findsWidgets);
+      expect(find.text('Join as a Scaler'), findsWidgets);
+      semantics.dispose();
+    },
+  );
 
   testWidgets('homepage opens the dedicated Scaler funnel', (tester) async {
     await tester.pumpWidget(app());

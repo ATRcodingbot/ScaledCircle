@@ -6,7 +6,7 @@ import '../../navigation/app_routes.dart';
 import '../../navigation/public_page_navigation.dart';
 import '../../navigation/app_router.dart';
 import '../../services/subscription_plan_service.dart';
-import 'authentic_product_map.dart';
+import 'campaign_workflow_illustration.dart';
 import 'public_funnel_components.dart'
     show ScaledCircleBrand, openPublicRoleChooser;
 import 'public_legal_footer.dart';
@@ -322,40 +322,7 @@ class _Hero extends StatelessWidget {
 class _MapPreview extends StatelessWidget {
   const _MapPreview();
   @override
-  Widget build(BuildContext context) => _Panel(
-    child: const Padding(
-      padding: EdgeInsets.all(18),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Example campaign area',
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 24,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-          SizedBox(height: 10),
-          Text(
-            'Review your territory, mapped property types and estimated field time.',
-            style: TextStyle(color: _muted, fontSize: 16, height: 1.5),
-          ),
-          SizedBox(height: 16),
-          AuthenticProductMap(
-            mode: PublicProductMapMode.campaign,
-            height: 320,
-            illustrativeOnly: true,
-          ),
-          SizedBox(height: 12),
-          Text(
-            'Planning estimates—not verified deliveries or a finalized walking route.',
-            style: TextStyle(color: _muted, fontSize: 14, height: 1.5),
-          ),
-        ],
-      ),
-    ),
-  );
+  Widget build(BuildContext context) => const CampaignWorkflowIllustration();
 }
 
 class _HowItWorks extends StatelessWidget {
