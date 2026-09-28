@@ -16,6 +16,7 @@ class MappedAddressField extends StatefulWidget {
     this.allowManualAddress = false,
     this.onManualAccepted,
     this.enabled = true,
+    this.locationOnly = false,
   });
 
   final TextEditingController controller;
@@ -28,6 +29,7 @@ class MappedAddressField extends StatefulWidget {
   final bool allowManualAddress;
   final ValueChanged<String>? onManualAccepted;
   final bool enabled;
+  final bool locationOnly;
 
   @override
   State<MappedAddressField> createState() => _MappedAddressFieldState();
@@ -40,12 +42,14 @@ class _MappedAddressFieldState extends State<MappedAddressField> {
   bool _searching = false;
   String? _error;
   String? _manualAddress;
+  int _request = 0;
 
   Future<void> _search() async {
     final query = widget.controller.text.trim();
     if (query.isEmpty || _searching) {
       return;
     }
+    final request = ++_request;
     FocusScope.of(context).unfocus();
     setState(() {
       _searching = true;
@@ -57,13 +61,17 @@ class _MappedAddressFieldState extends State<MappedAddressField> {
       final suggestions =
           await (widget.searchAddresses?.call(query) ??
               _searchService.search(query));
-      if (!mounted) {
+      if (!mounted ||
+          request != _request ||
+          widget.controller.text.trim() != query) {
         return;
       }
       setState(() {
         _suggestions = suggestions;
         _error = suggestions.isEmpty
-            ? widget.allowManualAddress
+            ? widget.locationOnly
+                  ? "We couldn’t find that city or ZIP. Check the location and try again."
+                  : widget.allowManualAddress
                   ? "We couldn't confirm this address on the map."
                   : 'This exact address was not found. Try a nearby street, neighborhood or ZIP, or draw the area manually.'
             : null;
@@ -76,14 +84,18 @@ class _MappedAddressFieldState extends State<MappedAddressField> {
         _select(suggestions.single);
       }
     } catch (_) {
-      if (!mounted) {
+      if (!mounted ||
+          request != _request ||
+          widget.controller.text.trim() != query) {
         return;
       }
       setState(() {
-        _error = "We couldn't map that area automatically.";
+        _error = widget.locationOnly
+            ? "We couldn’t look up this location right now. Please try again."
+            : "We couldn't map that area automatically.";
       });
     } finally {
-      if (mounted) {
+      if (mounted && request == _request) {
         setState(() {
           _searching = false;
         });
@@ -115,19 +127,21 @@ class _MappedAddressFieldState extends State<MappedAddressField> {
           controller: widget.controller,
           enabled: widget.enabled,
           textInputAction: TextInputAction.search,
-          keyboardType: TextInputType.streetAddress,
-          autofillHints: const [AutofillHints.fullStreetAddress],
+          keyboardType: widget.locationOnly
+              ? TextInputType.text
+              : TextInputType.streetAddress,
+          autofillHints: widget.locationOnly
+              ? null
+              : const [AutofillHints.fullStreetAddress],
           onChanged: (value) {
+            ++_request;
+            _searching = false;
             widget.onChanged?.call(value);
-            if (_suggestions.isNotEmpty ||
-                _error != null ||
-                _manualAddress != null) {
-              setState(() {
-                _suggestions = const [];
-                _error = null;
-                _manualAddress = null;
-              });
-            }
+            setState(() {
+              _suggestions = const [];
+              _error = null;
+              _manualAddress = null;
+            });
           },
           onFieldSubmitted: (_) => _search(),
           validator: widget.validator,
@@ -152,6 +166,11 @@ class _MappedAddressFieldState extends State<MappedAddressField> {
             border: const OutlineInputBorder(),
           ),
         ),
+        if (_searching && widget.locationOnly)
+          const Padding(
+            padding: EdgeInsets.only(top: 8),
+            child: Text('Looking up this location…'),
+          ),
         if (_suggestions.isNotEmpty || _error != null)
           Container(
             margin: const EdgeInsets.only(top: 6),
@@ -199,7 +218,8 @@ class _MappedAddressFieldState extends State<MappedAddressField> {
                               ),
                             TextButton(
                               onPressed: () {
-                                if (!widget.allowManualAddress) {
+                                if (!widget.allowManualAddress &&
+                                    !widget.locationOnly) {
                                   widget.controller.clear();
                                 }
                                 setState(() => _error = null);

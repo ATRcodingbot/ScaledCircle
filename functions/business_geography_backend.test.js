@@ -90,3 +90,21 @@ test('campaign suggestions require maintained workspace permission and exclude p
   await db.doc(`businessWorkspaces/${uid}/members/${member}`).update({permissions:['analytics']});await assert.rejects(suggest(member));
   await db.doc(`businessWorkspaces/${uid}/members/${member}`).update({permissions:['campaigns'],status:'removed'});await assert.rejects(suggest(member));
 });
+
+test('production ZIP selection binds real Census identity; workspace summary denies outsiders and discloses no private base',async()=>{
+ const uid=await owner({active:true,betaAccess:'approved'}), outsider=await owner({active:true,betaAccess:'approved'});
+ const real=require('./service_area_resolution').decodeCacheResult(require('./fixtures/business-base-21061.json'));
+ const resolved=onboarding.createService({db,auth,FieldValue:admin.firestore.FieldValue,resolvePlace:async()=>({results:[real]})});
+ const base=(await resolved.search({uid,query:' 21061 ',kind:'base'})).results[0];
+ assert.equal(base.canonicalId,'us_census_tigerweb:zcta:21061');
+ const area=(await resolved.search({uid,query:'21061',kind:'service_area'})).results[0];
+ await resolved.save({uid,input,geography:{baseSelectionId:base.selectionId,serviceAreaSelectionIds:[area.selectionId]}});
+ const loaded=await resolved.load({uid});assert.equal(loaded.geography.base.postalCode,'21061');
+ const workspace=createWorkspaceService({db,auth,FieldValue:admin.firestore.FieldValue,Timestamp:admin.firestore.Timestamp});
+ const status=await workspace.profileCompletion({uid,businessId:uid});assert.deepEqual(status,{complete:true,missingFields:[],businessId:uid,canEdit:true});
+ await assert.rejects(workspace.profileCompletion({uid:outsider,businessId:uid}),{code:'permission-denied'});
+ await db.doc('businessSubscriptions/'+uid).set({plan:'growth',status:'active',expiresAt:admin.firestore.Timestamp.fromMillis(Date.now()+86400000)});
+ await db.doc(`businessWorkspaces/${uid}/members/${outsider}`).set({uid:outsider,businessId:uid,status:'active',permissions:['campaigns'],seatIndex:1});
+ assert.equal((await workspace.profileCompletion({uid:outsider,businessId:uid})).canEdit,false);
+ for(const col of ['campaigns','campaignZones','wallets'])assert.equal((await db.collection(col).get()).size,0);
+});

@@ -61,6 +61,14 @@ function createWorkspaceService({db,auth,FieldValue,Timestamp,now=Date.now,origi
   const pending = i=>i.status==='pending'&&i.expiresAt?.toMillis()>now();
   return {
     actor,authority,inventory,seats,workspaceName,
+    async profileCompletion({uid,businessId}) {
+      const a = await authority({uid,businessId,allowExpired:true});
+      const [profile,setup] = await Promise.all([
+        db.doc(`businessGrowthProfiles/${a.businessId}`).get(),
+        db.doc(`businessOnboarding/${a.businessId}`).get()]);
+      return {...require('./business_onboarding').completionStatus(profile.data(),setup.data()),
+        businessId:a.businessId, canEdit:a.isOwner};
+    },
     async prepareInvitedAccount({uid,businessId,invitationId,token,name}) {
       if(!uid)fail('unauthenticated','Sign in to continue.');
       businessId=id(businessId);invitationId=id(invitationId);name=text(name,120);

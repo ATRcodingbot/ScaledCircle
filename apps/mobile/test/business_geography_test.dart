@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_core_platform_interface/test.dart';
@@ -275,6 +276,70 @@ void main() {
       expect(action, isNot(contains('signOut')));
       expect(s, contains('AuthenticatedSignOutButton'));
       expect(s, isNot(contains('PublicLandingScreen')));
+    },
+  );
+
+  testWidgets(
+    'actual profile form selects retained 21061 Census ZIP without losing entered fields or service areas',
+    (t) async {
+      final raw =
+          jsonDecode(
+                File(
+                  '../../functions/fixtures/business-base-21061.json',
+                ).readAsStringSync(),
+              )
+              as Map<String, dynamic>;
+      final resolved = {
+        ...raw,
+        'id': 'census-zcta-21061',
+        'canonicalId': 'us_census_tigerweb:zcta:21061',
+        'selectionId': List.filled(64, 'd').join(),
+        'geometry': (raw['geometry'] as Map)['points'],
+        'geometryParts': <dynamic>[],
+      };
+      Map<String, dynamic>? saved;
+      final initial = profile();
+      initial['geography'] = {
+        'base': place('base'),
+        'serviceAreas': [place('county')],
+      };
+      await t.pumpWidget(
+        MaterialApp(
+          home: CompleteBusinessProfileScreen(
+            editing: true,
+            load: () async => initial,
+            searchPlaces: (query, serviceArea) async {
+              expect(query, '21061');
+              expect(serviceArea, false);
+              return [AddressSearchService.parseSuggestion(resolved)!];
+            },
+            save: (value) async {
+              saved = value;
+              return {'profileComplete': true};
+            },
+            onCompleted: () {},
+          ),
+        ),
+      );
+      await t.pumpAndSettle();
+      await t.enterText(
+        find.byKey(const Key('business-profile-businessName')),
+        'Entered name retained',
+      );
+      await choose(t, 'business-base-search', ' 21061 ');
+      expect(find.text('Selected: ${raw['fullAddress']}'), findsOneWidget);
+      await show(t, find.text('Save profile'));
+      await t.tap(find.text('Save profile'));
+      await t.pumpAndSettle();
+      expect(saved?['businessName'], 'Entered name retained');
+      expect(
+        (saved?['geography'] as Map)['baseSelectionId'],
+        List.filled(64, 'd').join(),
+      );
+      expect((saved?['geography'] as Map)['serviceAreaSelectionIds'], [
+        place('county')['selectionId'],
+      ]);
+      expect(saved?['businessAddress'], 'Preserved private legacy address');
     },
   );
 }

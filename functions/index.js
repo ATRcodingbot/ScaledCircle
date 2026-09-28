@@ -13406,6 +13406,7 @@ exports.getBusinessWorkspaceContext = workspaceEndpoint(async(request,service)=>
   const a=await service.authority({uid,businessId:desired,allowExpired:true});
   return {businessId:a.businessId,actorUid:uid,isOwner:a.isOwner,permissions:a.permissions,
     businessName:await service.workspaceName(a.businessId,a.owner),
+    profileCompletion:await service.profileCompletion({uid,businessId:a.businessId}),
     subscriptionActive:subscriptionEntitlements.hasActivePaidBusinessEntitlement(a.entitlement),
     planId:String(a.entitlement.planId||a.entitlement.plan||""),
     propertyIntelligenceAvailable:subscriptionEntitlements.hasActiveScaleEntitlement(a.entitlement),

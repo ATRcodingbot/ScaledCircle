@@ -10,11 +10,15 @@ const MAX_AREAS = 8;
 const sha = value => crypto.createHash('sha256').update(value).digest('hex');
 function fail(code, message) {const error = new Error(message); error.code = code; throw error;}
 function canonicalPlace(result) {
-  if (!result || typeof result.id !== 'string' || !result.id || result.id.includes('unknown') ||
+  const censusIdentity = result?.resolutionSource === 'us_census_tigerweb' &&
+    typeof result.geographicId === 'string' && /^\d{5}$/.test(result.geographicId) &&
+    result.geographyType === 'zcta';
+  if (!result || typeof result.id !== 'string' || !result.id || (!censusIdentity && result.id.includes('unknown')) ||
       !Number.isFinite(result.latitude) || !Number.isFinite(result.longitude) ||
       Math.abs(result.latitude) > 90 || Math.abs(result.longitude) > 180 ||
       !result.fullAddress || !['openstreetmap_nominatim', 'us_census_tigerweb'].includes(result.resolutionSource)) return null;
-  const value = resolution.encodeCacheResult(result);
+  const value = resolution.encodeCacheResult(censusIdentity ?
+    {...result, id:`census-zcta-${result.geographicId}`} : result);
   value.canonicalId = result.geographicId
     ? `${result.resolutionSource}:${result.geographyType}:${result.geographicId}`
     : `${result.resolutionSource}:${result.id}`;
@@ -38,7 +42,9 @@ function createService({db, FieldValue, resolvePlace = resolution.resolvePlace})
       if (typeof query !== 'string' || query.trim().length < 2 || query.length > 180 ||
           !['base','service_area'].includes(kind)) fail('invalid-argument','Search for a city, county, ZIP or address.');
       let response;
-      try {response = await resolvePlace({query,db});}
+      try {response = await resolvePlace({query:resolution.normalizeQuery(query),db});
+        if (!Array.isArray(response?.results)) throw new Error('invalid_provider_response');
+      }
       catch (error) {
         if (error.message === 'rate_limited') fail('resource-exhausted','Location search is busy. Please try again in a moment.');
         fail('unavailable','Location search is unavailable. Please retry.');

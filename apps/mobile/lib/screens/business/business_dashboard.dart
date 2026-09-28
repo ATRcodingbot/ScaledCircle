@@ -1,3 +1,4 @@
+import '../../widgets/business_profile_completion.dart';
 import '../../config/native_release_policy.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_app/navigation/authenticated_app_bar.dart';
@@ -214,6 +215,7 @@ class _BusinessToday extends StatelessWidget {
 }
 
 class _BusinessDashboardState extends State<BusinessDashboard> {
+  final _profileCompletion = GlobalKey<BusinessProfileCompletionState>();
   void _openCampaigns(
     BuildContext context,
     String businessId, {
@@ -285,6 +287,7 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
 
   Future<void> _refreshDashboard() async {
     await _loadWeather();
+    await _profileCompletion.currentState?.refresh();
   }
 
   Future<void> _openCreateCampaign(BuildContext context, String userId) async {
@@ -823,6 +826,18 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
                     50,
                   ),
                   children: [
+                    if (kIsWeb)
+                      BusinessProfileCompletion(
+                        key: _profileCompletion,
+                        actorUid: user.uid,
+                        businessId: BusinessWorkspaceSession.businessIdFor(
+                          user.uid,
+                        ),
+                        onContinue: () => _openCreateCampaign(
+                          context,
+                          BusinessWorkspaceSession.businessIdFor(user.uid),
+                        ),
+                      ),
                     Card(
                       child: ListTile(
                         leading: const Icon(Icons.calendar_month_outlined),

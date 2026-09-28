@@ -30,6 +30,14 @@ function sanitize(input) {
     if(!['https:','http:'].includes(u.protocol)||u.username||u.password)fail('invalid-argument','Use a public website address without credentials.');}
   return p;
 }
+// Same legacy-compatible authority used by onboarding; optional fields do not
+// participate. This projection exposes field names, never private location data.
+function completionStatus(profile = {}, setup = {}) {
+  const complete = !!setup.completedAt || isProfileReady(profile);
+  const required = ['businessName','businessDescription','servicesOffered','serviceAreas'];
+  return {complete, missingFields: complete ? [] : required.filter(k =>
+    Array.isArray(profile[k]) ? !profile[k].length : !profile[k])};
+}
 function createService({db,auth,FieldValue,resolvePlace}) {
   const legal=createLegalConsentService({db,FieldValue});
   const geographyService=businessGeography.createService({db,FieldValue,resolvePlace});
@@ -59,7 +67,7 @@ function createService({db,auth,FieldValue,resolvePlace}) {
       view.primaryPhone??=p.contactNumber||'';
       const consent=await legal.status({uid,agreementTypes:['terms','privacy']});
       return {businessId:uid,email:u.email,emailVerified:true,role:'business',profile:view,
-        profileComplete:!!setup.data()?.completedAt||isProfileReady(stored),
+        profileComplete:completionStatus(stored,setup.data()).complete,
         geography:businessGeography.view(setup.data()?.geography),
         legacyServiceAreas:setup.data()?.geography ? [] : stored.serviceAreas||[],
         approved:p.active===true||p.betaAccess==='approved',missingAgreements:consent.missing};
@@ -96,4 +104,4 @@ function createService({db,auth,FieldValue,resolvePlace}) {
     },
   };
 }
-module.exports={createService,sanitize};
+module.exports={createService,sanitize,completionStatus};

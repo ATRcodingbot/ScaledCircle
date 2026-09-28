@@ -1,3 +1,6 @@
+import '../../../../widgets/business_profile_completion.dart';
+import '../../../../services/business_workspace_service.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_app/navigation/authenticated_app_bar.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
@@ -26,90 +29,103 @@ class CreateCampaignScreen extends StatelessWidget {
         centerTitle: true,
       ),
 
-      body: ListView(
-        padding: const EdgeInsets.all(20),
-
-        children: [
-          const Text(
-            "Choose Campaign Type",
-            style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
-          ),
-
-          const SizedBox(height: 25),
-
-          _section("Marketing Campaigns"),
-
-          _campaignCard(
-            context,
-            Icons.mail_outline,
-            "Flyer Distribution",
-            "Distribute flyers with GPS verification and mapped zones.",
-            MaterialDistributionCampaignScreen(
-              campaignType: CampaignType.flyerDistribution,
-              draftAndAreaFlowOverride: flyerDraftAndAreaFlowOverride,
-            ),
-          ),
-
-          _campaignCard(
-            context,
-            Icons.location_on,
-            "Door-to-Door Outreach",
-            "Scalers visit residents or businesses for in-person outreach using approved Business messaging and materials. Conversations, leads and sales are not guaranteed. Route tracking provides reviewable coverage evidence.",
-            const CanvassingCampaignScreen(),
-          ),
-
-          _campaignCard(
-            context,
-            Icons.door_front_door,
-            "Door Hanger Distribution",
-            "Distribute door hangers throughout mapped neighborhoods.",
-            const MaterialDistributionCampaignScreen(
-              campaignType: CampaignType.doorHangerDistribution,
-            ),
-          ),
-
-          if (kIsWeb)
-            _campaignCard(
-              context,
-              Icons.contact_page_outlined,
-              'Business Card Distribution',
-              'Plan business card distribution with mapped territory and your chosen team.',
-              const MaterialDistributionCampaignScreen(
-                campaignType: CampaignType.businessCardDistribution,
+      body:
+          kIsWeb &&
+              FirebaseAuth.instance.currentUser != null &&
+              flyerDraftAndAreaFlowOverride == null
+          ? BusinessProfileCompletion(
+              actorUid: FirebaseAuth.instance.currentUser!.uid,
+              businessId: BusinessWorkspaceSession.businessIdFor(
+                FirebaseAuth.instance.currentUser!.uid,
               ),
-            ),
-
-          const SizedBox(height: 30),
-
-          _section("Field Service Campaigns"),
-
-          _campaignCard(
-            context,
-            Icons.cleaning_services,
-            "Yard Cleanup",
-            "Before and after photos with completion verification.",
-            const CleanupCampaignScreen(),
-          ),
-
-          _campaignCard(
-            context,
-            Icons.local_shipping,
-            "Dump Run",
-            "Pickup, hauling, disposal and proof of completion.",
-            const DumpRunCampaignScreen(),
-          ),
-
-          _campaignCard(
-            context,
-            Icons.signpost,
-            "Yard Sign Installation",
-            "GPS verified placement with photo proof.",
-            const YardSignCampaignScreen(),
-          ),
-        ],
-      ),
+              child: _types(context),
+            )
+          : _types(context),
     );
   }
+
+  Widget _types(BuildContext context) => ListView(
+    padding: const EdgeInsets.all(20),
+
+    children: [
+      const Text(
+        "Choose Campaign Type",
+        style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
+      ),
+
+      const SizedBox(height: 25),
+
+      _section("Marketing Campaigns"),
+
+      _campaignCard(
+        context,
+        Icons.mail_outline,
+        "Flyer Distribution",
+        "Distribute flyers with GPS verification and mapped zones.",
+        MaterialDistributionCampaignScreen(
+          campaignType: CampaignType.flyerDistribution,
+          draftAndAreaFlowOverride: flyerDraftAndAreaFlowOverride,
+        ),
+      ),
+
+      _campaignCard(
+        context,
+        Icons.location_on,
+        "Door-to-Door Outreach",
+        "Scalers visit residents or businesses for in-person outreach using approved Business messaging and materials. Conversations, leads and sales are not guaranteed. Route tracking provides reviewable coverage evidence.",
+        const CanvassingCampaignScreen(),
+      ),
+
+      _campaignCard(
+        context,
+        Icons.door_front_door,
+        "Door Hanger Distribution",
+        "Distribute door hangers throughout mapped neighborhoods.",
+        const MaterialDistributionCampaignScreen(
+          campaignType: CampaignType.doorHangerDistribution,
+        ),
+      ),
+
+      if (kIsWeb)
+        _campaignCard(
+          context,
+          Icons.contact_page_outlined,
+          'Business Card Distribution',
+          'Plan business card distribution with mapped territory and your chosen team.',
+          const MaterialDistributionCampaignScreen(
+            campaignType: CampaignType.businessCardDistribution,
+          ),
+        ),
+
+      const SizedBox(height: 30),
+
+      _section("Field Service Campaigns"),
+
+      _campaignCard(
+        context,
+        Icons.cleaning_services,
+        "Yard Cleanup",
+        "Before and after photos with completion verification.",
+        const CleanupCampaignScreen(),
+      ),
+
+      _campaignCard(
+        context,
+        Icons.local_shipping,
+        "Dump Run",
+        "Pickup, hauling, disposal and proof of completion.",
+        const DumpRunCampaignScreen(),
+      ),
+
+      _campaignCard(
+        context,
+        Icons.signpost,
+        "Yard Sign Installation",
+        "GPS verified placement with photo proof.",
+        const YardSignCampaignScreen(),
+      ),
+    ],
+  );
 
   Widget _section(String title) {
     return Padding(
