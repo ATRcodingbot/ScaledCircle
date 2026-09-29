@@ -1180,7 +1180,7 @@ class _LandingPreview extends StatelessWidget {
                   color: style.ink,
                   padding: const EdgeInsets.all(16),
                   child: const Text(
-                    'Powered by ScaledCircle · A direct request to this Business',
+                    'Powered by Scaled Circle · A direct request to this Business',
                     textAlign: TextAlign.center,
                     style: TextStyle(color: Color(0xFFC7D2DE), fontSize: 11),
                   ),

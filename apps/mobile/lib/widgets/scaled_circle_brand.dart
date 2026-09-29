@@ -15,12 +15,12 @@ class ScaledCircleBrand extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Semantics(
-      label: 'ScaledCircle',
+      label: 'Scaled Circle',
       image: true,
       child: Image.asset(
         lightSurface
-            ? 'assets/brand/scaledcircle-lockup-light-surface.png'
-            : 'assets/brand/scaledcircle-lockup-dark-surface.png',
+            ? 'assets/brand/wordmark-20260928/scaledcircle-lockup-light-surface.png'
+            : 'assets/brand/wordmark-20260928/scaledcircle-lockup-dark-surface.png',
         height: compact ? 28 : 38,
         fit: BoxFit.contain,
         filterQuality: FilterQuality.high,

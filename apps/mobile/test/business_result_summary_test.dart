@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_app/models/business_result_summary.dart';
+import 'package:flutter_app/models/work_lifecycle_presentation.dart';
 
 Map<String, dynamic> zone(
   String campaignId, {
@@ -16,6 +17,17 @@ Map<String, dynamic> zone(
 }
 
 void main() {
+  test('Admin-retired test is excluded; an ordinary test label cannot hide work', () {
+    final retired = zone('retired', status: 'test_retired', submitted: true);
+    final ordinary = zone('real', status: 'submitted', submitted: true)
+      ..['isTestCampaign'] = true;
+    final summary = BusinessResultSummary.fromZones([retired, ordinary]);
+    expect(summary.forCampaign('retired').hasResults, isFalse);
+    expect(summary.awaitingReviewCount, 1);
+    expect(summary.campaignsAwaitingReview, ['real']);
+    expect(workSection('test_retired'), WorkSection.other);
+    expect(workIsSubmitted('test_retired'), isFalse);
+  });
   group('Business result authority', () {
     test('zero campaigns and work in progress have no results', () {
       expect(BusinessResultSummary.fromZones(const []).hasResults, isFalse);

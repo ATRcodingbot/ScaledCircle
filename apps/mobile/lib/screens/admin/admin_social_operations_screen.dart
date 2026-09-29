@@ -117,7 +117,7 @@ class _AdminSocialOperationsScreenState
       try {
         await _service.configureSocialProvider(
           provider: provider,
-          appName: 'ScaledCircle Social Operations — Production',
+          appName: 'Scaled Circle Social Operations — Production',
           clientId: clientId.text.trim(),
           redirectUri: redirectUri.text.trim(),
           enabled: enabled,

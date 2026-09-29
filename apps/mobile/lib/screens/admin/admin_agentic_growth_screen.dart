@@ -49,7 +49,7 @@ class _AdminAgenticGrowthScreenState extends State<AdminAgenticGrowthScreen> {
       title: const Text('AI Team operations'),
       actions: [
         IconButton(
-          tooltip: 'ScaledCircle Growth Agents',
+          tooltip: 'Scaled Circle Growth Agents',
           onPressed: () => Navigator.of(
             context,
           ).push(MaterialPageRoute(builder: (_) => const GrowthAgentsScreen())),
@@ -80,7 +80,7 @@ class _AdminAgenticGrowthScreenState extends State<AdminAgenticGrowthScreen> {
             children: [
               Card(
                 child: ListTile(
-                  title: const Text('ScaledCircle Growth Agents'),
+                  title: const Text('Scaled Circle Growth Agents'),
                   subtitle: const Text(
                     'Sourced prospects, drafts, territory priorities and reports.',
                   ),

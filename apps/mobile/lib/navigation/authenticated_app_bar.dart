@@ -52,12 +52,14 @@ class AuthenticatedAppBar extends StatelessWidget
     this.leadingWidth,
     this.toolbarHeight,
     this.automaticallyImplyLeading = true,
+    this.beforeNavigate,
   });
   final Widget? title, leading;
   final List<Widget>? actions;
   final PreferredSizeWidget? bottom;
   final bool? centerTitle;
   final bool automaticallyImplyLeading;
+  final Future<bool> Function()? beforeNavigate;
   final Color? backgroundColor, foregroundColor;
   final double? elevation,
       scrolledUnderElevation,
@@ -141,7 +143,9 @@ class AuthenticatedAppBar extends StatelessWidget
             (limitedSchedule && route == '/business')) &&
         !(ModalRoute.of(context)?.canPop ?? false);
     final wide = MediaQuery.sizeOf(context).width >= 800;
-    void open(String destination) {
+    void open(String destination) async {
+      if (beforeNavigate != null && !await beforeNavigate!()) return;
+      if (!context.mounted) return;
       if (destination == home) {
         AppNavigation.home(context, home);
         return;
@@ -150,7 +154,9 @@ class AuthenticatedAppBar extends StatelessWidget
       AppNavigation.push(context, destination);
     }
 
-    void back() {
+    void back() async {
+      if (beforeNavigate != null && !await beforeNavigate!()) return;
+      if (!context.mounted) return;
       final nav = Navigator.of(context);
       if (nav.canPop()) {
         nav.maybePop();
@@ -220,16 +226,16 @@ class AuthenticatedAppBar extends StatelessWidget
       title: Row(
         children: [
           Semantics(
-            label: 'ScaledCircle Home',
+            label: 'Scaled Circle Home',
             button: true,
             container: true,
-            onTap: () => AppNavigation.home(context, home),
+            onTap: () => open(home),
             excludeSemantics: true,
             child: Tooltip(
-              message: 'ScaledCircle Home',
+              message: 'Scaled Circle Home',
               excludeFromSemantics: true,
               child: InkWell(
-                onTap: () => AppNavigation.home(context, home),
+                onTap: () => open(home),
                 borderRadius: BorderRadius.circular(8),
                 child: SizedBox(
                   height: 48,

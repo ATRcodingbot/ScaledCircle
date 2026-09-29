@@ -108,7 +108,7 @@ void main() {
           'executionEnabled': true,
           'availableCents': 0,
           'setupMessage':
-              "We couldn't start payout setup. ScaledCircle needs to resolve an activation issue with its payout provider. Your earnings are unchanged.",
+              "We couldn't start payout setup. Scaled Circle needs to resolve an activation issue with its payout provider. Your earnings are unchanged.",
         };
       await tester.pumpWidget(
         MaterialApp(

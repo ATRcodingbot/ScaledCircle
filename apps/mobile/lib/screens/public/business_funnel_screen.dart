@@ -1,3 +1,4 @@
+import '../../navigation/public_page_navigation.dart';
 import '../../config/native_release_policy.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
@@ -5,7 +6,7 @@ import 'package:flutter/foundation.dart';
 import '../../navigation/app_routes.dart';
 import '../../navigation/app_router.dart';
 import '../../services/subscription_plan_service.dart';
-import 'authentic_product_map.dart';
+import 'campaign_workflow_illustration.dart';
 import 'public_funnel_components.dart';
 
 class BusinessFunnelScreen extends StatelessWidget {
@@ -16,7 +17,7 @@ class BusinessFunnelScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) => FunnelPage(
     accent: businessGreen,
-    semanticsLabel: 'ScaledCircle for Local Businesses',
+    semanticsLabel: 'Scaled Circle for Local Businesses',
     children: [
       FunnelHero(
         eyebrow: 'FOR LOCAL BUSINESSES',
@@ -24,10 +25,12 @@ class BusinessFunnelScreen extends StatelessWidget {
         body:
             'Customers, schedule, jobs and your team in one place. Choose growth tools when you need them.',
         primaryLabel: 'Start Your Business',
-        secondaryLabel: 'Join Business Waitlist',
+        secondaryLabel: kIsWeb ? 'Compare Core Plans' : 'Log In',
         accent: businessGreen,
         onPrimary: () => openPublicAccountRegistration(context, 'business'),
-        onSecondary: () => openPublicWaitlist(context, 'business'),
+        onSecondary: () => kIsWeb
+            ? openPublicPage(context, '/pricing')
+            : openPublicPage(context, '/login'),
         visual: const _BusinessHeroVisual(),
       ),
       const FunnelSection(
@@ -123,11 +126,14 @@ class BusinessFunnelScreen extends StatelessWidget {
         title: 'READY TO GROW LOCALLY?',
         primary: 'Start Your Business',
         accent: businessGreen,
-        supportingCopy:
-            'Create your ScaledCircle account now. Marketplace access is being rolled out in stages.',
-        waitlistLabel: 'Join Business Waitlist',
+        supportingCopy: kIsWeb
+            ? 'Starter, Growth and Scale are available now. Campaign funding and work eligibility are checked separately.'
+            : 'Use your existing Business workspace. Campaign work depends on current eligibility, funding and assignment.',
+        waitlistLabel: kIsWeb ? 'Compare Core Plans' : 'Log In',
         onPrimary: () => openPublicAccountRegistration(context, 'business'),
-        onWaitlist: () => openPublicWaitlist(context, 'business'),
+        onWaitlist: () => kIsWeb
+            ? openPublicPage(context, '/pricing')
+            : openPublicPage(context, '/login'),
       ),
     ],
   );
@@ -415,87 +421,7 @@ class _SocialVisual extends StatelessWidget {
 class _CampaignMapVisual extends StatelessWidget {
   const _CampaignMapVisual();
   @override
-  Widget build(BuildContext context) => const ProductWindow(
-    title: 'Flyer Distribution Target',
-    accent: businessGreen,
-    label: 'EXAMPLE',
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _MapLayers(),
-        SizedBox(height: 14),
-        ProductLine('Service Area', 'Anne Arundel County'),
-        ProductLine('Goal', 'Get more deck estimates'),
-        ProductLine('Flyers', '500'),
-        ProductLine('Campaign target', 'Local residential target'),
-        ProductLine('Zone 1', 'Mapped', color: scalerBlue),
-        ProductLine('Route', 'Not yet verified'),
-        ProductLine('Recommended Base', '\$100.00'),
-        ProductLine('Estimated Effective Pay', '\$20.00/hour equivalent'),
-        ProductLine('Completion Incentive', '+\$20.00 optional'),
-        ProductLine('Quality Incentive', '+\$10.00 optional'),
-        ProductLine('Potential Payout', '\$130.00'),
-        SizedBox(height: 14),
-        Text(
-          'CAMPAIGN ZONES',
-          style: TextStyle(
-            color: Colors.white,
-            fontSize: 12,
-            fontWeight: FontWeight.w900,
-          ),
-        ),
-        SizedBox(height: 8),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: [
-            StatusPill('1 Zone', color: scalerBlue),
-            StatusPill('1 Mapped', color: scalerBlue),
-            StatusPill('0 Assigned', color: publicMuted),
-          ],
-        ),
-        SizedBox(height: 14),
-        Text(
-          'VALIDATED SMART ZONE DEMO',
-          style: TextStyle(
-            color: businessGreen,
-            fontSize: 11,
-            fontWeight: FontWeight.w900,
-          ),
-        ),
-        SizedBox(height: 6),
-        ProductLine('Selected Area', 'Baltimore, Maryland • Demo'),
-        ProductLine('Estimated Homes', '225 • Conservative estimate'),
-        ProductLine('Walking Route', 'Not yet verified'),
-        ProductLine('Workload', '5 hours • serviceable geography'),
-        SizedBox(height: 8),
-        StatusPill(
-          'Review Campaign',
-          color: businessGreen,
-          icon: Icons.fact_check_outlined,
-        ),
-        SizedBox(height: 10),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: [
-            StatusPill('Selected Area', color: publicMuted),
-            StatusPill('Smart Zone A', color: businessGreen),
-            StatusPill('Route not verified', color: scalerBlue),
-          ],
-        ),
-      ],
-    ),
-  );
-}
-
-class _MapLayers extends StatelessWidget {
-  const _MapLayers();
-  @override
-  Widget build(BuildContext context) => const AuthenticProductMap(
-    mode: PublicProductMapMode.campaign,
-    height: 240,
-  );
+  Widget build(BuildContext context) => const CampaignWorkflowIllustration();
 }
 
 class _WeatherVisual extends StatelessWidget {
@@ -533,7 +459,7 @@ class _WeatherVisual extends StatelessWidget {
         ProductLine('Official fact status', 'Sample scenario only'),
         SizedBox(height: 10),
         Text(
-          'ScaledCircle can qualify what an official event could mean for broad local marketing. It does not claim individual property damage or need.',
+          'Scaled Circle can qualify what an official event could mean for broad local marketing. It does not claim individual property damage or need.',
           style: TextStyle(color: publicMuted, fontSize: 12, height: 1.4),
         ),
       ],
@@ -613,9 +539,9 @@ class _ManagedGrowthBand extends StatelessWidget {
   Widget build(BuildContext context) => const FunnelSection(
     key: Key('business-managed-growth'),
     step: 'MANAGED GROWTH',
-    title: 'WANT SCALEDCIRCLE TO HELP PREPARE THE MARKETING?',
+    title: 'WANT SCALED CIRCLE TO HELP PREPARE THE MARKETING?',
     body:
-        'ScaledCircle helps prepare ongoing marketing from your Business Profile, Service Areas, goals, and local intelligence. You keep review and approval control.',
+        'Scaled Circle helps prepare ongoing marketing from your Business Profile, Service Areas, goals, and local intelligence. You keep review and approval control.',
     accent: businessGreen,
     visual: ProductPanel(
       child: Column(
@@ -721,7 +647,7 @@ class _BusinessPricing extends StatelessWidget {
     'growth': 'Core Business OS. 3 total seats, including the owner.',
     'scale':
         'Core Business OS plus Property and supported Weather Intelligence. 5 total seats, including the owner.',
-    'managed_growth': 'Have ScaledCircle help prepare ongoing marketing.',
+    'managed_growth': 'Have Scaled Circle help prepare ongoing marketing.',
   };
 }
 

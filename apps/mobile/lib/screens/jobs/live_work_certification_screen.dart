@@ -118,7 +118,7 @@ class _LiveWorkCertificationState extends State<LiveWorkCertificationScreen> {
       final quote = _data?['quote'] as Map?;
       if (!await _confirm(
         'Review Business payment',
-        'Base: ${_money(quote?['workerAmountCents'])}\nScaledCircle fee: ${_money(quote?['platformFeeCents'])}\nTotal: ${_money(quote?['totalChargeCents'])}\n\nContinue only after the Founder payment checkpoint has been approved. Stripe will show the final payment confirmation.',
+        'Base: ${_money(quote?['workerAmountCents'])}\nScaled Circle fee: ${_money(quote?['platformFeeCents'])}\nTotal: ${_money(quote?['totalChargeCents'])}\n\nContinue only after the Founder payment checkpoint has been approved. Stripe will show the final payment confirmation.',
       )) {
         return;
       }

@@ -1,3 +1,5 @@
+import '../../services/subscription_plan_service.dart';
+import '../../widgets/business_profile_completion.dart';
 import '../../config/native_release_policy.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_app/navigation/authenticated_app_bar.dart';
@@ -11,7 +13,6 @@ import '../../navigation/app_router.dart';
 
 import '../../models/campaign_card_compensation.dart';
 import '../../models/business_result_summary.dart';
-import '../../services/subscription_plan_service.dart';
 import '../../services/maryland_weather_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/scaled_circle_brand.dart';
@@ -214,6 +215,7 @@ class _BusinessToday extends StatelessWidget {
 }
 
 class _BusinessDashboardState extends State<BusinessDashboard> {
+  final _profileCompletion = GlobalKey<BusinessProfileCompletionState>();
   void _openCampaigns(
     BuildContext context,
     String businessId, {
@@ -232,8 +234,6 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
       ),
     );
   }
-
-  final SubscriptionPlanService _planService = SubscriptionPlanService();
 
   final MarylandWeatherService _weatherService = MarylandWeatherService();
 
@@ -285,117 +285,22 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
 
   Future<void> _refreshDashboard() async {
     await _loadWeather();
+    await _profileCompletion.currentState?.refresh();
   }
 
   Future<void> _openCreateCampaign(BuildContext context, String userId) async {
     try {
-      final workspace = await BusinessWorkspaceService().context();
+      await BusinessWorkspaceService().context();
       if (!context.mounted) return;
       if (!BusinessWorkspaceSession.can('campaigns')) {
         throw StateError('Campaign access is required.');
       }
-      final planId = workspace['planId']?.toString() ?? '';
-      final subscriptionActive = workspace['subscriptionActive'] == true;
-      if (!subscriptionActive) {
-        final subscribed = await Navigator.push<bool>(
-          context,
-          MaterialPageRoute(builder: (_) => const SubscriptionScreen()),
-        );
-
-        if (!context.mounted) {
-          return;
-        }
-
-        if (!context.mounted) {
-          return;
-        }
-
-        if (subscribed != true) {
-          return;
-        }
-
-        await _openCreateCampaign(context, userId);
-
-        return;
-      }
-
-      final campaignsSnapshot = await businessWorkspaceRecords(
-        FirebaseFirestore.instance,
-        'campaigns',
-        userId,
-      ).first.timeout(const Duration(seconds: 25));
-
-      if (!context.mounted) {
-        return;
-      }
-
-      int activeCampaignCount = 0;
-
-      for (final campaign in campaignsSnapshot) {
-        final data = campaign.data() ?? {};
-
-        final status = data['status']?.toString().toLowerCase() ?? '';
-
-        if (status != 'draft' &&
-            status != 'completed' &&
-            status != 'cancelled' &&
-            status != 'canceled') {
-          activeCampaignCount++;
-        }
-      }
-
-      final canCreateCampaign = _planService.canCreateCampaign(
-        plan: planId,
-        currentActiveCampaigns: activeCampaignCount,
-      );
-
-      if (!canCreateCampaign) {
-        final campaignLimit = _planService.getMaxActiveCampaigns(planId);
-
-        if (!context.mounted) {
-          return;
-        }
-
-        await showDialog<void>(
-          context: context,
-          builder: (dialogContext) {
-            return AlertDialog(
-              title: const Text('Campaign Limit Reached'),
-              content: Text(
-                campaignLimit == null
-                    ? 'Your current plan does not allow another campaign.'
-                    : 'Your ${_planService.getPlanName(planId)} plan allows '
-                          '$campaignLimit active '
-                          'campaign${campaignLimit == 1 ? '' : 's'}. '
-                          '${kIsWeb ? 'Complete an existing campaign or upgrade your plan before creating another one.' : 'Complete an existing campaign before creating another one.'}',
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () {
-                    Navigator.pop(dialogContext);
-                  },
-                  child: const Text('OK'),
-                ),
-              ],
-            );
-          },
-        );
-
-        return;
-      }
-
-      if (!context.mounted) {
-        return;
-      }
-
+      // Both clients use server-authorized own-team/marketplace planning.
+      // Opening the editor does not confer funding or work-start authority.
       await Navigator.push(
         context,
         MaterialPageRoute(builder: (_) => const CreateCampaignScreen()),
       );
-
-      if (!context.mounted) {
-        return;
-      }
     } catch (e) {
       if (!context.mounted) {
         return;
@@ -814,6 +719,17 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
                     50,
                   ),
                   children: [
+                    BusinessProfileCompletion(
+                      key: _profileCompletion,
+                      actorUid: user.uid,
+                      businessId: BusinessWorkspaceSession.businessIdFor(
+                        user.uid,
+                      ),
+                      onContinue: () => _openCreateCampaign(
+                        context,
+                        BusinessWorkspaceSession.businessIdFor(user.uid),
+                      ),
+                    ),
                     Card(
                       child: ListTile(
                         leading: const Icon(Icons.calendar_month_outlined),

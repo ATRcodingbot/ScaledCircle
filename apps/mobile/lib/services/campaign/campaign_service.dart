@@ -365,7 +365,9 @@ class CampaignService {
     required String status,
   }) async {
     if (status != 'rejected') {
-      throw StateError('Application status changes require assignment authority.');
+      throw StateError(
+        'Application status changes require assignment authority.',
+      );
     }
     await _secureFunctions.call(
       functionName: 'rejectCampaignApplication',
@@ -580,77 +582,28 @@ class CampaignService {
   // - prevents broken references
   // - allows businesses to restore mistakes
   //
-  // Only unused TEST campaigns may be deleted.
+  // Eligible unfinished drafts can be removed through server-reviewed list
+  // actions. Removal retains the campaign audit record and linked history.
   // ------------------------------------------------------------
 
+  // Lifecycle eligibility and confirmation are owned by CampaignListActions.
+  // Legacy programmatic mutations cannot bypass that review flow.
   Future<void> archiveCampaign({
     required String campaignId,
     required String userId,
   }) async {
-    if (campaignId.trim().isEmpty) {
-      throw Exception('Campaign ID is required.');
-    }
-
-    await _campaigns.doc(campaignId).update({
-      'status': 'archived',
-      'archived': true,
-      'archivedBy': userId,
-      'archivedAt': FieldValue.serverTimestamp(),
-      'updatedAt': FieldValue.serverTimestamp(),
-    });
+    throw UnsupportedError(
+      'Use the campaign list action to review current server eligibility.',
+    );
   }
 
   Future<void> restoreCampaign({required String campaignId}) async {
-    if (campaignId.trim().isEmpty) {
-      throw Exception('Campaign ID is required.');
-    }
-
-    await _campaigns.doc(campaignId).update({
-      'archived': false,
-      'status': 'draft',
-      'updatedAt': FieldValue.serverTimestamp(),
-    });
+    throw UnsupportedError('Use Restore to list from Archived campaigns.');
   }
 
-  Future<bool> canDeleteCampaign(String campaignId) async {
-    final campaign = await _campaigns.doc(campaignId).get();
-
-    if (!campaign.exists) {
-      return false;
-    }
-
-    final data = campaign.data();
-
-    // Only allow deleting test campaigns
-    if (data?['isTestCampaign'] != true) {
-      return false;
-    }
-
-    final applications = await _applications(campaignId).limit(1).get();
-
-    final locations = await _campaignLocations
-        .where('campaignId', isEqualTo: campaignId)
-        .limit(1)
-        .get();
-
-    final completions = await _campaignCompletions
-        .where('campaignId', isEqualTo: campaignId)
-        .limit(1)
-        .get();
-
-    return applications.docs.isEmpty &&
-        locations.docs.isEmpty &&
-        completions.docs.isEmpty;
-  }
-
+  Future<bool> canDeleteCampaign(String campaignId) async => false;
   Future<void> deleteTestCampaign({required String campaignId}) async {
-    final allowed = await canDeleteCampaign(campaignId);
-
-    if (!allowed) {
-      throw Exception('Only unused test campaigns can be permanently deleted.');
-    }
-
-    await _campaigns.doc(campaignId).delete();
+    throw UnsupportedError('Use Delete draft from the campaign list.');
   }
 
   Future<void> replaceCompletionProofs({

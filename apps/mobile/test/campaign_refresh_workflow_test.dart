@@ -175,10 +175,20 @@ void _unchangedEffects(CampaignRefreshFirebase backend, {int quoteCalls = 1}) {
     backend.calls.where(
       (name) =>
           name != 'quoteCampaignFunding' &&
+          name != 'getCampaignFundingState' &&
+          name != 'getCampaignZoneIntelligence' &&
+          name != 'businessOperationsV1' &&
           name != 'getBusinessWorkspaceContext',
     ),
     isEmpty,
   );
+  for (final call in backend.callArguments.where(
+    (call) => call['name'] == 'businessOperationsV1',
+  )) {
+    final data = call['data'] as Map;
+    expect(data['operation'], 'campaignWorkloadContext');
+    expect(data['input'], {'campaignId': 'refresh-draft'});
+  }
   expect(backend.documents[_draftPath]!['campaignName'], 'Refresh draft');
   expect(backend.documents[_zonePath]!['serviceAreaPointCount'], 48);
   expect(backend.documents[_zonePath]!['areaSquareMeters'], 97263807);
@@ -200,6 +210,27 @@ void main() {
         return refresh == null ? workspace : await refresh!();
       }
       if (name == 'quoteCampaignFunding') return _quote();
+      // Maintained read-only funding presentation was added after this fixture.
+      if (name == 'getCampaignFundingState') {
+        return {
+          'campaignId': 'refresh-draft',
+          'fundingStatus': 'unfunded',
+          'allocation': null,
+        };
+      }
+      if (name == 'getCampaignZoneIntelligence') {
+        throw FirebaseFunctionsException(
+          code: 'unavailable',
+          message: 'Synthetic evidence offline',
+        );
+      }
+      if (name == 'businessOperationsV1' &&
+          data['operation'] == 'campaignWorkloadContext') {
+        return {
+          'ready': false,
+          'reason': 'Synthetic workload authority offline',
+        };
+      }
       throw StateError('Unexpected callable: $name');
     };
   });
@@ -270,10 +301,17 @@ void main() {
       await tester.tap(find.text('Manage Campaign Zones'));
       await tester.pumpAndSettle();
       await _reveal(tester, find.byType(ZoneIntelligenceCard));
-      expect(find.text('Regional housing estimate'), findsOneWidget);
-      expect(find.text('6,237 units'), findsOneWidget);
-      expect(find.text('Requires route/stop review'), findsOneWidget);
-      expect(find.text('500'), findsOneWidget);
+      // Current cards use the factual endpoint; preserve historical source
+      // data through navigation without asserting obsolete primary copy.
+      final retained =
+          tester
+                  .widget<ZoneIntelligenceCard>(
+                    find.byType(ZoneIntelligenceCard),
+                  )
+                  .data['targetPlanning']
+              as Map;
+      expect(retained['residentialProperties'], 6237);
+      expect(retained['materialsAvailable'], 500);
       await _reveal(tester, find.text('Edit Zone'));
       await tester.tap(find.text('Edit Zone'));
       await tester.pumpAndSettle();
@@ -319,7 +357,9 @@ void main() {
       expect(find.text(r'Planning total: $120.00'), findsOneWidget);
       expect(find.text(r'Maximum Scaler pay: $100.00'), findsOneWidget);
       expect(find.text(r'Platform fee (20%): $20.00'), findsOneWidget);
-      expect(backend.gets.where((path) => path == _draftPath), hasLength(1));
+      // Route cache read plus the maintained workload authority's fresh parent
+      // read when Zones opens; permission ticks must not add campaign reads.
+      expect(backend.gets.where((path) => path == _draftPath), hasLength(2));
       expect(
         backend.calls
             .where((name) => name == 'getBusinessWorkspaceContext')

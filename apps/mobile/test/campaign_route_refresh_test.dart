@@ -112,7 +112,14 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      expect(find.text('Campaign not available.'), findsOneWidget);
+      expect(
+        find.text(
+          failed
+              ? 'Campaign temporarily unavailable'
+              : 'Campaign no longer available',
+        ),
+        findsOneWidget,
+      );
       expect(find.text('Private campaign'), findsNothing);
     }
   });

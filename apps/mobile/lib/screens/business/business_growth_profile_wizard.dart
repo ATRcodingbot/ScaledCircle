@@ -241,7 +241,7 @@ class _BusinessGrowthProfileWizardState
   );
 
   Widget _summary() => _question(
-    "Here's what ScaledCircle understands about your business.",
+    "Here's what Scaled Circle understands about your business.",
     "We'll remember this when creating your marketing.",
     Card(
       child: Padding(

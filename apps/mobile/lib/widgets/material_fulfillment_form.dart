@@ -13,6 +13,7 @@ class MaterialFulfillmentForm extends StatefulWidget {
     this.businessAddress,
     this.businessLatitude,
     this.businessLongitude,
+    this.ownTeam = false,
   });
 
   final MaterialLogisticsDraft value;
@@ -22,6 +23,7 @@ class MaterialFulfillmentForm extends StatefulWidget {
   final String? businessAddress;
   final double? businessLatitude;
   final double? businessLongitude;
+  final bool ownTeam;
 
   @override
   State<MaterialFulfillmentForm> createState() =>
@@ -95,9 +97,13 @@ class _MaterialFulfillmentFormState extends State<MaterialFulfillmentForm> {
 
   String _label(String value) => switch (value) {
     MaterialLogisticsDraft.scalerPickupPrintShop =>
-      'Scaler picks up from printing shop',
+      widget.ownTeam
+          ? 'My team picks up from printing shop'
+          : 'Scaler picks up from printing shop',
     MaterialLogisticsDraft.scalerPickupBusiness =>
-      'Scaler picks up from my Business',
+      widget.ownTeam
+          ? 'My team picks up from my Business'
+          : 'Scaler picks up from my Business',
     MaterialLogisticsDraft.businessDelivery =>
       'I will deliver / drop off materials',
     _ => 'No physical materials required',
@@ -119,7 +125,11 @@ class _MaterialFulfillmentFormState extends State<MaterialFulfillmentForm> {
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 6),
-            const Text('How will Scalers receive campaign materials?'),
+            Text(
+              widget.ownTeam
+                  ? 'How will your team receive campaign materials?'
+                  : 'How will Scalers receive campaign materials?',
+            ),
             if (widget.lockMessage != null) ...[
               const SizedBox(height: 8),
               Text(

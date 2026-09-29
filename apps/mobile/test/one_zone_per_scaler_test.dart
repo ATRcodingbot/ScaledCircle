@@ -32,10 +32,10 @@ void main() {
     expect(areaSource, contains("'\$_zoneName already has an area'"));
     expect(areaSource, contains("'Replace \$_zoneName'"));
     expect(areaSource, contains('_confirmReplaceExistingArea'));
-    expect(areaSource, contains('unawaited(_changeShape(selection.first))'));
+    expect(areaSource, contains('() => _changeShape(shape)'));
     expect(
       areaSource,
-      contains('unawaited(_handleMapTap(tapPosition, point))'),
+      contains('unawaited(_replaceThenPlacePoint(tapPosition, point))'),
     );
   });
 

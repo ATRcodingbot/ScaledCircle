@@ -110,7 +110,7 @@ class _WeatherAlertsState extends State<WeatherAlertsScreen> {
             style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
           ),
           const Text(
-            'ScaledCircle is not your sole source of emergency warnings. Follow official instructions.',
+            'Scaled Circle is not your sole source of emergency warnings. Follow official instructions.',
           ),
           if (data?['canConfigure'] == true)
             OutlinedButton(

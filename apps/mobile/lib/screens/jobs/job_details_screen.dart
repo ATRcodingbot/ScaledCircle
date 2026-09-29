@@ -179,7 +179,7 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
         );
       } else {
         throw UnsupportedError(
-          'Active-job GPS tracking requires the ScaledCircle Android or iOS app.',
+          'Active-job GPS tracking requires the Scaled Circle Android or iOS app.',
         );
       }
 

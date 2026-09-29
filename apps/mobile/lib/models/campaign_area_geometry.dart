@@ -1,10 +1,33 @@
 import 'dart:math' as math;
+import 'dart:convert';
+import 'package:crypto/crypto.dart';
 
 import 'package:latlong2/latlong.dart';
 
 enum CampaignAreaShape { polygon, rectangle, circle, triangle }
 
 abstract final class CampaignAreaGeometry {
+  /// Same ordered seven-decimal fingerprint as server zoneGeometryDigest.
+  /// Used only to suppress stale displayed evidence, never to grant authority.
+  static String? savedDigest(dynamic raw) {
+    if (raw is! List || raw.length < 3) return null;
+    final coordinates = <List<String>>[];
+    for (final point in raw) {
+      if (point is! Map ||
+          point['latitude'] is! num ||
+          point['longitude'] is! num) {
+        return null;
+      }
+      final lat = (point['latitude'] as num).toDouble();
+      final lng = (point['longitude'] as num).toDouble();
+      if (!lat.isFinite || !lng.isFinite || lat.abs() > 90 || lng.abs() > 180) {
+        return null;
+      }
+      coordinates.add([lat.toStringAsFixed(7), lng.toStringAsFixed(7)]);
+    }
+    return sha256.convert(utf8.encode(jsonEncode(coordinates))).toString();
+  }
+
   static List<LatLng> fromInput(CampaignAreaShape shape, List<LatLng> points) {
     switch (shape) {
       case CampaignAreaShape.polygon:

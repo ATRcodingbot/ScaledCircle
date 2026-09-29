@@ -48,32 +48,48 @@ class _CampaignRouteContentState extends State<CampaignRouteContent> {
   }
 
   @override
-  Widget build(BuildContext context) =>
-      FutureBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-        future: _campaign,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState != ConnectionState.done) {
-            return const Scaffold(
-              body: Center(child: CircularProgressIndicator()),
-            );
-          }
-          final campaign = snapshot.data;
-          if (snapshot.hasError || campaign == null || !campaign.exists) {
-            return RouteRecoveryScreen(
-              title: 'Campaign not available.',
-              destination: widget.fallbackRoute,
-            );
-          }
-          if (!widget.isAdmin &&
-              (campaign.data()?['businessId'] != widget.actorUid ||
-                  (widget.workspaceId != null &&
-                      campaign.data()?['businessId'] != widget.workspaceId))) {
-            return RouteRecoveryScreen(
-              title: "You don't have access to this campaign.",
-              destination: widget.fallbackRoute,
-            );
-          }
-          return widget.builder(campaign);
-        },
-      );
+  Widget build(
+    BuildContext context,
+  ) => FutureBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+    future: _campaign,
+    builder: (context, snapshot) {
+      if (snapshot.connectionState != ConnectionState.done) {
+        return const Scaffold(body: Center(child: CircularProgressIndicator()));
+      }
+      final campaign = snapshot.data;
+      // A hard-deleted document has no workspace fields, so the maintained
+      // tenant rules may deny its read instead of returning a missing doc.
+      // Use the same recovery for inaccessible IDs without revealing whether
+      // another Business owns one. Network/service failures remain distinct.
+      final error = snapshot.error;
+      final unavailable =
+          error is FirebaseException &&
+          const {'permission-denied', 'not-found'}.contains(error.code);
+      if (snapshot.hasError ||
+          campaign == null ||
+          !campaign.exists ||
+          campaign.data()?['status'] == 'deleted') {
+        return RouteRecoveryScreen(
+          title: snapshot.hasError && !unavailable
+              ? 'Campaign temporarily unavailable'
+              : 'Campaign no longer available',
+          destination: widget.isAdmin
+              ? widget.fallbackRoute
+              : '/business/campaigns',
+          actionLabel: widget.isAdmin
+              ? 'Return to Dashboard'
+              : 'Return to Campaigns',
+        );
+      }
+      if (!widget.isAdmin &&
+          campaign.data()?['businessId'] !=
+              (widget.workspaceId ?? widget.actorUid)) {
+        return RouteRecoveryScreen(
+          title: "You don't have access to this campaign.",
+          destination: widget.fallbackRoute,
+        );
+      }
+      return widget.builder(campaign);
+    },
+  );
 }

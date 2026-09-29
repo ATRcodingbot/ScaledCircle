@@ -105,7 +105,7 @@ void main() {
       );
       await tester.tap(find.byType(DropdownButtonFormField<String>));
       await tester.pumpAndSettle();
-      expect(find.text('ScaledCircle Printing — Coming Soon'), findsWidgets);
+      expect(find.text('Scaled Circle Printing — Coming Soon'), findsWidgets);
       expect(
         campaignMaterialSourceOptions
             .singleWhere((item) => item.value == 'printed_by_scaled_circle')
@@ -113,7 +113,7 @@ void main() {
         isFalse,
       );
       await tester.tap(
-        find.text('ScaledCircle Printing — Coming Soon').last,
+        find.text('Scaled Circle Printing — Coming Soon').last,
         warnIfMissed: false,
       );
       await tester.pumpAndSettle();

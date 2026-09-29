@@ -80,7 +80,7 @@ class _ScalerCashoutCardState extends State<ScalerCashoutCard>
             'cashout_setup_confirming':
                 "We're confirming your payout setup. Check its status before continuing.",
             'cashout_setup_platform_blocked':
-                'Payout setup is currently unavailable. ScaledCircle is resolving an issue with its payout provider. Your earnings are unchanged.',
+                'Payout setup is currently unavailable. Scaled Circle is resolving an issue with its payout provider. Your earnings are unchanged.',
             'cashout_setup_provider_rejected':
                 "We couldn't start payout setup. Please try again later or contact support.",
           };

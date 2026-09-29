@@ -57,7 +57,7 @@ class SocialPerformancePanel extends StatelessWidget {
                     ),
                   ),
                 Text(
-                  'Published through ScaledCircle: ${p['published'] ?? 'Unavailable'}',
+                  'Published through Scaled Circle: ${p['published'] ?? 'Unavailable'}',
                 ),
               ],
             ),

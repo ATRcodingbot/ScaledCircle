@@ -68,7 +68,7 @@ void main() {
     );
     expect(
       screen,
-      contains('Allow ScaledCircle to publish this approved post'),
+      contains('Allow Scaled Circle to publish this approved post'),
     );
     expect(screen, contains('Approve this exact X post?'));
     expect(screen, contains('Use this X account?'));

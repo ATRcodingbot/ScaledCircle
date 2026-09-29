@@ -146,7 +146,7 @@ class _CampaignFundingReturnScreenState
           loading: true,
           title: 'Confirming payment...',
           message: _takingLonger
-              ? 'Confirmation is taking longer than expected. ScaledCircle is still waiting for signed payment authority; your browser return does not mark the campaign funded.'
+              ? 'Confirmation is taking longer than expected. Scaled Circle is still waiting for signed payment authority; your browser return does not mark the campaign funded.'
               : 'Waiting for the signed payment confirmation. You can safely keep this page open.',
           actionLabel: _takingLonger ? 'Return to Business Dashboard' : null,
           action: _takingLonger

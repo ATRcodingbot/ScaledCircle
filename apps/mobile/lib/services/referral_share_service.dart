@@ -33,7 +33,7 @@ Future<void> shareReferral(String destination, Rect origin) async {
   await SharePlus.instance.share(
     ShareParams(
       text: destination,
-      title: 'ScaledCircle referral',
+      title: 'Scaled Circle referral',
       sharePositionOrigin: origin,
     ),
   );

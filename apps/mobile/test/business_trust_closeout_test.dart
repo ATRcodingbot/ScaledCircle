@@ -24,7 +24,7 @@ void main() {
       isNot(contains('AppRoutes.campaignDetail(campaigns.first.id)')),
     );
     expect(campaigns, contains("key: const Key('campaign-list-create')"));
-    expect(campaigns, contains('No campaign results yet'));
+    expect(campaigns, contains('No archived campaigns'));
     expect(campaigns, contains('No campaigns yet'));
   });
 
@@ -44,7 +44,7 @@ void main() {
     expect(
       subscription,
       contains(
-        'Paid Scaler execution is held pending live cash-out certification',
+        'Supported Maryland field campaigns require separate funding and server-confirmed work eligibility',
       ),
     );
     for (final capability in [

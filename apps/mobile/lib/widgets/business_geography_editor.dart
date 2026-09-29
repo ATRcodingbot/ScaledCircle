@@ -44,6 +44,7 @@ class BusinessGeographyEditor extends StatelessWidget {
       MappedAddressField(
         key: const Key('business-base-search'),
         controller: baseController,
+        locationOnly: true,
         labelText: 'Business base',
         hintText: 'Search a city, ZIP or address',
         enabled: enabled,
@@ -97,6 +98,7 @@ class BusinessGeographyEditor extends StatelessWidget {
       MappedAddressField(
         key: const Key('business-area-search'),
         controller: areaController,
+        locationOnly: true,
         labelText: 'Add service area',
         hintText: 'Search a city, county or ZIP',
         enabled: enabled && areas.length < 8,

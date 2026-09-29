@@ -187,7 +187,7 @@ class _WeatherSettingsState extends State<WeatherCoverageSettingsScreen> {
                 onChanged: (v) => setState(() => urgent = v),
               ),
               const Text(
-                'ScaledCircle is not your sole source of emergency warnings. Follow official instructions. Expired warnings are not delivered as new emergencies.',
+                'Scaled Circle is not your sole source of emergency warnings. Follow official instructions. Expired warnings are not delivered as new emergencies.',
               ),
               if (error != null) Text(error!),
               FilledButton(

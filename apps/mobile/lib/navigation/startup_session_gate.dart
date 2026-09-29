@@ -272,7 +272,7 @@ class _StartupSessionGateState extends State<StartupSessionGate>
     if (state == null) {
       return _shell([
         const CircularProgressIndicator(),
-        const Text('Opening ScaledCircle…'),
+        const Text('Opening Scaled Circle…'),
       ]);
     }
     switch (resolveStartupDestination(state)) {
@@ -398,7 +398,7 @@ class _StartupSessionGateState extends State<StartupSessionGate>
 
   Widget _shell(List<Widget> children) => Scaffold(
     appBar: AppBar(
-      title: const Text('ScaledCircle'),
+      title: const Text('Scaled Circle'),
       actions: [
         if (widget.load == null && FirebaseAuth.instance.currentUser != null)
           const AuthenticatedSignOutButton(),

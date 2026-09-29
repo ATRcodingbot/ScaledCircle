@@ -54,7 +54,7 @@ void main() {
       final source = File(
         'lib/screens/business/scaled_circle_services_screen.dart',
       ).readAsStringSync();
-      expect(source, contains('ScaledCircle Services'));
+      expect(source, contains('Scaled Circle Services'));
       expect(source, contains('Upgrade / Learn More'));
       expect(
         source,

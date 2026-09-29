@@ -1,3 +1,4 @@
+import '../../widgets/door_hanger_proof_guide.dart';
 import 'package:flutter_app/navigation/authenticated_app_bar.dart';
 import 'package:flutter/material.dart';
 
@@ -429,7 +430,7 @@ class _PhysicalMarketingScreenState extends State<PhysicalMarketingScreen> {
                       title: const Text('Postcards — Coming Soon'),
                       subtitle: const Text(
                         AppEnvironmentConfig.isStaging
-                            ? 'Fulfilled by ScaledCircle. Review your design and confirmed quote before payment. Staging TEST orders only.'
+                            ? 'Fulfilled by Scaled Circle. Review your design and confirmed quote before payment. Staging TEST orders only.'
                             : 'Plan your territory-to-mail campaign. Coming soon — ordering is not available yet.',
                       ),
                       trailing: const Icon(Icons.chevron_right),
@@ -450,7 +451,7 @@ class _PhysicalMarketingScreenState extends State<PhysicalMarketingScreen> {
                               SizedBox(width: 12),
                               Expanded(
                                 child: Text(
-                                  'Add your Business name in Grow → Growth Plan → Set Up Your Growth Profile. ScaledCircle will never invent it for customer material.',
+                                  'Add your Business name in Grow → Growth Plan → Set Up Your Growth Profile. Scaled Circle will never invent it for customer material.',
                                 ),
                               ),
                             ],
@@ -656,7 +657,14 @@ class _MaterialCard extends StatelessWidget {
                         child: Column(
                           children: [
                             AspectRatio(
-                              aspectRatio: 3.5 / 8.5,
+                              aspectRatio:
+                                  (proof['width'] as num?)?.toDouble() !=
+                                          null &&
+                                      (proof['height'] as num?)?.toDouble() !=
+                                          null
+                                  ? (proof['width'] as num).toDouble() /
+                                        (proof['height'] as num).toDouble()
+                                  : 3.5 / 8.5,
                               child: DecoratedBox(
                                 decoration: BoxDecoration(
                                   border: Border.all(
@@ -666,16 +674,26 @@ class _MaterialCard extends StatelessWidget {
                                 ),
                                 child: ClipRRect(
                                   borderRadius: BorderRadius.circular(13),
-                                  child: AuthenticatedMediaPreview(
-                                    identity:
-                                        proof['contentHash'] ??
-                                        proof['storagePath'],
-                                    semanticLabel:
-                                        'Exact print proof side $side',
-                                    fit: BoxFit.contain,
-                                    load: () => service.bytes(
-                                      proof['storagePath'].toString(),
-                                      maximumBytes: 8 * 1024 * 1024,
+                                  child: DoorHangerProofGuide(
+                                    geometry:
+                                        (proof['guide'] as Map?)?['geometry'] ==
+                                            null
+                                        ? null
+                                        : Map<String, dynamic>.from(
+                                            (proof['guide'] as Map)['geometry']
+                                                as Map,
+                                          ),
+                                    child: AuthenticatedMediaPreview(
+                                      identity:
+                                          proof['contentHash'] ??
+                                          proof['storagePath'],
+                                      semanticLabel:
+                                          'Exact print proof side $side',
+                                      fit: BoxFit.contain,
+                                      load: () => service.bytes(
+                                        proof['storagePath'].toString(),
+                                        maximumBytes: 8 * 1024 * 1024,
+                                      ),
                                     ),
                                   ),
                                 ),
@@ -691,6 +709,26 @@ class _MaterialCard extends StatelessWidget {
             final details = Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                if (version['geometryMigrationRequired'] == true)
+                  const Text('Needs regeneration / Needs renewed approval'),
+                if (draft['productSpecId'] == 'door_hanger_3_5x8_5')
+                  const Padding(
+                    padding: EdgeInsets.only(bottom: 12),
+                    child: Text(
+                      'Full-page door-hanger artwork isn’t supported yet. Upload your logo and images and Scaled Circle will place them safely within the verified template.',
+                    ),
+                  ),
+
+                if (draft['productSpecId'] == 'door_hanger_3_5x8_5')
+                  const Padding(
+                    padding: EdgeInsets.only(bottom: 12),
+                    child: Text(
+                      'Door hangers include a reserved top area for the printer’s hole/die-cut. '
+                      'Important text, logos and QR codes are automatically kept below the safe area. '
+                      'The web preview guide is not printed. For GotPrint, download the flattened Printer JPG files. ',
+                    ),
+                  ),
+
                 Text(
                   draft['headline']?.toString() ?? 'Marketing material',
                   style: Theme.of(context).textTheme.titleLarge,
@@ -740,7 +778,8 @@ class _MaterialCard extends StatelessWidget {
                   spacing: 10,
                   runSpacing: 10,
                   children: [
-                    if (status == 'DRAFT')
+                    if (status == 'DRAFT' ||
+                        version['geometryMigrationRequired'] == true)
                       FilledButton.tonal(
                         onPressed: busy ? null : () => onPrepare(materialId),
                         child: const Text('Prepare proof'),
@@ -768,6 +807,24 @@ class _MaterialCard extends StatelessWidget {
                         icon: const Icon(Icons.download_outlined),
                         label: const Text('Print-ready PDF'),
                       ),
+                    if (status == 'ORDER_READY')
+                      ...((artifact['printRasters'] as List?) ?? const [])
+                          .whereType<Map>()
+                          .map(
+                            (raster) => OutlinedButton.icon(
+                              onPressed: busy
+                                  ? null
+                                  : () => onDownload(
+                                      raster['storagePath'].toString(),
+                                      '$materialId-print-side-${raster['side']}.jpg',
+                                      'image/jpeg',
+                                    ),
+                              icon: const Icon(Icons.download_outlined),
+                              label: Text(
+                                'Printer JPG side ${raster['side']} • 350 DPI CMYK',
+                              ),
+                            ),
+                          ),
                     if (status == 'ORDER_READY' &&
                         artifact['digitalJpgPath'] != null)
                       OutlinedButton.icon(

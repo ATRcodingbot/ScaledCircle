@@ -124,7 +124,7 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(find.text('Add your logo or photos'), findsOneWidget);
-    expect(find.textContaining('still use ScaledCircle'), findsOneWidget);
+    expect(find.textContaining('still use Scaled Circle'), findsOneWidget);
     expect(find.text('Upload image'), findsWidgets);
   });
 

@@ -175,7 +175,7 @@ void main() {
     expect(find.text('Add Another Work Area'), findsOneWidget);
     await tester.drag(find.byType(ListView), const Offset(0, -1200));
     await tester.pumpAndSettle();
-    expect(find.text('In ScaledCircle'), findsOneWidget);
+    expect(find.text('In Scaled Circle'), findsOneWidget);
     expect(find.text('Email me about matching jobs'), findsOneWidget);
     expect(find.text('Push notifications — Coming Soon'), findsOneWidget);
   });

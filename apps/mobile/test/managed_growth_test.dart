@@ -95,7 +95,7 @@ void main() {
     expect(wizard, contains('Advanced Settings'));
     expect(wizard, contains('Yes, use this'));
     expect(wizard, contains('Let me change it'));
-    expect(wizard, contains("Here's what ScaledCircle understands"));
+    expect(wizard, contains("Here's what Scaled Circle understands"));
     for (final jargon in [
       'service taxonomy',
       'geographic targeting parameters',
@@ -123,7 +123,7 @@ void main() {
     expect(
       public,
       contains(
-        'Planning does not activate paid field work. Campaign costs are separate.',
+        'Campaign costs are separate.',
       ),
     );
     expect(subscription, contains("plan: 'managed_growth'"));

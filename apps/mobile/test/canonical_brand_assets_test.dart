@@ -7,8 +7,8 @@ void main() {
     const assets = [
       'assets/brand/source/scaledcircle-approved-artwork.png',
       'assets/brand/scaledcircle-symbol.png',
-      'assets/brand/scaledcircle-lockup-dark-surface.png',
-      'assets/brand/scaledcircle-lockup-light-surface.png',
+      'assets/brand/wordmark-20260928/scaledcircle-lockup-dark-surface.png',
+      'assets/brand/wordmark-20260928/scaledcircle-lockup-light-surface.png',
       'assets/brand/scaledcircle-secondary-marketing-lockup.png',
       'web/favicon.png',
       'web/icons/Icon-192.png',
@@ -24,7 +24,7 @@ void main() {
     expect(pubspec, contains('- assets/brand/'));
     final index = File('web/index.html').readAsStringSync();
     expect(index, isNot(contains('scaled-circle-mark.svg')));
-    expect(index, contains('ScaledCircle'));
+    expect(index, contains('Scaled Circle'));
   });
 
   test('maintained brand widgets use approved assets, not drawn substitutes', () {
@@ -36,7 +36,7 @@ void main() {
     ).readAsStringSync();
     final publicBrand = public.split('class PublicTopNavigation').first;
     for (final source in [shared, publicBrand]) {
-      expect(source, contains('assets/brand/scaledcircle-'));
+      expect(source, contains('assets/brand/wordmark-20260928/scaledcircle-'));
       expect(source, isNot(contains('BoxShape.circle')));
     }
   });

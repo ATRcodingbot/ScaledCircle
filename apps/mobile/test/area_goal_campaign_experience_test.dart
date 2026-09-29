@@ -1,3 +1,4 @@
+import 'package:flutter_app/screens/business/campaign_planner_screen.dart';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -146,13 +147,9 @@ void main() {
     await tester.tap(find.text('Flyer Distribution'));
     await tester.pumpAndSettle();
     expect(find.byType(FlyerCampaignScreen), findsOneWidget);
-    expect(find.text('Create Flyer Distribution'), findsOneWidget);
-    await tester.drag(find.byType(ListView).last, const Offset(0, -5000));
-    await tester.pumpAndSettle();
-    expect(find.text('Create & Define Zones'), findsOneWidget);
-    await tester.tap(find.text('Create & Define Zones'));
-    await tester.pumpAndSettle();
-    expect(find.text('Enter how many flyers you have.'), findsOneWidget);
+    expect(find.byType(CampaignPlannerScreen), findsOneWidget);
+    expect(find.text('Create & Define Zones'), findsNothing);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('actual catalog CTA opens the zone map exactly once', (

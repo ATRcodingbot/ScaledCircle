@@ -16,7 +16,10 @@ class ZoneDisplayIdentity {
   final int sourceIndex;
 }
 
-final _canonicalZoneName = RegExp(r'^zone\s+(\d+)$', caseSensitive: false);
+final _canonicalZoneName = RegExp(
+  r'^(?:zone|area)\s+(\d+)$',
+  caseSensitive: false,
+);
 
 List<ZoneDisplayIdentity> resolveZoneDisplayIdentities(
   List<Map<String, dynamic>> zones,
@@ -55,7 +58,9 @@ List<ZoneDisplayIdentity> resolveZoneDisplayIdentities(
     final label =
         candidate.rawName != null &&
             (numericName == null || numericName == ordinal)
-        ? candidate.rawName!
+        ? numericName == null
+              ? candidate.rawName!
+              : 'Zone $ordinal'
         : 'Zone $ordinal';
     resolved[candidate.sourceIndex] = ZoneDisplayIdentity(
       authoritativeId: candidate.authoritativeId,

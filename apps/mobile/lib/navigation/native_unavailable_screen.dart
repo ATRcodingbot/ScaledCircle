@@ -10,7 +10,7 @@ class NativeUnavailableScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(
-      title: const Text('ScaledCircle'),
+      title: const Text('Scaled Circle'),
       actions: const [AuthenticatedSignOutButton()],
     ),
     body: Center(

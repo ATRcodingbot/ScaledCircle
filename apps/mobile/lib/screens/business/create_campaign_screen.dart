@@ -3,6 +3,7 @@ import 'package:flutter_app/navigation/authenticated_app_bar.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'campaign_planner_screen.dart';
 
 import '../../config/app_environment.dart';
 import '../../navigation/app_routes.dart';
@@ -236,7 +237,7 @@ class _CreateCampaignScreenState extends State<CreateCampaignScreen> {
         return 'Create Tracked Materials with Scaled Circle';
 
       case 'printed_by_scaled_circle':
-        return 'ScaledCircle Printing — Coming Soon';
+        return 'Scaled Circle Printing — Coming Soon';
 
       default:
         return source;
@@ -780,6 +781,12 @@ class _CreateCampaignScreenState extends State<CreateCampaignScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (!AppEnvironmentConfig.isLocal) {
+      return CampaignPlannerScreen(
+        initialServiceArea: widget.initialServiceArea,
+        propertyIntelligenceAnalysisId: widget.propertyIntelligenceAnalysisId,
+      );
+    }
     final previewBasePay = double.tryParse(payController.text.trim()) ?? 0;
 
     final previewBonus = double.tryParse(bonusController.text.trim()) ?? 0;

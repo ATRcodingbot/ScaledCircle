@@ -77,7 +77,7 @@ void main() {
       await tester.tap(find.text('Review quote & pay'));
       await tester.pumpAndSettle();
       final button = tester.widget<FilledButton>(
-        find.widgetWithText(FilledButton, 'Pay ScaledCircle — TEST'),
+        find.widgetWithText(FilledButton, 'Pay Scaled Circle — TEST'),
       );
       expect(button.onPressed, isNull);
       expect(

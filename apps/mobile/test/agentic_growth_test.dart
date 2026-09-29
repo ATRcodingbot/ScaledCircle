@@ -182,7 +182,7 @@ void main() {
       service.fail = false;
       await tester.tap(find.text('Try again'));
       await tester.pumpAndSettle();
-      expect(find.text('ScaledCircle Growth Agents'), findsOneWidget);
+      expect(find.text('Scaled Circle Growth Agents'), findsOneWidget);
     },
   );
 

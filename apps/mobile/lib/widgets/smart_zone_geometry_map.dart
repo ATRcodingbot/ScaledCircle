@@ -122,6 +122,8 @@ class SmartZoneGeometryMap extends StatefulWidget {
     this.height,
     this.mapKey,
     this.showZoneSelector = false,
+    this.planningPreview = false,
+    this.tileProvider,
     super.key,
   });
 
@@ -133,6 +135,8 @@ class SmartZoneGeometryMap extends StatefulWidget {
   final double? height;
   final Key? mapKey;
   final bool showZoneSelector;
+  final bool planningPreview;
+  final TileProvider? tileProvider;
 
   @override
   State<SmartZoneGeometryMap> createState() => _SmartZoneGeometryMapState();
@@ -165,6 +169,28 @@ class _SmartZoneGeometryMapState extends State<SmartZoneGeometryMap> {
     final operationalPoints = <LatLng>[
       for (final zone in validZones) ...zone.points,
     ];
+    final targetPoints = <LatLng>[
+      for (final zone in widget.zones)
+        if (zone['planningTargets'] is Map)
+          ...smartZonePoints(zone['planningTargets']['features']),
+    ];
+    final supportingSegments = <List<LatLng>>[
+      for (final zone in widget.zones)
+        if (zone['planningNetwork'] is Map &&
+            zone['planningNetwork']['isExecutionRoute'] == false)
+          for (final segment
+              in zone['planningNetwork']['segments'] as List? ?? const [])
+            if (segment is Map)
+              smartZonePoints([segment['from'], segment['to']]),
+    ].where((points) => points.length == 2).toList();
+    final fitPoints = <LatLng>[
+      ...operationalPoints,
+      // Preview starts at the recommended areas; the unchanged search outline
+      // remains on the map and can be inspected with normal pan/zoom.
+      if (!widget.planningPreview) ...widget.selectedTerritory,
+      ...targetPoints,
+      for (final segment in supportingSegments) ...segment,
+    ];
     if (validZones.isEmpty || operationalPoints.length < 3) {
       return const Card(
         child: Padding(
@@ -186,7 +212,9 @@ class _SmartZoneGeometryMapState extends State<SmartZoneGeometryMap> {
             .clamp(24.0, 64.0);
         return Semantics(
           label:
-              'Campaign territory with ${validZones.length} authoritative worker Zones. '
+              '${widget.planningPreview ? 'Candidate planning territory' : 'Saved campaign territory'} with ${validZones.length} areas. '
+              '${targetPoints.length} mapped target features and ${supportingSegments.length} supporting street segments. '
+              '${widget.planningPreview ? 'No execution route is approved. ' : ''}'
               'Labels use $labels.',
           child: ClipRRect(
             borderRadius: BorderRadius.circular(16),
@@ -206,9 +234,7 @@ class _SmartZoneGeometryMapState extends State<SmartZoneGeometryMap> {
                             initialCenter: operationalPoints.first,
                             initialZoom: 14,
                             initialCameraFit: CameraFit.bounds(
-                              bounds: LatLngBounds.fromPoints(
-                                operationalPoints,
-                              ),
+                              bounds: LatLngBounds.fromPoints(fitPoints),
                               padding: EdgeInsets.all(cameraPadding),
                               maxZoom: validZones.length == 1
                                   ? 17
@@ -227,6 +253,7 @@ class _SmartZoneGeometryMapState extends State<SmartZoneGeometryMap> {
                               urlTemplate:
                                   'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
                               userAgentPackageName: 'com.scaledcircle.app',
+                              tileProvider: widget.tileProvider,
                             ),
                             if (widget.selectedTerritory.length >= 3)
                               PolygonLayer(
@@ -263,22 +290,63 @@ class _SmartZoneGeometryMapState extends State<SmartZoneGeometryMap> {
                                   .toList(growable: false),
                             ),
                             PolylineLayer(
+                              key: const Key('planning-street-evidence'),
                               polylines: [
-                                for (final zone in validZones)
-                                  if (widget.zones[zone.index]['executionRoute']
-                                      is Map)
-                                    Polyline(
-                                      points: smartZonePoints(
-                                        widget.zones[zone
-                                            .index]['executionRoute']['centerline'],
-                                      ),
-                                      color: smartZoneColor(
-                                        zone.identity.styleKey - 1,
-                                      ),
-                                      strokeWidth: 4,
+                                for (final points in supportingSegments)
+                                  Polyline(
+                                    points: points,
+                                    color: const Color(0xFF8A4E00),
+                                    strokeWidth: 3,
+                                    pattern: StrokePattern.dashed(
+                                      segments: [6, 4],
                                     ),
+                                  ),
                               ],
                             ),
+                            MarkerLayer(
+                              key: const Key('mapped-target-evidence'),
+                              markers: [
+                                for (final point in targetPoints)
+                                  Marker(
+                                    point: point,
+                                    width: 10,
+                                    height: 10,
+                                    child: Semantics(
+                                      label:
+                                          'Mapped target feature, not a verified delivery point',
+                                      child: DecoratedBox(
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFF5B2785),
+                                          shape: BoxShape.circle,
+                                          border: Border.all(
+                                            color: Colors.white,
+                                            width: 1.5,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                            if (!widget.planningPreview)
+                              PolylineLayer(
+                                polylines: [
+                                  for (final zone in validZones)
+                                    if (widget.zones[zone
+                                            .index]['executionRoute']
+                                        is Map)
+                                      Polyline(
+                                        points: smartZonePoints(
+                                          widget.zones[zone
+                                              .index]['executionRoute']['centerline'],
+                                        ),
+                                        color: smartZoneColor(
+                                          zone.identity.styleKey - 1,
+                                        ),
+                                        strokeWidth: 4,
+                                      ),
+                                ],
+                              ),
                             MarkerLayer(
                               markers: validZones
                                   .asMap()
@@ -363,41 +431,17 @@ class _SmartZoneGeometryMapState extends State<SmartZoneGeometryMap> {
                             ),
                           ],
                         ),
-                        Positioned(
-                          left: 10,
-                          bottom: 10,
-                          child: IgnorePointer(
-                            child: DecoratedBox(
-                              decoration: BoxDecoration(
-                                color: Theme.of(
-                                  context,
-                                ).colorScheme.surface.withValues(alpha: 0.92),
-                                borderRadius: BorderRadius.circular(8),
-                                boxShadow: const [
-                                  BoxShadow(
-                                    color: Colors.black26,
-                                    blurRadius: 4,
-                                  ),
-                                ],
-                              ),
-                              child: const Padding(
-                                padding: EdgeInsets.symmetric(
-                                  horizontal: 10,
-                                  vertical: 7,
-                                ),
-                                child: Text(
-                                  'Dashed: selected territory  •  Colored: Scaler Zones',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
                       ],
                     ),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.all(10),
+                  child: Text(
+                    widget.planningPreview
+                        ? 'Colored boundary: candidate planning territory. Purple dots: mapped target features. Brown dashed lines: supporting street network. Gray dashed outline: search region. Execution route: not approved.'
+                        : 'Colored boundaries: saved campaign areas. Purple dots: mapped target features. Brown dashed lines: supporting street evidence, not an execution route. Gray dashed outline: selected territory.',
+                    style: const TextStyle(fontSize: 12),
                   ),
                 ),
                 if (widget.showZoneSelector)

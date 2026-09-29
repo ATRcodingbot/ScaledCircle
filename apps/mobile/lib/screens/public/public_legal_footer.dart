@@ -28,7 +28,7 @@ class PublicLegalFooter extends StatelessWidget {
               runSpacing: 4,
               children: [
                 Text(
-                  'ScaledCircle · operated by Scaled Circle LLC',
+                  'Scaled Circle · operated by Scaled Circle LLC',
                   style: TextStyle(color: foreground),
                 ),
                 _FooterLink('Legal', AppRoutes.legal, foreground),

@@ -64,7 +64,7 @@ void main() {
           await tester.tap(signup);
           await tester.pumpAndSettle();
           expect(
-            find.text('How do you want to use ScaledCircle?'),
+            find.text('How do you want to use Scaled Circle?'),
             findsOneWidget,
           );
           expect(find.text('Grow My Business'), findsOneWidget);

@@ -353,7 +353,7 @@ class _PostcardCreationScreenState extends State<PostcardCreationScreen> {
       return Column(
         children: [
           const Text(
-            'Start with your own design, customize a template, or let ScaledCircle help create one from your Business.',
+            'Start with your own design, customize a template, or let Scaled Circle help create one from your Business.',
           ),
           for (final choice in [
             ('upload', 'Use My Design', 'Upload your existing postcard.'),
@@ -423,7 +423,7 @@ class _PostcardCreationScreenState extends State<PostcardCreationScreen> {
               SwitchListTile(
                 value: _replaceBack,
                 onChanged: (v) => setState(() => _replaceBack = v),
-                title: const Text('Use a ScaledCircle back'),
+                title: const Text('Use a Scaled Circle back'),
                 subtitle: const Text(
                   'On: use your front and add an editable contact / QR back. Off: retain your fixed back artwork; no new phone or QR is added.',
                 ),
@@ -537,19 +537,19 @@ class _PostcardCreationScreenState extends State<PostcardCreationScreen> {
             ),
             DropdownMenuItem(
               value: 'tracking',
-              child: Text('ScaledCircle Tracking Number'),
+              child: Text('Scaled Circle Tracking Number'),
             ),
             DropdownMenuItem(value: 'none', child: Text('No phone')),
           ], (v) => setState(() => _contact = v!)),
           if (_contact == 'business') ...[
             _field(_phone, 'Business phone — exactly as printed'),
             const Text(
-              'Calls to your own number are not measured by ScaledCircle.',
+              'Calls to your own number are not measured by Scaled Circle.',
             ),
           ],
           if (_contact == 'tracking') ...[
             const Text(
-              'Use a ScaledCircle tracking number to measure calls from this campaign. Only an active number already bound to this campaign can be used.',
+              'Use a Scaled Circle tracking number to measure calls from this campaign. Only an active number already bound to this campaign can be used.',
             ),
             if (_phones.isEmpty)
               const Text(
@@ -577,7 +577,7 @@ class _PostcardCreationScreenState extends State<PostcardCreationScreen> {
     if (_step == 3) {
       if (_fixedBack) {
         return const Text(
-          'Your uploaded back is fixed artwork. Any existing QR remains as supplied; ScaledCircle does not claim to measure it. To add a new tracked QR, go back and choose a ScaledCircle back.',
+          'Your uploaded back is fixed artwork. Any existing QR remains as supplied; Scaled Circle does not claim to measure it. To add a new tracked QR, go back and choose a Scaled Circle back.',
         );
       }
       return Column(
@@ -605,7 +605,7 @@ class _PostcardCreationScreenState extends State<PostcardCreationScreen> {
               const [
                 DropdownMenuItem(
                   value: 'page',
-                  child: Text('ScaledCircle Landing Page'),
+                  child: Text('Scaled Circle Landing Page'),
                 ),
                 DropdownMenuItem(
                   value: 'website',
@@ -681,7 +681,7 @@ class _PostcardCreationScreenState extends State<PostcardCreationScreen> {
           _field(_area, 'Neighborhood / mailing area'),
           _field(_zip, 'ZIP Code'),
           const Text(
-            'ScaledCircle confirms complete USPS carrier routes and exclusions before the final quote. No route or delivery count is invented.',
+            'Scaled Circle confirms complete USPS carrier routes and exclusions before the final quote. No route or delivery count is invented.',
           ),
         ],
       );
@@ -703,10 +703,10 @@ class _PostcardCreationScreenState extends State<PostcardCreationScreen> {
         Text('${_quantity.text} preferred pieces'),
         const SizedBox(height: 16),
         const Text(
-          'Your exact design is approved. ScaledCircle will confirm printing, actual USPS postage and the final route count.',
+          'Your exact design is approved. Scaled Circle will confirm printing, actual USPS postage and the final route count.',
         ),
         const Text(
-          'ScaledCircle Fulfillment & Creative: 20% of printing + USPS postage, before tax. This covers creative assistance, print preparation, coordination and managed mailing.',
+          'Scaled Circle Fulfillment & Creative: 20% of printing + USPS postage, before tax. This covers creative assistance, print preparation, coordination and managed mailing.',
         ),
         const Text(
           'You will review the itemized quote and intentionally pay next. Requesting a quote does not charge you.',

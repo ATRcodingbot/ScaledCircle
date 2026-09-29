@@ -4,6 +4,7 @@ import '../../../../../services/business_workspace_service.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import '../../../campaign_planner_screen.dart';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -130,9 +131,13 @@ class _FlyerCampaignScreenState extends State<FlyerCampaignScreen> {
           'Service: ${widget.initialService!.trim()}',
       ].join('\n');
     }
-    _loadSavedAreas();
-    _loadProfileAreas();
-    _loadBusinessPickupAddress();
+    if (!_distributionCampaignTypes.contains(widget.campaignType) ||
+        widget.loadPreferences != null ||
+        widget.loadProfileAreas != null) {
+      _loadSavedAreas();
+      _loadProfileAreas();
+      _loadBusinessPickupAddress();
+    }
   }
 
   Future<void> _loadBusinessPickupAddress() async {
@@ -577,7 +582,7 @@ class _FlyerCampaignScreenState extends State<FlyerCampaignScreen> {
         return 'Create Tracked Materials with Scaled Circle';
 
       case 'printed_by_scaled_circle':
-        return 'ScaledCircle Printing — Coming Soon';
+        return 'Scaled Circle Printing — Coming Soon';
 
       default:
         return source;
@@ -1072,6 +1077,20 @@ class _FlyerCampaignScreenState extends State<FlyerCampaignScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (_distributionCampaignTypes.contains(widget.campaignType) &&
+        widget.draftAndAreaFlowOverride == null &&
+        widget.quoteLoader == null &&
+        widget.loadPreferences == null &&
+        widget.loadProfileAreas == null) {
+      return CampaignPlannerScreen(
+        campaignType: widget.campaignType,
+        initialServiceArea: widget.initialServiceArea,
+        initialServiceAreaName: widget.initialServiceAreaName,
+        initialGoal: widget.initialGoal,
+        initialService: widget.initialService,
+        propertyIntelligenceAnalysisId: widget.propertyIntelligenceAnalysisId,
+      );
+    }
     final previewBasePay = double.tryParse(payController.text.trim()) ?? 0;
 
     final previewBonus = double.tryParse(bonusController.text.trim()) ?? 0;

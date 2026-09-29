@@ -83,7 +83,7 @@ class _BusinessAccessApprovalScreenState
         title: const Text('Approve Business?'),
         content: Text(
           '${selected!['businessName']} (${selected['email']}) has completed onboarding. '
-          'Approve access to ScaledCircle? This does not activate a subscription or paid features.',
+          'Approve access to Scaled Circle? This does not activate a subscription or paid features.',
         ),
         actions: [
           TextButton(

@@ -950,7 +950,7 @@ class _AreasPreferencesScreenState extends State<AreasPreferencesScreen> {
               Text(
                 _business
                     ? 'These areas personalize relevant Business opportunities.'
-                    : 'Add the areas where you want ScaledCircle to notify you about nearby jobs. Your service areas control job alerts. You can still browse other available work manually. Choosing your state does not subscribe you to every job in that state.',
+                    : 'Add the areas where you want Scaled Circle to notify you about nearby jobs. Your service areas control job alerts. You can still browse other available work manually. Choosing your state does not subscribe you to every job in that state.',
               ),
               const SizedBox(height: 12),
               ..._areas.asMap().entries.map(
@@ -1251,7 +1251,7 @@ class _AreasPreferencesScreenState extends State<AreasPreferencesScreen> {
                 value: _alertDelivery['inApp'] ?? true,
                 onChanged: (value) =>
                     setState(() => _alertDelivery['inApp'] = value),
-                title: const Text('In ScaledCircle'),
+                title: const Text('In Scaled Circle'),
               ),
               if (!_business)
                 SwitchListTile(
@@ -1351,7 +1351,7 @@ class _AreasPreferencesScreenState extends State<AreasPreferencesScreen> {
                             style: TextStyle(fontWeight: FontWeight.bold),
                           ),
                           Text(
-                            'In ScaledCircle ${_alertDelivery['inApp'] == false ? '— Off' : '✓'}',
+                            'In Scaled Circle ${_alertDelivery['inApp'] == false ? '— Off' : '✓'}',
                           ),
                           Text(
                             'Email ${_alertDelivery['email'] == true ? '✓' : '— Off'}',

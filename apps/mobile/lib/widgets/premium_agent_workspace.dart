@@ -440,7 +440,7 @@ class PremiumAgentWorkspace extends StatelessWidget {
         _section(
           context,
           ad['noConnectedAccount'] == true
-              ? 'No ScaledCircle advertising running'
+              ? 'No Scaled Circle advertising running'
               : 'Advertising status',
           [
             for (final account in agentRows(ad['accounts']))

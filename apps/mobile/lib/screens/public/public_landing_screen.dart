@@ -6,7 +6,7 @@ import '../../navigation/app_routes.dart';
 import '../../navigation/public_page_navigation.dart';
 import '../../navigation/app_router.dart';
 import '../../services/subscription_plan_service.dart';
-import 'authentic_product_map.dart';
+import 'campaign_workflow_illustration.dart';
 import 'public_funnel_components.dart'
     show ScaledCircleBrand, openPublicRoleChooser;
 import 'public_legal_footer.dart';
@@ -84,12 +84,12 @@ class PublicLandingScreen extends StatelessWidget {
                                 AppNavigation.push(context, AppRoutes.scalers),
                           ),
                           const _Gap(),
-                          _HowItWorks(key: howItWorksKey),
+                          _HowItWorks(key: howItWorksKey, homepage: true),
                           const SizedBox(height: 24),
                           FilledButton(
                             key: const Key('business-after-proof-cta'),
                             onPressed: () => _start(context, 'business'),
-                            child: const Text('Start Your Business'),
+                            child: const Text('Get Started for Business'),
                           ),
                           const _Gap(),
                           const _BusinessExperience(),
@@ -247,7 +247,7 @@ class _Hero extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
-            'Run your business. Grow locally.',
+            'Run your business.\nGrow locally.',
             key: Key('homepage-hero-title'),
             style: TextStyle(
               color: Colors.white,
@@ -259,7 +259,7 @@ class _Hero extends StatelessWidget {
           ),
           const SizedBox(height: 20),
           const Text(
-            'Keep customers, schedule, jobs and your team in one place. Choose local growth tools as you need them, and track what worked.',
+            'Connect with local gig workers—called Scalers—for flyer distribution, door hangers and door-to-door outreach in Maryland.\n\nKeep your customers, schedules, jobs and team organized in the same workspace.',
             style: TextStyle(color: _muted, fontSize: 19, height: 1.55),
           ),
           const SizedBox(height: 12),
@@ -281,7 +281,7 @@ class _Hero extends StatelessWidget {
                   minimumSize: const Size(190, 52),
                 ),
                 icon: const Icon(Icons.trending_up),
-                label: const Text('Start Your Business'),
+                label: const Text('Get Started for Business'),
               ),
               OutlinedButton.icon(
                 key: const Key('scaler-primary-cta'),
@@ -295,6 +295,14 @@ class _Hero extends StatelessWidget {
                 label: const Text('Join as a Scaler'),
               ),
             ],
+          ),
+          const SizedBox(height: 14),
+          const Text(
+            kIsWeb
+                ? 'Business plans from \$99/month. Campaign work is priced and funded separately.'
+                : 'Campaign work is priced and funded separately. Membership purchases and upgrades are not offered in the app.',
+            key: Key('homepage-cost-separation'),
+            style: TextStyle(color: _muted, fontSize: 16, height: 1.5),
           ),
         ],
       );
@@ -316,49 +324,50 @@ class _Hero extends StatelessWidget {
 class _MapPreview extends StatelessWidget {
   const _MapPreview();
   @override
-  Widget build(BuildContext context) => _Panel(
-    child: const AuthenticProductMap(
-      mode: PublicProductMapMode.campaign,
-      height: 410,
-      showOpportunityCard: true,
-    ),
-  );
+  Widget build(BuildContext context) => const CampaignWorkflowIllustration();
 }
 
 class _HowItWorks extends StatelessWidget {
-  const _HowItWorks({super.key});
+  const _HowItWorks({super.key, this.homepage = false});
+  final bool homepage;
   @override
-  Widget build(BuildContext context) => const Column(
+  Widget build(BuildContext context) => Column(
     children: [
       _Heading(
-        eyebrow: 'HOW SCALEDCIRCLE WORKS',
-        title: 'Organize the work. Choose your next step.',
-        subtitle:
-            'Start with your customers and schedule. Add growth tools when you need them.',
+        eyebrow: 'HOW SCALED CIRCLE WORKS',
+        title: homepage
+            ? 'How Scaled Circle works'
+            : 'Organize the work. Choose your next step.',
+        subtitle: homepage
+            ? 'Own-team work is Business-reported. Marketplace work shows the available assignment and GPS evidence.'
+            : 'Start with your customers and schedule. Add growth tools when you need them.',
       ),
-      SizedBox(height: 22),
+      const SizedBox(height: 22),
       _Cards(
         children: [
           _Outcome(
             number: '1',
             icon: Icons.travel_explore,
-            title: 'Set up your Business',
-            body:
-                'Save your Business details, customers and service areas. Keep appointments, jobs and tasks together.',
+            title: homepage ? 'Set up your business' : 'Set up your Business',
+            body: homepage
+                ? 'Add your services and locations, then organize your customers, schedule and team.'
+                : 'Save your Business details, customers and service areas. Keep appointments, jobs and tasks together.',
           ),
           _Outcome(
             number: '2',
             icon: Icons.auto_awesome,
-            title: 'Choose how to grow',
-            body:
-                'Choose a campaign or an available growth tool. Review the work, permissions and costs before proceeding.',
+            title: homepage ? 'Plan your local campaign' : 'Choose how to grow',
+            body: homepage
+                ? 'Choose the work, marketing materials and territory. Use your own team or arrange eligible work through Scalers.'
+                : 'Choose a campaign or an available growth tool. Review the work, permissions and costs before proceeding.',
           ),
           _Outcome(
             number: '3',
             icon: Icons.rocket_launch_outlined,
-            title: 'Track and review',
-            body:
-                'Follow work and customer responses, review the results, and use what you learn to plan your next step.',
+            title: homepage ? 'Review the work' : 'Track and review',
+            body: homepage
+                ? 'Follow campaign status, review available evidence and keep your records together.'
+                : 'Follow work and customer responses, review the results, and use what you learn to plan your next step.',
           ),
         ],
       ),
@@ -524,7 +533,7 @@ class _Pricing extends StatelessWidget {
     'scale':
         'Core Business OS for up to five, with Property and supported Weather Intelligence.',
     'managed_growth':
-        'For businesses that want ScaledCircle helping prepare and coordinate ongoing marketing.',
+        'For businesses that want Scaled Circle helping prepare and coordinate ongoing marketing.',
   };
 
   static const _featureLabels = <String, String>{
@@ -673,7 +682,9 @@ class _Pricing extends StatelessWidget {
         ),
         const SizedBox(height: 16),
         const Text(
-          'Paid Scaler execution is held pending legitimate LIVE cash-out certification. Planning does not activate paid field work. Campaign costs are separate. Paid advertising needs separate approval. Printing is Coming Soon. Postcards are Private Beta for selected Businesses while real-world fulfillment testing is completed.',
+          kIsWeb
+              ? 'Maryland Flyer Distribution, Door Hanger Distribution and Door-to-Door Outreach require campaign-specific payment, assignment, consent and worker-funding checks. Membership or payment alone does not mean work is ready. Campaign costs are separate. Paid advertising needs separate approval. Printing and general postcard fulfillment remain Coming Soon.'
+              : 'Supported Maryland field campaigns require separate funding and server-confirmed work eligibility. Campaign costs are separate. Paid advertising needs separate approval. Printing is Coming Soon. Postcards are Private Beta for selected Businesses while real-world fulfillment testing is completed.',
           style: TextStyle(color: _muted),
           textAlign: TextAlign.center,
         ),
@@ -743,7 +754,7 @@ class _FinalCta extends StatelessWidget {
               foregroundColor: _bg,
               minimumSize: const Size(180, 52),
             ),
-            child: const Text('Start Your Business'),
+            child: const Text('Get Started for Business'),
           ),
           FilledButton(
             onPressed: onScaler,

@@ -76,11 +76,11 @@ class _IosStartupGateState extends State<IosStartupGate> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Text('ScaledCircle', style: TextStyle(fontSize: 24)),
+                  const Text('Scaled Circle', style: TextStyle(fontSize: 24)),
                   const SizedBox(height: 20),
                   if (_failed) ...[
                     const Text(
-                      'ScaledCircle could not start. Please try again.',
+                      'Scaled Circle could not start. Please try again.',
                       textAlign: TextAlign.center,
                     ),
                     const SizedBox(height: 12),
@@ -88,7 +88,7 @@ class _IosStartupGateState extends State<IosStartupGate> {
                   ] else ...[
                     const CircularProgressIndicator(),
                     const SizedBox(height: 12),
-                    const Text('Starting ScaledCircle…'),
+                    const Text('Starting Scaled Circle…'),
                   ],
                 ],
               ),

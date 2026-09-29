@@ -9,11 +9,13 @@ import hashlib
 import json
 from pathlib import Path
 import platform
+import plistlib
 import subprocess
 import tempfile
 import zipfile
 
 ROOT = Path(__file__).resolve().parent.parent
+WORDMARK_HASHES = {'scaledcircle-lockup-dark-surface.png': '4719e60f997a6b0b8f14f47cdd537446b0082125884f3f3156d7e7e905060c32', 'scaledcircle-lockup-light-surface.png': '674b95708a173a371c28d5d9a29c151b49ebb324939b1b8d83e50e5808d48fb3'}
 SYMBOL_SHA = '1b21dabe8d32acd3e62fd413359caecd39534be6170bb869c6ab35030df420c1'
 
 
@@ -32,8 +34,14 @@ def verify_source(root=ROOT):
             raise ValueError('Wrong native image size: ' + relative)
         if item['opaque'] and data[25] != 2:
             raise ValueError('Opaque launcher must have RGB data with no alpha channel: ' + relative)
+    info = plistlib.loads((mobile / 'ios/Runner/Info.plist').read_bytes())
+    if info.get('CFBundleDisplayName') != 'Scaled Circle' or info.get('CFBundleName') != 'Scaled Circle':
+        raise ValueError('Wrong iOS customer app name')
+    for name, digest in WORDMARK_HASHES.items():
+        if hashlib.sha256((mobile / 'assets/brand/wordmark-20260928' / name).read_bytes()).hexdigest() != digest:
+            raise ValueError('Approved spaced wordmark changed: ' + name)
     android = mobile / 'android/app/src/main'
-    if 'android:label="ScaledCircle"' not in (android / 'AndroidManifest.xml').read_text():
+    if 'android:label="Scaled Circle"' not in (android / 'AndroidManifest.xml').read_text():
         raise ValueError('Wrong customer app name')
     for folder in ['drawable', 'drawable-v21']:
         xml = (android / 'res' / folder / 'launch_background.xml').read_text()
@@ -63,6 +71,12 @@ def verify_ipa(ipa, manifest, root=ROOT):
     with tempfile.TemporaryDirectory() as tmp, zipfile.ZipFile(ipa) as z:
         app = 'Payload/Runner.app/'
         embedded_manifest(z, app + 'Frameworks/App.framework/flutter_assets/assets/brand/native-brand-manifest.json', manifest)
+        info = plistlib.loads(z.read(app + 'Info.plist'))
+        if info.get('CFBundleDisplayName') != 'Scaled Circle':
+            raise ValueError('Wrong packaged iOS customer app name')
+        for name, digest in WORDMARK_HASHES.items():
+            if hashlib.sha256(z.read(app + 'Frameworks/App.framework/flutter_assets/assets/brand/wordmark-20260928/' + name)).hexdigest() != digest:
+                raise ValueError('Packaged wordmark mismatch')
         icon = app + 'AppIcon60x60@2x.png'
         if icon not in z.namelist() or not any(n.startswith(app) and 'LaunchScreen.storyboardc/' in n for n in z.namelist()):
             raise ValueError('Native launcher/launch storyboard missing')
@@ -96,6 +110,9 @@ print("Compiled iOS launcher pixel comparison PASS")
 def verify_aab(aab, manifest, root=ROOT):
     with tempfile.TemporaryDirectory() as tmp, zipfile.ZipFile(aab) as z:
         embedded_manifest(z, 'base/assets/flutter_assets/assets/brand/native-brand-manifest.json', manifest)
+        for name, digest in WORDMARK_HASHES.items():
+            if hashlib.sha256(z.read('base/assets/flutter_assets/assets/brand/wordmark-20260928/' + name)).hexdigest() != digest:
+                raise ValueError('Packaged wordmark mismatch')
         comparisons = []
         for name in z.namelist():
             if name.startswith('base/res/') and name.endswith(('/ic_launcher.png', '/launch_symbol.png', '/ic_launcher_foreground.png')):

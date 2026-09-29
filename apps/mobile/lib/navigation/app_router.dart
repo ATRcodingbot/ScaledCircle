@@ -214,6 +214,24 @@ class AppRouterScope extends InheritedWidget {
 }
 
 abstract final class AppNavigation {
+  /// A confirmed removal must replace the deleted route, never pop the shell's
+  /// only declarative page. Any later browser Back/deep link is recovered by the
+  /// campaign route's unavailable-state check.
+  static void afterCampaignRemoval(BuildContext context) {
+    final delegate = AppRouterScope.maybeOf(context);
+    final nav = Navigator.of(context);
+    if (delegate != null) {
+      nav.popUntil((route) => route.isFirst);
+      delegate.navigate(
+        '/business/campaigns',
+        replace: true,
+        context: nav.context,
+      );
+    } else {
+      nav.pushNamedAndRemoveUntil('/business/campaigns', (_) => false);
+    }
+  }
+
   /// Dismiss imperative reviews while honoring their unsaved-change guards.
   /// Resolve the router before popping: the originating preview may be disposed.
   static Future<void> home(BuildContext context, String location) async {

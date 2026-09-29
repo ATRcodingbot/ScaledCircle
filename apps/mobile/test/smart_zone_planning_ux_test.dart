@@ -8,23 +8,23 @@ import 'package:latlong2/latlong.dart';
 
 void main() {
   test(
-    'Smart Zone planning is the preferred flow and manual mapping is advanced',
+    'recommendation and manual drawing retain explicit review and authority',
     () {
       final source = File(
         'lib/screens/business/campaign_zones_screen.dart',
       ).readAsStringSync();
 
-      expect(source, contains('Recommend Workable Zones'));
-      expect(source, contains('Use Recommended Zones'));
-      expect(source, contains('Advanced Edit'));
-      expect(source, contains('estimated total hours'));
+      expect(source, contains('Recommend an Area'));
+      expect(source, contains('Use Recommended Area'));
+      expect(source, contains('Adjust Area'));
+      expect(source, contains('selectedZoneIndex: selectedZoneIndex'));
       expect(source, contains('Scaler compensation recommendation'));
       expect(source, contains('Recommended base payout'));
       expect(source, contains('Estimated effective compensation'));
       expect(source, contains('Optional completion incentive'));
       expect(source, contains('Optional quality incentive'));
       expect(source, contains('Potential recommended payout'));
-      expect(source, contains('Below ScaledCircle recommended compensation'));
+      expect(source, contains('Below Scaled Circle recommended compensation'));
       expect(source, contains('Use Recommended Pay'));
       expect(source, contains("'useRecommendedPay': useRecommendedPay"));
       expect(source, contains('Campaign compensation remains fixed-price'));
@@ -39,7 +39,7 @@ void main() {
       expect(source, contains('No saved Service Area is required.'));
       expect(source, contains("'areaSelection':"));
       expect(source, contains("'resultId': selectedArea.id"));
-      expect(source, contains('Large campaigns are split into Zones'));
+      expect(source, contains('Available evidence may support less work.'));
       expect(source, contains('Use My Service Area'));
       expect(source, contains('Finding future opportunities is separate'));
       expect(source, isNot(contains('AI neighborhood')));
@@ -54,8 +54,8 @@ void main() {
     final source = File(
       'lib/screens/business/campaign_zones_screen.dart',
     ).readAsStringSync();
-    expect(source, contains("We couldn't analyze this area yet."));
-    expect(source, contains('Try a smaller area or Draw My Own Area'));
+    expect(source, contains("We couldn't find enough reliable data"));
+    expect(source, contains('You can still draw your own area.'));
   });
 
   test(
@@ -426,13 +426,16 @@ void main() {
     expect(source, contains('selectedZoneIndex'));
     expect(source, contains('Dashed outline: selected campaign territory'));
     expect(mapSource, contains('CameraFit.bounds'));
-    expect(mapSource, matches(RegExp(r'LatLngBounds\.fromPoints\(\s*operationalPoints,?\s*\)')));
+    expect(
+      mapSource,
+      matches(RegExp(r'LatLngBounds\.fromPoints\(\s*fitPoints,?\s*\)')),
+    );
     expect(mapSource, isNot(contains('LatLngBounds.fromPoints(allPoints)')));
     expect(mapSource, contains('cameraPadding'));
     expect(mapSource, contains('smartZoneMarkerOffsets'));
     expect(source, contains('showZoneSelector: true'));
     expect(mapSource, contains('MapAttributionFrame('));
-    expect(mapSource, contains('Dashed: selected territory'));
+    expect(mapSource, contains('Gray dashed outline: selected territory'));
     expect(mapSource, contains('constraints.maxWidth < 520 ? 300.0 : 360.0'));
     expect(mapSource, contains('InteractiveFlag.all'));
   });
@@ -453,7 +456,12 @@ void main() {
     ]) {
       final source = File(path).readAsStringSync();
       if (path.contains('campaign_details_screen')) {
-        expect(source, contains('Your campaign could not be published. Check funding, work-area setup and account eligibility before trying again.'));
+        expect(
+          source,
+          contains(
+            'Your campaign could not be published. Check funding, work-area setup and account eligibility before trying again.',
+          ),
+        );
       } else {
         expect(source, contains("replaceFirst('Exception: ', '')"));
       }

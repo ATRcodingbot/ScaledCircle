@@ -14,7 +14,7 @@ void main() {
     expect(details, isNot(contains('JobTrackingScreen')));
     expect(details, isNot(contains('saveLegacyTrackingRoute')));
     expect(details, isNot(contains("functionName: 'startAssignedZone'")));
-    expect(details, contains('requires the ScaledCircle Android or iOS app'));
+    expect(details, contains('requires the Scaled Circle Android or iOS app'));
   });
 
   test('test harness selection is compile-time local and identity-neutral', () {

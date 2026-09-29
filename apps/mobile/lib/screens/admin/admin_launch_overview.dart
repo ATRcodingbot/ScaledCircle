@@ -106,7 +106,7 @@ class AdminLaunchOverview extends StatelessWidget {
           actionLabel: 'Review subscriptions',
         ),
         section(
-          'ScaledCircle internal Growth',
+          'Scaled Circle internal Growth',
           [
             Text('Research: ${state(map(data['internalGrowth'])['status'])}'),
             Text(
@@ -186,7 +186,7 @@ class AdminLaunchOverview extends StatelessWidget {
               },
             ),
           const Text(
-            'ScaledCircle internal research uses its separate internal workspace. Review it in Growth operations; it is not inferred from Attractive Remodel.',
+            'Scaled Circle internal research uses its separate internal workspace. Review it in Growth operations; it is not inferred from Attractive Remodel.',
           ),
           if (onAgents != null)
             TextButton(

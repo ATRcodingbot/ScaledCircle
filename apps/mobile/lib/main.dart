@@ -1,3 +1,4 @@
+import 'screens/business/campaign_map_record_screen.dart';
 import 'screens/business/weather_alerts_screen.dart';
 import 'screens/business/weather_coverage_settings_screen.dart';
 import 'screens/admin/admin_operations_reader_screen.dart';
@@ -291,6 +292,18 @@ class ScaledCircleApp extends StatelessWidget {
           builder: (_, _) => route?.path == '/business/weather-preferences'
               ? const WeatherCoverageSettingsScreen()
               : WeatherAlertsScreen(alertId: route?.queryParameters['alert']),
+        ),
+      );
+    }
+    if (route?.path == '/business/map-record') {
+      return MaterialPageRoute(
+        settings: settings,
+        builder: (_) => ProtectedRouteGate(
+          routeName: settings.name!,
+          audience: ProtectedRouteAudience.business,
+          builder: (_, _) => CampaignMapRecordScreen(
+            campaignId: route?.queryParameters['campaign'] ?? '',
+          ),
         ),
       );
     }

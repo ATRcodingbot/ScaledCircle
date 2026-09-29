@@ -7,15 +7,36 @@ import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/gestures.dart';
 import '../../widgets/production_route_review.dart';
 import '../../config/app_environment.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 
 import '../../models/campaign_area_geometry.dart';
+import '../../models/campaign_freehand_geometry.dart';
 import '../../services/property_intelligence_service.dart';
 import '../../services/scaled_circle_intelligence_service.dart';
 import '../../widgets/property_intelligence_panel.dart';
+import '../../widgets/zone_intelligence_summary.dart';
+
+class CampaignAreaRecommendationResult {
+  const CampaignAreaRecommendationResult.adjust(this.adjustedBoundary)
+    : applied = false,
+      drawOwn = false;
+  const CampaignAreaRecommendationResult.applied()
+    : adjustedBoundary = null,
+      applied = true,
+      drawOwn = false;
+  const CampaignAreaRecommendationResult.drawOwn()
+    : adjustedBoundary = null,
+      applied = false,
+      drawOwn = true;
+
+  final List<Map<String, dynamic>>? adjustedBoundary;
+  final bool applied;
+  final bool drawOwn;
+}
 
 class CampaignAreaScreen extends StatefulWidget {
   final DocumentReference campaignReference;
@@ -25,6 +46,23 @@ class CampaignAreaScreen extends StatefulWidget {
   // It remains unsaved until the owner explicitly chooses Save Zone.
   final List<Map<String, dynamic>> initialArea;
   final int? materialQuantity;
+  final LatLng? initialCenter;
+  final Map<String, double>? initialBounds;
+  final String? searchContextLabel;
+  final TileProvider? tileProvider;
+  final ZoneEvidenceLoader? zoneEvidenceLoader;
+  final String Function()? zoneEvidenceIdentity;
+  final MapController? mapController;
+  final Future<bool> Function()? analyzePersistedZone;
+  final Future<PropertyIntelligenceAnalysis> Function(
+    List<Map<String, double>> geometry,
+  )?
+  analyzeGeometry;
+  final Future<CampaignAreaRecommendationResult?> Function(
+    BuildContext context,
+    List<Map<String, double>> boundary,
+  )?
+  recommendWithinArea;
 
   const CampaignAreaScreen({
     super.key,
@@ -33,6 +71,16 @@ class CampaignAreaScreen extends StatefulWidget {
     this.searchBoundary = const [],
     this.initialArea = const [],
     this.materialQuantity,
+    this.initialCenter,
+    this.initialBounds,
+    this.searchContextLabel,
+    this.tileProvider,
+    this.zoneEvidenceLoader,
+    this.zoneEvidenceIdentity,
+    this.mapController,
+    this.analyzePersistedZone,
+    this.analyzeGeometry,
+    this.recommendWithinArea,
   });
 
   @override
@@ -40,7 +88,10 @@ class CampaignAreaScreen extends StatefulWidget {
 }
 
 class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
-  final MapController _mapController = MapController();
+  late final MapController _mapController =
+      widget.mapController ?? MapController();
+  final GlobalKey _mapViewportKey = GlobalKey();
+  final GlobalKey _mapFrameKey = GlobalKey();
 
   final List<LatLng> _inputPoints = [];
 
@@ -50,13 +101,32 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
   CampaignAreaShape _selectedShape = CampaignAreaShape.polygon;
 
   bool _saving = false;
+  bool _recommending = false;
   bool _loadingExistingArea = true;
   bool _hasLoadedExistingArea = false;
   bool _mappingLocked = false;
   bool _propertyLayerEnabled = false;
   bool _loadingPropertyIntelligence = false;
   PropertyIntelligenceAnalysis? _propertyIntelligence;
+  LatLng? _circlePreviewEdge;
+  Timer? _propertyAnalysisDebounce;
+  int _geometryRevision = 0;
+  bool _replacementPromptOpen = false;
+  bool _advancedDrawing = false;
+  bool _drawingFreehand = false;
+  int? _drawingPointer;
+  int? _advancedTapPointer;
+  Offset? _advancedTapStart;
+  final List<LatLng> _freehandStroke = [];
+  String? _freehandError;
+  String? _freehandNotice;
+  List<LatLng> _originalRepairStroke = [];
+  bool _compareRepairStroke = false;
+  bool _traceInvalid = false;
+  _AreaDrawingSnapshot? _beforeFreehand;
+  _AreaDrawingSnapshot? _freehandUndo;
   late String _zoneName;
+  String _evidenceCampaignId = "";
 
   static const LatLng _defaultCenter = LatLng(39.2904, -76.6122);
 
@@ -67,8 +137,31 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
     super.initState();
 
     _zoneName = widget.pendingZoneData?['zoneName']?.toString() ?? 'Zone 1';
+    _evidenceCampaignId =
+        widget.pendingZoneData?['campaignId']?.toString() ?? '';
 
     _loadExistingArea();
+  }
+
+  @override
+  void dispose() {
+    _propertyAnalysisDebounce?.cancel();
+    if (widget.mapController == null) _mapController.dispose();
+    super.dispose();
+  }
+
+  void _geometryChanged() {
+    _geometryRevision++;
+    _circlePreviewEdge = null;
+    _propertyIntelligence = null;
+    _loadingPropertyIntelligence = false;
+    _propertyAnalysisDebounce?.cancel();
+    if (_propertyLayerEnabled && !_drawingFreehand && _isAreaValid()) {
+      _propertyAnalysisDebounce = Timer(
+        const Duration(milliseconds: 300),
+        _loadPropertyIntelligence,
+      );
+    }
   }
 
   Future<void> _loadExistingArea() async {
@@ -96,19 +189,6 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
           _searchBoundary = _parsePoints(widget.searchBoundary);
           _loadingExistingArea = false;
         });
-
-        if (_searchBoundary.isNotEmpty) {
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted) {
-              _mapController.move(
-                _calculateCenter(
-                  _generatedArea.isNotEmpty ? _generatedArea : _searchBoundary,
-                ),
-                _generatedArea.isNotEmpty ? 15 : 10,
-              );
-            }
-          });
-        }
 
         return;
       }
@@ -142,6 +222,8 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
 
       setState(() {
         _zoneName = rawData['zoneName']?.toString() ?? _zoneName;
+        _evidenceCampaignId = rawData['campaignId']?.toString() ?? '';
+
         _selectedShape = existingShape;
 
         _mappingLocked =
@@ -166,20 +248,6 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
 
         _loadingExistingArea = false;
       });
-
-      if (existingPoints.isNotEmpty) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (!mounted) {
-            return;
-          }
-
-          try {
-            _mapController.move(_calculateCenter(existingPoints), 15);
-          } catch (_) {
-            // Map may not yet be fully attached.
-          }
-        });
-      }
     } catch (e) {
       if (!mounted) {
         return;
@@ -268,67 +336,107 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
 
   void _selectShape(CampaignAreaShape shape) {
     setState(() {
+      _advancedDrawing = true;
+      _drawingFreehand = false;
+      _drawingPointer = null;
+      _advancedTapPointer = null;
+      _freehandStroke.clear();
+      _freehandError = null;
+      _freehandNotice = null;
+      _originalRepairStroke = [];
+      _compareRepairStroke = false;
+      _traceInvalid = false;
       _selectedShape = shape;
 
       _inputPoints.clear();
-      _generatedArea.clear();
+      _generatedArea = [];
 
       _hasLoadedExistingArea = false;
+      _geometryChanged();
     });
   }
 
-  Future<bool> _confirmReplaceExistingArea() async {
+  Future<bool> _confirmReplaceExistingArea({bool clear = true}) async {
     if (!_hasLoadedExistingArea) return true;
-    final replace = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: Text('$_zoneName already has an area'),
-        content: const Text(
-          'A Zone is one practical Scaler work area. Replace the current '
-          'boundary to redraw this Zone.',
+    if (_replacementPromptOpen) return false;
+    _replacementPromptOpen = true;
+    bool? replace;
+    try {
+      replace = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: Text('$_zoneName already has an area'),
+          content: const Text(
+            'A Zone is one practical Scaler work area. Replace the current '
+            'boundary to redraw this Zone.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: Text('Replace $_zoneName'),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(dialogContext, true),
-            child: Text('Replace $_zoneName'),
-          ),
-        ],
-      ),
-    );
+      );
+    } finally {
+      _replacementPromptOpen = false;
+    }
     if (replace != true || !mounted) return false;
-    _beginReplacement();
+    if (clear) {
+      _beginReplacement();
+    } else {
+      setState(() => _hasLoadedExistingArea = false);
+    }
     return true;
   }
 
   void _beginReplacement() {
     setState(() {
       _inputPoints.clear();
-      _generatedArea.clear();
+      _generatedArea = [];
       _hasLoadedExistingArea = false;
+      _geometryChanged();
     });
   }
 
   Future<void> _changeShape(CampaignAreaShape shape) async {
-    if (shape == _selectedShape) return;
-    if (!await _confirmReplaceExistingArea() || !mounted) return;
+    if (shape == _selectedShape && _advancedDrawing) return;
+    if (_hasLoadedExistingArea && !await _confirmReplaceExistingArea()) return;
+    if (!mounted) return;
     _selectShape(shape);
   }
 
-  Future<void> _handleMapTap(TapPosition tapPosition, LatLng point) async {
-    debugPrint('CAMPAIGN AREA TAP: ${point.latitude}, ${point.longitude}');
-
-    if (!await _confirmReplaceExistingArea() || !mounted) return;
-
+  void _handleMapTap(TapPosition tapPosition, LatLng point) {
+    if (_mappingLocked || _saving || !_advancedDrawing) return;
+    if (_hasLoadedExistingArea) {
+      unawaited(_replaceThenPlacePoint(tapPosition, point));
+      return;
+    }
+    if (_inputPoints.length >=
+        CampaignAreaGeometry.maximumInputPoints(_selectedShape)) {
+      return;
+    }
+    if (_selectedShape == CampaignAreaShape.polygon &&
+        _inputPoints.isNotEmpty &&
+        const Distance().as(LengthUnit.Meter, _inputPoints.last, point) < .5) {
+      return;
+    }
+    // A double-click on the center is not a meaningful radius. Keep the center
+    // ready for the next actual edge; never finalize a zero-area circle.
+    if (_selectedShape == CampaignAreaShape.circle &&
+        _inputPoints.length == 1 &&
+        const Distance().as(LengthUnit.Meter, _inputPoints.first, point) < 1) {
+      return;
+    }
     setState(() {
       switch (_selectedShape) {
         case CampaignAreaShape.polygon:
           _inputPoints.add(point);
-
-          _generatedArea = _autoOrderPolygon(_inputPoints);
+          _generatedArea = List.of(_inputPoints);
           break;
 
         case CampaignAreaShape.triangle:
@@ -370,7 +478,32 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
           }
           break;
       }
+      _geometryChanged();
     });
+  }
+
+  Future<void> _replaceThenPlacePoint(
+    TapPosition tapPosition,
+    LatLng point,
+  ) async {
+    final shape = _selectedShape;
+    if (!await _confirmReplaceExistingArea() ||
+        !mounted ||
+        shape != _selectedShape) {
+      return;
+    }
+    _handleMapTap(tapPosition, point);
+  }
+
+  void _previewCircle(LatLng point) {
+    if (_mappingLocked ||
+        _saving ||
+        !_advancedDrawing ||
+        _selectedShape != CampaignAreaShape.circle ||
+        _inputPoints.length != 1) {
+      return;
+    }
+    setState(() => _circlePreviewEdge = point);
   }
 
   List<LatLng> _autoOrderPolygon(List<LatLng> points) {
@@ -392,18 +525,43 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
   }
 
   double? _circleRadiusMeters() {
-    if (_selectedShape != CampaignAreaShape.circle || _inputPoints.length < 2) {
+    if (_selectedShape != CampaignAreaShape.circle ||
+        _inputPoints.isEmpty ||
+        (_inputPoints.length < 2 && _circlePreviewEdge == null)) {
       return null;
     }
 
     return const Distance().as(
       LengthUnit.Meter,
       _inputPoints[0],
-      _inputPoints[1],
+      _inputPoints.length >= 2 ? _inputPoints[1] : _circlePreviewEdge!,
     );
   }
 
   void _undoLastPoint() {
+    if (!_advancedDrawing) {
+      final previous = _freehandUndo;
+      setState(() {
+        if (previous == null) {
+          _inputPoints.clear();
+          _generatedArea = [];
+          _hasLoadedExistingArea = false;
+        } else {
+          _restoreDrawing(previous);
+        }
+        _freehandUndo = null;
+        _drawingFreehand = false;
+        _drawingPointer = null;
+        _freehandStroke.clear();
+        _freehandError = null;
+        _freehandNotice = null;
+        _originalRepairStroke = [];
+        _compareRepairStroke = false;
+        _traceInvalid = false;
+        _geometryChanged();
+      });
+      return;
+    }
     if (_inputPoints.isEmpty) {
       return;
     }
@@ -415,7 +573,7 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
 
       switch (_selectedShape) {
         case CampaignAreaShape.polygon:
-          _generatedArea = _autoOrderPolygon(_inputPoints);
+          _generatedArea = List.of(_inputPoints);
           break;
 
         case CampaignAreaShape.triangle:
@@ -436,22 +594,353 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
               : [];
           break;
       }
+      _geometryChanged();
     });
   }
 
   void _clearArea() {
     setState(() {
+      if (_generatedArea.isNotEmpty) _freehandUndo = _captureDrawing();
       _inputPoints.clear();
-      _generatedArea.clear();
+      _generatedArea = [];
 
       _hasLoadedExistingArea = false;
+      _drawingFreehand = false;
+      _drawingPointer = null;
+      _freehandStroke.clear();
+      _freehandError = null;
+      _freehandNotice = null;
+      _originalRepairStroke = [];
+      _compareRepairStroke = false;
+      _traceInvalid = false;
+      _advancedTapPointer = null;
+      _beforeFreehand = null;
+      _geometryChanged();
+    });
+  }
+
+  _AreaDrawingSnapshot _captureDrawing() => _AreaDrawingSnapshot(
+    _selectedShape,
+    List.of(_inputPoints),
+    List.of(_generatedArea),
+    _hasLoadedExistingArea,
+  );
+
+  void _restoreDrawing(_AreaDrawingSnapshot previous) {
+    _selectedShape = previous.shape;
+    _inputPoints
+      ..clear()
+      ..addAll(previous.input);
+    _generatedArea = List.of(previous.area);
+    _hasLoadedExistingArea = previous.loaded;
+  }
+
+  Future<void> _recommendWithinArea() async {
+    final recommend = widget.recommendWithinArea;
+    if (recommend == null || _recommending || !_isAreaValid()) return;
+    final revision = _geometryRevision;
+    final geometry = _generatedArea
+        .map((p) => <String, double>{'lat': p.latitude, 'lng': p.longitude})
+        .toList();
+    setState(() => _recommending = true);
+    try {
+      final result = await recommend(context, geometry);
+      if (!mounted) return;
+      if (result?.applied == true) {
+        // Apply owns persistence. This pending Zone must never enter the
+        // caller's separate Save Zone path.
+        Navigator.pop(context, false);
+        return;
+      }
+      if (result?.drawOwn == true) {
+        await _beginFreehand();
+        return;
+      }
+      if (revision != _geometryRevision) return;
+      final adjusted = _parsePoints(result?.adjustedBoundary);
+      if (adjusted.length < 3 ||
+          !CampaignFreehandGeometry.finish(
+            adjusted,
+            repairMinorDefects: false,
+          ).isValid) {
+        return;
+      }
+      final previous = _captureDrawing();
+      setState(() {
+        _freehandUndo = previous;
+        _selectedShape = CampaignAreaShape.polygon;
+        _advancedDrawing = false;
+        _inputPoints
+          ..clear()
+          ..addAll(adjusted);
+        _generatedArea = List.of(adjusted);
+        _hasLoadedExistingArea = false;
+        _freehandError = null;
+        _freehandNotice = null;
+        _originalRepairStroke = [];
+        _compareRepairStroke = false;
+        _geometryChanged();
+      });
+    } finally {
+      if (mounted) setState(() => _recommending = false);
+    }
+  }
+
+  Future<void> _beginFreehand({bool retry = false}) async {
+    final before = _captureDrawing();
+    if (!retry &&
+        _hasLoadedExistingArea &&
+        !await _confirmReplaceExistingArea(clear: false)) {
+      return;
+    }
+    if (!mounted) return;
+    setState(() {
+      _beforeFreehand = before;
+      _advancedDrawing = false;
+      _drawingFreehand = true;
+      _drawingPointer = null;
+      _freehandStroke.clear();
+      _freehandError = null;
+      _freehandNotice = null;
+      _originalRepairStroke = [];
+      _compareRepairStroke = false;
+      _traceInvalid = false;
+      _circlePreviewEdge = null;
+      // Editing starts a new geometry request generation. An analysis started
+      // for the prior boundary must not arrive as this drawing's result.
+      _geometryRevision++;
+      _propertyAnalysisDebounce?.cancel();
+      _propertyIntelligence = null;
+      _loadingPropertyIntelligence = false;
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final mapContext = _mapFrameKey.currentContext;
+      if (mounted && _drawingFreehand && mapContext != null) {
+        Scrollable.ensureVisible(mapContext, alignment: .1);
+      }
+    });
+  }
+
+  void _cancelFreehand() {
+    setState(() {
+      if (_beforeFreehand != null) _restoreDrawing(_beforeFreehand!);
+      _drawingFreehand = false;
+      _drawingPointer = null;
+      _freehandStroke.clear();
+      _freehandError = null;
+      _freehandNotice = null;
+      _originalRepairStroke = [];
+      _compareRepairStroke = false;
+      _traceInvalid = false;
+      _advancedTapPointer = null;
+      _geometryChanged();
+    });
+  }
+
+  bool _insideMap(Offset point) {
+    final size = _mapController.camera.nonRotatedSize;
+    return point.dx >= 0 &&
+        point.dy >= 0 &&
+        point.dx <= size.width &&
+        point.dy <= size.height;
+  }
+
+  void _traceDown(PointerDownEvent event) {
+    if (_advancedDrawing && !_saving && !_mappingLocked) {
+      if (_advancedTapPointer != null ||
+          (event.kind == PointerDeviceKind.mouse &&
+              event.buttons != kPrimaryMouseButton)) {
+        _advancedTapPointer = null;
+        return;
+      }
+      _advancedTapPointer = event.pointer;
+      _advancedTapStart = event.localPosition;
+      return;
+    }
+    if (!_drawingFreehand || _saving || _mappingLocked) return;
+    if (_drawingPointer != null) {
+      // Keep ownership until pointer-up/cancel, but immediately reject the
+      // multi-touch trace. No second pointer may become a new stroke mid-gesture.
+      _traceInvalid = true;
+      _freehandError = 'Draw with one finger at a time. Try the outline again.';
+      return;
+    }
+    if (event.kind == PointerDeviceKind.mouse &&
+        event.buttons != kPrimaryMouseButton) {
+      return;
+    }
+    if (!_insideMap(event.localPosition)) return;
+    setState(() {
+      _drawingPointer = event.pointer;
+      _freehandStroke
+        ..clear()
+        ..add(_mapController.camera.screenOffsetToLatLng(event.localPosition));
+      _traceInvalid = false;
+      _freehandError = null;
+    });
+  }
+
+  void _traceMove(PointerMoveEvent event) {
+    if (_advancedDrawing &&
+        _advancedTapPointer == event.pointer &&
+        (event.localPosition - _advancedTapStart!).distance > 8) {
+      _advancedTapPointer = null;
+    }
+    if (!_drawingFreehand ||
+        _drawingPointer != event.pointer ||
+        _traceInvalid) {
+      return;
+    }
+    if (!_insideMap(event.localPosition)) {
+      _traceInvalid = true;
+      _freehandError =
+          'Keep the outline inside the map. Move the map in Browse mode, then draw again.';
+      return;
+    }
+    if (_freehandStroke.length >= CampaignFreehandGeometry.maximumRawPoints) {
+      _traceInvalid = true;
+      _freehandError =
+          'This outline has too many points. Draw a shorter, simpler boundary.';
+      return;
+    }
+    final point = _mapController.camera.screenOffsetToLatLng(
+      event.localPosition,
+    );
+    if (_freehandStroke.isNotEmpty &&
+        const Distance().as(LengthUnit.Meter, _freehandStroke.last, point) <
+            .5) {
+      return;
+    }
+    setState(() => _freehandStroke.add(point));
+  }
+
+  void _traceUp(PointerUpEvent event) {
+    if (_advancedDrawing) {
+      final isTap =
+          _advancedTapPointer == event.pointer &&
+          _advancedTapStart != null &&
+          (event.localPosition - _advancedTapStart!).distance <= 8;
+      _advancedTapPointer = null;
+      if (isTap && _insideMap(event.localPosition)) {
+        _handleMapTap(
+          TapPosition(event.position, event.localPosition),
+          _mapController.camera.screenOffsetToLatLng(event.localPosition),
+        );
+      }
+      return;
+    }
+    if (!_drawingFreehand || _drawingPointer != event.pointer) return;
+    FreehandAreaResult? result;
+    try {
+      if (!_insideMap(event.localPosition)) _traceInvalid = true;
+      if (!_traceInvalid) {
+        final endpoint = _mapController.camera.screenOffsetToLatLng(
+          event.localPosition,
+        );
+        if (_freehandStroke.isNotEmpty &&
+            const Distance().as(
+                  LengthUnit.Meter,
+                  _freehandStroke.last,
+                  endpoint,
+                ) >=
+                .5) {
+          if (_freehandStroke.length >=
+              CampaignFreehandGeometry.maximumRawPoints) {
+            _traceInvalid = true;
+            _freehandError =
+                'This outline has too many points. Draw a shorter, simpler boundary.';
+          } else {
+            _freehandStroke.add(endpoint);
+          }
+        }
+      }
+      result = _traceInvalid
+          ? null
+          : CampaignFreehandGeometry.finish(
+              _freehandStroke,
+              metersPerPixel:
+                  40075016.686 *
+                  math.cos(
+                    _mapController.camera.center.latitude * math.pi / 180,
+                  ) /
+                  (256 * math.pow(2, _mapController.camera.zoom)),
+            );
+    } catch (_) {
+      _freehandError = 'The outline was interrupted. Draw again.';
+    } finally {
+      _completeTrace(result);
+    }
+  }
+
+  void _traceCancel(PointerCancelEvent event) {
+    _advancedTapPointer = null;
+    _advancedTapStart = null;
+    if (event.pointer != _drawingPointer) return;
+    _freehandError = 'The outline was interrupted. Draw again.';
+    _completeTrace(null);
+  }
+
+  void _guardTrace(VoidCallback action) {
+    try {
+      action();
+    } catch (_) {
+      _freehandError = 'The outline was interrupted. Draw again.';
+      _completeTrace(null);
+    }
+  }
+
+  void _completeTrace(FreehandAreaResult? result) {
+    if (!mounted) return;
+    setState(() {
+      _drawingFreehand = false;
+      _drawingPointer = null;
+      _advancedTapPointer = null;
+      _advancedTapStart = null;
+      _traceInvalid = false;
+      if (result?.isValid == true) {
+        _freehandUndo = _beforeFreehand;
+        _selectedShape = CampaignAreaShape.polygon;
+        // Preserve the traced ring order, including concave neighborhood edges.
+        _generatedArea = List.of(result!.points);
+        _inputPoints
+          ..clear()
+          ..addAll(result.points);
+        _hasLoadedExistingArea = false;
+        _freehandError = null;
+        _freehandNotice = result.wasRepaired
+            ? 'We cleaned up a small overlap. Review your boundary.'
+            : null;
+        _originalRepairStroke = result.wasRepaired
+            ? List.of(_freehandStroke)
+            : [];
+        _compareRepairStroke = false;
+        _geometryChanged();
+      } else {
+        _freehandError ??=
+            result?.error ??
+            'The outline was interrupted. Try drawing it again.';
+        if (_beforeFreehand != null) _restoreDrawing(_beforeFreehand!);
+        _freehandUndo = _beforeFreehand;
+        _freehandNotice = null;
+        _originalRepairStroke = [];
+        _compareRepairStroke = false;
+        _geometryChanged();
+      }
+      _freehandStroke.clear();
     });
   }
 
   bool _isAreaValid() {
+    if (_freehandError != null) return false;
     switch (_selectedShape) {
       case CampaignAreaShape.polygon:
-        return _generatedArea.length >= 3;
+        return _generatedArea.length >= 3 &&
+            (!_advancedDrawing ||
+                _hasLoadedExistingArea ||
+                CampaignFreehandGeometry.finish(
+                  _generatedArea,
+                  repairMinorDefects: false,
+                ).isValid);
 
       case CampaignAreaShape.triangle:
         return _generatedArea.length == 3;
@@ -549,6 +1038,9 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
 
   Future<bool> _analyzeSavedZone() async {
     try {
+      if (widget.analyzePersistedZone != null) {
+        return widget.analyzePersistedZone!();
+      }
       final callable = FirebaseFunctions.instanceFor(
         region: 'us-east1',
       ).httpsCallable('analyzeCampaignZone');
@@ -558,6 +1050,16 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
       });
       if (!mounted) return false;
       await reviewProductionRouteAnalysis(context, result.data);
+      final saved = await widget.campaignReference.get();
+      final campaignId = (saved.data() as Map?)?['campaignId'];
+      if (campaignId is String) {
+        await FirebaseFunctions.instanceFor(
+          region: 'us-east1',
+        ).httpsCallable('confirmCampaignZoneIntelligence').call({
+          'campaignId': campaignId,
+          'zoneId': widget.campaignReference.id,
+        });
+      }
 
       return true;
     } on FirebaseFunctionsException catch (e) {
@@ -577,19 +1079,33 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
   }
 
   Future<void> _loadPropertyIntelligence() async {
-    if (_generatedArea.length < 3 || _loadingPropertyIntelligence) {
+    if (!_isAreaValid() ||
+        _drawingFreehand ||
+        _loadingPropertyIntelligence ||
+        !_propertyLayerEnabled) {
       return;
     }
     setState(() => _loadingPropertyIntelligence = true);
+    final revision = _geometryRevision;
+    final geometry = _generatedArea
+        .map(
+          (p) => <String, double>{
+            'latitude': p.latitude,
+            'longitude': p.longitude,
+          },
+        )
+        .toList(growable: false);
     try {
-      final analysis = await PropertyIntelligenceService().analyzeZone(
-        widget.campaignReference.id,
-      );
-      if (mounted) {
+      // The editor holds draft geometry, including unsaved edits to an existing
+      // Zone. Analyze those exact points through the exploratory authority.
+      final analysis =
+          await (widget.analyzeGeometry ??
+              PropertyIntelligenceService().analyzeArea)(geometry);
+      if (mounted && revision == _geometryRevision && _propertyLayerEnabled) {
         setState(() => _propertyIntelligence = analysis);
       }
     } on FirebaseFunctionsException catch (error) {
-      if (mounted) {
+      if (mounted && revision == _geometryRevision) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
@@ -600,7 +1116,7 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
         );
       }
     } finally {
-      if (mounted) {
+      if (mounted && revision == _geometryRevision) {
         setState(() => _loadingPropertyIntelligence = false);
       }
     }
@@ -613,6 +1129,40 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
     if (signal >= 50) return const Color(0xFFE3A13D);
     if (signal >= 25) return const Color(0xFF43A7D8);
     return const Color(0xFF19C7A2);
+  }
+
+  CameraFit? _initialCameraFit() {
+    if (_generatedArea.length >= 3) {
+      return CameraFit.bounds(
+        bounds: LatLngBounds.fromPoints(_generatedArea),
+        padding: const EdgeInsets.all(32),
+      );
+    }
+    final bounds = widget.initialBounds;
+    if (bounds != null &&
+        const [
+          'south',
+          'north',
+          'west',
+          'east',
+        ].every((k) => bounds[k]?.isFinite == true) &&
+        bounds['north']! > bounds['south']! &&
+        bounds['east']! > bounds['west']!) {
+      return CameraFit.bounds(
+        bounds: LatLngBounds(
+          LatLng(bounds['south']!, bounds['west']!),
+          LatLng(bounds['north']!, bounds['east']!),
+        ),
+        padding: const EdgeInsets.all(32),
+      );
+    }
+    if (_searchBoundary.length >= 3) {
+      return CameraFit.bounds(
+        bounds: LatLngBounds.fromPoints(_searchBoundary),
+        padding: const EdgeInsets.all(32),
+      );
+    }
+    return null;
   }
 
   Future<void> _showPropertyComparison() async {
@@ -934,17 +1484,115 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
     }
   }
 
+  Widget _areaActions() {
+    final label = _drawingFreehand
+        ? 'Cancel drawing'
+        : _freehandError != null
+        ? 'Draw Again'
+        : _generatedArea.isEmpty
+        ? 'Draw Area'
+        : 'Edit Boundary';
+    final busy = _saving || _recommending || _loadingExistingArea;
+    return SafeArea(
+      top: false,
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (_freehandError != null && !_drawingFreehand) ...[
+              Semantics(liveRegion: true, child: Text(_freehandError!)),
+              const SizedBox(height: 8),
+            ],
+            Wrap(
+              spacing: 12,
+              runSpacing: 8,
+              alignment: WrapAlignment.center,
+              children: [
+                FilledButton.icon(
+                  key: _freehandError != null && !_drawingFreehand
+                      ? const Key('freehand-draw-again')
+                      : const Key('freehand-boundary-action'),
+                  onPressed: busy || _mappingLocked
+                      ? null
+                      : _drawingFreehand
+                      ? _cancelFreehand
+                      : () => _beginFreehand(retry: _freehandError != null),
+                  icon: Icon(
+                    _drawingFreehand ? Icons.close : Icons.draw_outlined,
+                  ),
+                  label: Text(label),
+                ),
+                TextButton(
+                  key: const Key('freehand-recovery-cancel'),
+                  onPressed: busy ? null : () => Navigator.pop(context, false),
+                  child: const Text('Cancel'),
+                ),
+                ConstrainedBox(
+                  constraints: const BoxConstraints(minHeight: 55),
+                  child: ElevatedButton.icon(
+                    onPressed:
+                        busy ||
+                            _mappingLocked ||
+                            _drawingFreehand ||
+                            !_isAreaValid()
+                        ? null
+                        : _saveArea,
+                    icon: _saving
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.save),
+                    label: Text(
+                      _saving
+                          ? 'Saving Target...'
+                          : _advancedDrawing
+                          ? 'Save Zone'
+                          : 'Use This Area',
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   String _instructionText() {
+    if (!_advancedDrawing) {
+      if (_drawingFreehand) {
+        return 'Press and drag around the streets or neighborhood you want to cover. Release to preview your area.';
+      }
+      return _generatedArea.isEmpty
+          ? 'Browse the map, then choose Draw Area to trace your territory.'
+          : 'Review your boundary. Pan or zoom to inspect it, then Use This Area or Edit Boundary.';
+    }
     switch (_selectedShape) {
       case CampaignAreaShape.polygon:
-        return 'Tap at least 3 points around the zone. '
-            'Scaled Circle will automatically organize them into a clean boundary.';
+        if (_generatedArea.length >= 3) {
+          final validation = CampaignFreehandGeometry.finish(
+            _generatedArea,
+            repairMinorDefects: false,
+          );
+          if (!validation.isValid) return validation.error!;
+        }
+        return 'Click or tap boundary points in order around the area. Add at least 3 points; Undo removes the last point.';
 
       case CampaignAreaShape.rectangle:
         return 'Tap two opposite corners of the rectangle.';
 
       case CampaignAreaShape.circle:
-        return 'Tap once for the center, then tap again to set the radius.';
+        if (_inputPoints.isEmpty) {
+          return 'Click or tap the center of your campaign area.';
+        }
+        if (_inputPoints.length == 1) {
+          return 'Move the pointer and click again to set the radius. On touchscreens, tap the radius point.';
+        }
+        return 'Circle ready. Save this area, or Undo to adjust its radius.';
 
       case CampaignAreaShape.triangle:
         return 'Tap the 3 corners of the triangle.';
@@ -999,6 +1647,12 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
     }
 
     final signalColor = _propertySignalColor();
+    final preview =
+        _selectedShape == CampaignAreaShape.circle &&
+            _inputPoints.length == 1 &&
+            _circlePreviewEdge != null
+        ? _buildCirclePolygon(_inputPoints.first, _circlePreviewEdge!)
+        : <LatLng>[];
     final polygons = _generatedArea.length >= 3
         ? [
             Polygon(
@@ -1011,6 +1665,16 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
             ),
           ]
         : <Polygon>[];
+    if (preview.isNotEmpty) {
+      polygons.add(
+        Polygon(
+          points: preview,
+          borderStrokeWidth: 2,
+          color: Colors.blue.withValues(alpha: 0.10),
+          borderColor: Colors.blue,
+        ),
+      );
+    }
     if (_searchBoundary.length >= 3) {
       polygons.insert(
         0,
@@ -1023,7 +1687,7 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
       );
     }
 
-    final markers = _inputPoints
+    final markers = (_advancedDrawing ? _inputPoints : <LatLng>[])
         .asMap()
         .entries
         .map(
@@ -1050,6 +1714,10 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
     final metrics = _calculateZoneMetrics();
 
     return Scaffold(
+      // One persistent action surface serves every boundary state. Clear must
+      // never leave its Draw action in an offscreen toolbar. Scaffold reserves
+      // space for this footer; it does not overlay the map or its attribution.
+      bottomNavigationBar: _areaActions(),
       appBar: AuthenticatedAppBar(
         title: Text(_mappingLocked ? 'Campaign Area (Locked)' : 'Choose area'),
         centerTitle: true,
@@ -1057,11 +1725,20 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
       body: LayoutBuilder(
         builder: (context, viewport) {
           final desktop = viewport.maxWidth >= 760;
-          final mapHeight = desktop
+          final preferredMapHeight = desktop
               ? (viewport.maxHeight * 0.64).clamp(520.0, 760.0)
               : (viewport.maxHeight * 0.56).clamp(360.0, 560.0);
+          // Large-text controls consume their real height. Fit the map frame,
+          // including its attribution, in the remaining scroll viewport.
+          final mapHeight = math.min(
+            preferredMapHeight,
+            math.max(160.0, viewport.maxHeight - 16),
+          );
           return SingleChildScrollView(
             key: const Key('campaign-area-scroll'),
+            physics: _drawingFreehand
+                ? const NeverScrollableScrollPhysics()
+                : null,
             child: Column(
               children: [
                 if (!_mappingLocked)
@@ -1070,7 +1747,7 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
                     child: Align(
                       alignment: Alignment.centerLeft,
                       child: Text(
-                        'Choose where the work happens',
+                        'Draw Your Area',
                         style: TextStyle(
                           fontSize: 20,
                           fontWeight: FontWeight.w800,
@@ -1078,27 +1755,53 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
                       ),
                     ),
                   ),
-                SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  padding: const EdgeInsets.fromLTRB(12, 12, 12, 6),
-                  child: SegmentedButton<CampaignAreaShape>(
-                    segments: CampaignAreaShape.values
-                        .map(
-                          (shape) => ButtonSegment<CampaignAreaShape>(
-                            value: shape,
+                Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Wrap(
+                    spacing: 12,
+                    runSpacing: 8,
+                    children: [
+                      Chip(
+                        avatar: Icon(
+                          _drawingFreehand
+                              ? Icons.gesture
+                              : Icons.pan_tool_outlined,
+                        ),
+                        label: Text(
+                          _drawingFreehand ? 'Draw mode' : 'Browse Map',
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                ExpansionTile(
+                  title: const Text('Advanced Drawing Tools'),
+                  subtitle: const Text(
+                    'Click boundary points, or use Rectangle and Circle.',
+                  ),
+                  children: [
+                    Wrap(
+                      spacing: 8,
+                      children: [
+                        for (final shape in CampaignAreaShape.values.where(
+                          (v) => v != CampaignAreaShape.triangle,
+                        ))
+                          OutlinedButton.icon(
+                            onPressed: _mappingLocked || _saving
+                                ? null
+                                : () => _changeShape(shape),
                             icon: Icon(_shapeIcon(shape)),
                             label: Text(_shapeLabel(shape)),
                           ),
-                        )
-                        .toList(),
-                    selected: {_selectedShape},
-                    onSelectionChanged: _mappingLocked
-                        ? null
-                        : (selection) {
-                            unawaited(_changeShape(selection.first));
-                          },
-                    showSelectedIcon: false,
-                  ),
+                      ],
+                    ),
+                    const Padding(
+                      padding: EdgeInsets.all(12),
+                      child: Text(
+                        'Polygon is an alternative to dragging: click or tap boundary points one at a time.',
+                      ),
+                    ),
+                  ],
                 ),
 
                 if (_mappingLocked)
@@ -1124,8 +1827,7 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
                         leading: const Icon(Icons.check_circle_outline),
                         title: Text('$_zoneName already has an area'),
                         subtitle: const Text(
-                          'This boundary is one Scaler assignment area. Use '
-                          'Replace Area to redraw it.',
+                          'Review this saved boundary or choose Edit Boundary to redraw it.',
                         ),
                       ),
                     ),
@@ -1151,16 +1853,23 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
                   secondary: const Icon(Icons.home_work_outlined),
                   title: const Text('Property Intelligence'),
                   subtitle: const Text(
-                    'Use available property and local geography signals to help shape practical Scaler Zones. Select an area to review available information.',
+                    'Select an area to analyze properties and local geography.',
                   ),
-                  onChanged: _generatedArea.length < 3
-                      ? null
-                      : (enabled) {
-                          setState(() => _propertyLayerEnabled = enabled);
-                          if (enabled && _propertyIntelligence == null) {
-                            _loadPropertyIntelligence();
-                          }
-                        },
+                  onChanged: (enabled) {
+                    setState(() => _propertyLayerEnabled = enabled);
+                    if (enabled && !_isAreaValid()) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text(
+                            'Draw or select an area first. Property Intelligence will analyze it as soon as the area is ready.',
+                          ),
+                        ),
+                      );
+                    }
+                    if (enabled && _propertyIntelligence == null) {
+                      _loadPropertyIntelligence();
+                    }
+                  },
                 ),
 
                 Container(
@@ -1168,16 +1877,52 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
                   padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
                   child: Column(
                     children: [
-                      Text(_instructionText(), textAlign: TextAlign.center),
-
-                      if (radius != null) ...[
-                        const SizedBox(height: 6),
-
-                        Text(
-                          'Radius: ${radius.toStringAsFixed(0)} meters',
-                          style: const TextStyle(fontWeight: FontWeight.w600),
+                      // Reserve status space so the map cannot move underneath
+                      // the pointer when the first click changes instructions.
+                      SizedBox(
+                        height: MediaQuery.textScalerOf(context).scale(64),
+                        child: Center(
+                          child: Text(
+                            _instructionText(),
+                            textAlign: TextAlign.center,
+                          ),
                         ),
-                      ],
+                      ),
+                      if (widget.searchContextLabel != null)
+                        Text('Map context: ${widget.searchContextLabel}'),
+                      if (_freehandNotice != null)
+                        Text(
+                          _freehandNotice!,
+                          key: const Key('freehand-repair-notice'),
+                        ),
+                      if (_freehandNotice != null)
+                        TextButton(
+                          key: const Key('freehand-raw-comparison'),
+                          onPressed: () => setState(
+                            () => _compareRepairStroke = !_compareRepairStroke,
+                          ),
+                          child: Text(
+                            _compareRepairStroke
+                                ? 'Hide original outline'
+                                : 'Compare original outline',
+                          ),
+                        ),
+                      if (_compareRepairStroke)
+                        const Text(
+                          'Orange: original outline. Blue: corrected boundary.',
+                        ),
+
+                      SizedBox(
+                        height: MediaQuery.textScalerOf(context).scale(26),
+                        child: Center(
+                          child: Text(
+                            radius == null
+                                ? ' '
+                                : '${_inputPoints.length == 1 ? 'Preview radius' : 'Radius'}: ${radius.toStringAsFixed(0)} meters',
+                            style: const TextStyle(fontWeight: FontWeight.w600),
+                          ),
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -1186,37 +1931,80 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
                   key: const Key('campaign-zone-map-workspace'),
                   height: mapHeight,
                   child: MapAttributionFrame(
-                    child: FlutterMap(
-                      mapController: _mapController,
+                    key: _mapFrameKey,
+                    child: Listener(
+                      key: const Key('freehand-map-input'),
+                      onPointerDown: (event) =>
+                          _guardTrace(() => _traceDown(event)),
+                      onPointerMove: (event) =>
+                          _guardTrace(() => _traceMove(event)),
+                      onPointerUp: (event) =>
+                          _guardTrace(() => _traceUp(event)),
+                      onPointerCancel: _traceCancel,
+                      child: FlutterMap(
+                        key: _mapViewportKey,
+                        mapController: _mapController,
 
-                      options: MapOptions(
-                        initialCenter: _generatedArea.isEmpty
-                            ? (_searchBoundary.isEmpty
-                                  ? _defaultCenter
-                                  : _calculateCenter(_searchBoundary))
-                            : _calculateCenter(_generatedArea),
-                        initialZoom: _generatedArea.isEmpty
-                            ? (_searchBoundary.isEmpty ? 13 : 10)
-                            : 15,
+                        options: MapOptions(
+                          initialCenter: _generatedArea.isEmpty
+                              ? (_searchBoundary.isEmpty
+                                    ? widget.initialCenter ?? _defaultCenter
+                                    : _calculateCenter(_searchBoundary))
+                              : _calculateCenter(_generatedArea),
+                          initialZoom: _generatedArea.isEmpty
+                              ? (_searchBoundary.isEmpty ? 13 : 10)
+                              : 15,
+                          initialCameraFit: _initialCameraFit(),
+                          interactionOptions: InteractionOptions(
+                            flags: _drawingFreehand
+                                ? InteractiveFlag.none
+                                : _mappingLocked || !_advancedDrawing
+                                ? InteractiveFlag.all
+                                : InteractiveFlag.all &
+                                      ~InteractiveFlag.doubleTapZoom &
+                                      ~InteractiveFlag.doubleTapDragZoom,
+                          ),
+                          onPointerHover: (_, point) => _previewCircle(point),
 
-                        onTap: _mappingLocked
-                            ? null
-                            : (tapPosition, point) {
-                                unawaited(_handleMapTap(tapPosition, point));
-                              },
-                      ),
-
-                      children: [
-                        TileLayer(
-                          urlTemplate:
-                              'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                          userAgentPackageName: 'com.scaledcircle.app',
+                          // Drawing taps use the pointer path above so switching
+                          // modes cannot leave FlutterMap's double-tap timer in
+                          // charge of an area's first or second boundary point.
                         ),
 
-                        PolygonLayer(polygons: polygons),
+                        children: [
+                          TileLayer(
+                            urlTemplate:
+                                'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                            userAgentPackageName: 'com.scaledcircle.app',
+                            tileProvider: widget.tileProvider,
+                          ),
 
-                        MarkerLayer(markers: markers),
-                      ],
+                          PolygonLayer(polygons: polygons),
+                          if (_compareRepairStroke &&
+                              _originalRepairStroke.length >= 2)
+                            PolylineLayer(
+                              polylines: [
+                                Polyline(
+                                  points: _originalRepairStroke,
+                                  color: Colors.orange,
+                                  strokeWidth: 2,
+                                ),
+                              ],
+                            ),
+                          if (_freehandStroke.length >= 2)
+                            PolylineLayer(
+                              polylines: [
+                                Polyline(
+                                  points: List.of(_freehandStroke),
+                                  color: Colors.blue,
+                                  strokeWidth: 4,
+                                ),
+                              ],
+                            ),
+
+                          MarkerLayer(markers: markers),
+                        ],
+                      ),
                     ),
                   ),
                 ),
@@ -1242,73 +2030,41 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
                                   ),
                                 ),
                               ),
-                          onCompare: _showPropertyComparison,
+                          onCompare: widget.pendingZoneData == null
+                              ? _showPropertyComparison
+                              : null,
                           onAskAi: _askPropertyAi,
                         ),
                         const SizedBox(height: 12),
                       ],
-                      if (metrics != null)
+                      if (metrics != null &&
+                          !_drawingFreehand &&
+                          !_traceInvalid)
                         Card(
                           child: Padding(
                             padding: const EdgeInsets.all(14),
                             child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                const Row(
-                                  children: [
-                                    Icon(Icons.analytics_outlined),
-                                    SizedBox(width: 8),
-                                    Text(
-                                      'Preliminary Zone Intelligence',
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 17,
-                                      ),
-                                    ),
-                                  ],
+                                Text(
+                                  '${metrics.areaAcres.toStringAsFixed(1)} acres',
                                 ),
-
-                                const SizedBox(height: 12),
-
-                                Wrap(
-                                  spacing: 8,
-                                  runSpacing: 8,
-                                  children: [
-                                    Chip(
-                                      avatar: const Icon(
-                                        Icons.square_foot,
-                                        size: 18,
-                                      ),
-                                      label: Text(
-                                        '${metrics.areaAcres.toStringAsFixed(1)} acres',
-                                      ),
-                                    ),
-
-                                    const Chip(
-                                      avatar: Icon(
-                                        Icons.route_outlined,
-                                        size: 18,
-                                      ),
-                                      label: Text('Route not yet verified'),
-                                    ),
-                                    const Chip(
-                                      avatar: Icon(
-                                        Icons.analytics_outlined,
-                                        size: 18,
-                                      ),
-                                      label: Text(
-                                        'Workload pending target analysis',
-                                      ),
-                                    ),
-                                  ],
-                                ),
-
                                 const SizedBox(height: 8),
-
-                                const Text(
-                                  'Geographic area is calculated from your target. '
-                                  'Home and workload estimates are handled separately.',
-                                  style: TextStyle(fontSize: 12),
-                                  textAlign: TextAlign.center,
+                                ZoneIntelligencePreview(
+                                  geometry: _generatedArea
+                                      .map(
+                                        (p) => <String, double>{
+                                          'latitude': p.latitude,
+                                          'longitude': p.longitude,
+                                        },
+                                      )
+                                      .toList(),
+                                  campaignId: _evidenceCampaignId,
+                                  zoneId: widget.pendingZoneData == null
+                                      ? widget.campaignReference.id
+                                      : null,
+                                  loader: widget.zoneEvidenceLoader,
+                                  identity: widget.zoneEvidenceIdentity,
                                 ),
                               ],
                             ),
@@ -1317,7 +2073,7 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
 
                       Row(
                         children: [
-                          if (_hasLoadedExistingArea) ...[
+                          if (_hasLoadedExistingArea && _advancedDrawing) ...[
                             Expanded(
                               child: OutlinedButton.icon(
                                 onPressed: _mappingLocked
@@ -1334,7 +2090,8 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
                               onPressed:
                                   _mappingLocked ||
                                       (_inputPoints.isEmpty &&
-                                          _generatedArea.isEmpty)
+                                          _generatedArea.isEmpty &&
+                                          _freehandUndo == null)
                                   ? null
                                   : _undoLastPoint,
                               icon: const Icon(Icons.undo),
@@ -1361,45 +2118,39 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
 
                       const SizedBox(height: 10),
 
-                      SizedBox(
-                        width: double.infinity,
-                        child: TextButton(
-                          onPressed: _saving
-                              ? null
-                              : () => Navigator.pop(context, false),
-                          child: const Text('Cancel'),
+                      if (widget.recommendWithinArea != null) ...[
+                        const Text(
+                          'Preview a recommendation inside this boundary. '
+                          'Your saved territory stays unchanged until you use a recommendation or save this area.',
                         ),
-                      ),
-
-                      Text(
-                        '${_shapeLabel(_selectedShape)} • '
-                        '${_generatedArea.length} verification '
-                        'point${_generatedArea.length == 1 ? '' : 's'}',
-                      ),
-
-                      const SizedBox(height: 10),
-
-                      SizedBox(
-                        width: double.infinity,
-                        height: 55,
-                        child: ElevatedButton.icon(
-                          onPressed: _saving || _mappingLocked
+                        const SizedBox(height: 8),
+                        OutlinedButton.icon(
+                          onPressed:
+                              _saving ||
+                                  _recommending ||
+                                  _mappingLocked ||
+                                  _drawingFreehand ||
+                                  !_isAreaValid()
                               ? null
-                              : _saveArea,
-                          icon: _saving
-                              ? const SizedBox(
-                                  width: 20,
-                                  height: 20,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                  ),
-                                )
-                              : const Icon(Icons.save),
+                              : _recommendWithinArea,
+                          icon: const Icon(Icons.auto_awesome_outlined),
                           label: Text(
-                            _saving ? 'Saving Target...' : 'Save Zone',
+                            _recommending
+                                ? 'Reviewing this area...'
+                                : 'Recommend within this area',
                           ),
                         ),
-                      ),
+                        const SizedBox(height: 10),
+                      ],
+
+                      if (_advancedDrawing)
+                        Text(
+                          '${_shapeLabel(_selectedShape)} • '
+                          '${_generatedArea.length} verification '
+                          'point${_generatedArea.length == 1 ? '' : 's'}',
+                        ),
+
+                      const SizedBox(height: 10),
                     ],
                   ),
                 ),
@@ -1410,6 +2161,15 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
       ),
     );
   }
+}
+
+class _AreaDrawingSnapshot {
+  final CampaignAreaShape shape;
+  final List<LatLng> input;
+  final List<LatLng> area;
+  final bool loaded;
+
+  const _AreaDrawingSnapshot(this.shape, this.input, this.area, this.loaded);
 }
 
 class ZoneMetrics {

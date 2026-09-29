@@ -222,7 +222,7 @@ class _PostcardCampaignScreenState extends State<PostcardCampaignScreen> {
                       ),
                     ),
                   const Text(
-                    'Review both sides, your Business details and the QR destination. ScaledCircle will confirm the mailing routes and final quote before you pay.',
+                    'Review both sides, your Business details and the QR destination. Scaled Circle will confirm the mailing routes and final quote before you pay.',
                   ),
                   CheckboxListTile(
                     value: checked,
@@ -270,7 +270,7 @@ class _PostcardCampaignScreenState extends State<PostcardCampaignScreen> {
       {},
       acknowledgment:
           'I approve the ${q['quantity']} pieces and listed routes, the exact approved design, and the cancellation terms shown on this order.',
-      button: 'Pay ScaledCircle — TEST',
+      button: 'Pay Scaled Circle — TEST',
     );
     if (accepted == null) return;
     await _run(() async {
@@ -564,7 +564,7 @@ class _PostcardCampaignScreenState extends State<PostcardCampaignScreen> {
                   '${route['zip']} ${route['route']} · ${route['quantity']} ${route['delivery'] == 'residential' ? 'residential addresses' : 'addresses'}',
                 ),
               Text(
-                'Printing: ${_money(q['printingCents'])}\nUSPS Postage: ${_money(q['postageCents'])}\nScaledCircle Fulfillment & Creative${q['feePolicy'] != null ? ' (20%)' : ''}: ${_money(q['fulfillmentCents'])}\nTax: ${_money(q['taxCents'])}',
+                'Printing: ${_money(q['printingCents'])}\nUSPS Postage: ${_money(q['postageCents'])}\nScaled Circle Fulfillment & Creative${q['feePolicy'] != null ? ' (20%)' : ''}: ${_money(q['fulfillmentCents'])}\nTax: ${_money(q['taxCents'])}',
               ),
               Text(
                 'Total ${_money(q['totalCents'])}',
@@ -669,7 +669,7 @@ class _PostcardCampaignScreenState extends State<PostcardCampaignScreen> {
                   '${receipt['label']} · ${receipt['evidenceId']}',
                 ),
               const Text(
-                'Use the USPS EDDM tool to select complete routes, prepare facing slips and PS Form 3587, apply do-not-deliver exclusions and confirm the designated drop-off office. Bundle by carrier route (50–100 pieces, at most 6 inches high). Retain the official acceptance receipt. ScaledCircle does not submit USPS orders automatically.',
+                'Use the USPS EDDM tool to select complete routes, prepare facing slips and PS Form 3587, apply do-not-deliver exclusions and confirm the designated drop-off office. Bundle by carrier route (50–100 pieces, at most 6 inches high). Retain the official acceptance receipt. Scaled Circle does not submit USPS orders automatically.',
               ),
             ] else
               Wrap(

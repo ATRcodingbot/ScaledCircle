@@ -12,6 +12,7 @@ class NativeBrandGateTest(unittest.TestCase):
         for relative in ['assets/brand', 'ios/Runner/Assets.xcassets', 'ios/Runner/Base.lproj', 'android/app/src/main/res']:
             shutil.copytree(ROOT / 'apps/mobile' / relative, root / 'apps/mobile' / relative)
         shutil.copyfile(ROOT / 'apps/mobile/android/app/src/main/AndroidManifest.xml', root / 'apps/mobile/android/app/src/main/AndroidManifest.xml')
+        shutil.copyfile(ROOT / 'apps/mobile/ios/Runner/Info.plist', root / 'apps/mobile/ios/Runner/Info.plist')
         return root
 
     def test_exact_native_assets_pass(self):
@@ -41,7 +42,7 @@ class NativeBrandGateTest(unittest.TestCase):
                 verify_source(root)
             launch.write_bytes(original)
             manifest = root / 'apps/mobile/android/app/src/main/AndroidManifest.xml'
-            manifest.write_text(manifest.read_text().replace('ScaledCircle', 'Flutter Demo'))
+            manifest.write_text(manifest.read_text().replace('Scaled Circle', 'Flutter Demo'))
             with self.assertRaisesRegex(ValueError, 'app name'):
                 verify_source(root)
 

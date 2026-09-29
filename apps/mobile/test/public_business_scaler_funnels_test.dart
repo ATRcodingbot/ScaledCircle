@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_app/navigation/app_routes.dart';
 import 'package:flutter_app/screens/public/business_funnel_screen.dart';
-import 'package:flutter_app/screens/public/authentic_product_map.dart';
 import 'package:flutter_app/screens/public/public_landing_screen.dart';
 import 'package:flutter_app/screens/public/scaler_funnel_screen.dart';
 
@@ -33,7 +32,7 @@ void main() {
         ),
       );
       expect(tester.takeException(), isNull);
-      expect(find.text('Run your business. Grow locally.'), findsOneWidget);
+      expect(find.text('Run your business.\nGrow locally.'), findsOneWidget);
       expect(find.textContaining('422 homes'), findsNothing);
       expect(find.textContaining('98% coverage'), findsNothing);
       expect(find.textContaining('THIS WEEK'), findsNothing);
@@ -59,6 +58,11 @@ void main() {
 
   testWidgets('homepage opens the dedicated Business funnel', (tester) async {
     await tester.pumpWidget(app());
+    await Scrollable.ensureVisible(
+      tester.element(find.byKey(const Key('business-primary-cta'))),
+      alignment: .5,
+    );
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('business-primary-cta')));
     await tester.pumpAndSettle();
     expect(find.text('FOR LOCAL BUSINESSES'), findsOneWidget);
@@ -67,24 +71,57 @@ void main() {
     expect(find.text('Analyze Main Service Area'), findsOneWidget);
   });
 
-  testWidgets('homepage restores authentic campaign-map hero and role paths', (
-    tester,
-  ) async {
-    await tester.pumpWidget(app());
-    expect(find.text('Run your business. Grow locally.'), findsOneWidget);
-    expect(
-      find.textContaining('Keep customers, schedule, jobs and your team'),
-      findsOneWidget,
-    );
-    expect(find.textContaining('Results you can review'), findsOneWidget);
-    expect(find.text('VALIDATED SMART ZONE • DEMO'), findsOneWidget);
-    expect(find.textContaining('Route not yet verified'), findsWidgets);
-    expect(find.text('Start Your Business'), findsWidgets);
-    expect(find.text('Join as a Scaler'), findsWidgets);
-  });
+  testWidgets(
+    'homepage matches the Business workflow illustration without numeric claims',
+    (tester) async {
+      final semantics = tester.ensureSemantics();
+      await tester.pumpWidget(app());
+      expect(find.text('Run your business.\nGrow locally.'), findsOneWidget);
+      expect(
+        find.textContaining('Connect with local gig workers—called Scalers'),
+        findsOneWidget,
+      );
+      expect(find.textContaining('Results you can review'), findsOneWidget);
+      expect(
+        find.bySemanticsLabel(
+          RegExp('Workflow illustration of an assigned area'),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.bySemanticsLabel(RegExp('validated Smart Zone')),
+        findsNothing,
+      );
+      expect(find.text('One connected campaign'), findsOneWidget);
+      expect(find.text('Example campaign area'), findsNothing);
+      expect(find.textContaining('225 estimated homes'), findsNothing);
+      expect(find.textContaining('5-hour'), findsNothing);
+      expect(find.textContaining('Validated demo'), findsNothing);
+      expect(find.text('VALIDATED SMART ZONE • DEMO'), findsNothing);
+      expect(
+        find.text('Illustrative boundary • Baltimore, Maryland'),
+        findsNothing,
+      );
+      expect(find.text('How Scaled Circle works'), findsOneWidget);
+      expect(find.text('Plan your local campaign'), findsOneWidget);
+      expect(find.byKey(const Key('homepage-cost-separation')), findsOneWidget);
+      expect(
+        find.textContaining('Workflow illustration · not a live campaign'),
+        findsOneWidget,
+      );
+      expect(find.text('Get Started for Business'), findsWidgets);
+      expect(find.text('Join as a Scaler'), findsWidgets);
+      semantics.dispose();
+    },
+  );
 
   testWidgets('homepage opens the dedicated Scaler funnel', (tester) async {
     await tester.pumpWidget(app());
+    await Scrollable.ensureVisible(
+      tester.element(find.byKey(const Key('scaler-primary-cta'))),
+      alignment: .5,
+    );
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('scaler-primary-cta')));
     await tester.pumpAndSettle();
     expect(find.text('FOR SCALERS'), findsWidgets);
@@ -135,20 +172,17 @@ void main() {
     expect(find.text('SAMPLE RESULTS'), findsOneWidget);
     expect(find.text('Weather Intelligence'), findsOneWidget);
     expect(find.text('SAMPLE SCENARIO'), findsOneWidget);
-    expect(find.text('CAMPAIGN ZONES'), findsOneWidget);
-    expect(find.text('1 Zone'), findsOneWidget);
-    expect(find.text('1 Mapped'), findsOneWidget);
-    expect(find.text('0 Assigned'), findsOneWidget);
-    expect(find.text('VALIDATED SMART ZONE DEMO'), findsOneWidget);
-    expect(find.text('Walking Route'), findsOneWidget);
-    expect(find.text('5 hours • serviceable geography'), findsOneWidget);
-    expect(find.text('Recommended Base'), findsOneWidget);
-    expect(find.text('\$100.00'), findsOneWidget);
-    expect(find.text('\$20.00/hour equivalent'), findsOneWidget);
-    expect(find.text('+\$20.00 optional'), findsOneWidget);
-    expect(find.text('+\$10.00 optional'), findsOneWidget);
-    expect(find.text('\$130.00'), findsOneWidget);
-    expect(find.text('Review Campaign'), findsOneWidget);
+    expect(find.text('One connected campaign'), findsOneWidget);
+    for (final label in [
+      'Assigned area',
+      'Field execution',
+      'Campaign responses',
+    ]) {
+      expect(find.text(label), findsOneWidget);
+    }
+    expect(find.textContaining('225'), findsNothing);
+    expect(find.textContaining('5 hours'), findsNothing);
+    expect(find.textContaining('VALIDATED SMART ZONE'), findsNothing);
   });
 
   testWidgets('Scaler funnel is ordered and keeps capability claims truthful', (
@@ -188,35 +222,6 @@ void main() {
     expect(find.text('Active'), findsWidgets);
   });
 
-  test(
-    'validated public Smart Zone keeps its demo position inside geometry',
-    () {
-      expect(validatedSmartZoneDemo, hasLength(13));
-      expect(validatedSmartZoneDemoPlanId, startsWith('smart-zone_'));
-      expect(validatedSmartZoneDemoEstimatedHomes, 225);
-      expect(validatedSmartZoneDemoEstimatedMinutes, 300);
-      expect(
-        publicPointInsidePolygon(
-          validatedSmartZoneDemoPosition,
-          validatedSmartZoneDemo,
-        ),
-        isTrue,
-      );
-      final latitudes = validatedSmartZoneDemo.map((point) => point.latitude);
-      final longitudes = validatedSmartZoneDemo.map((point) => point.longitude);
-      expect(
-        latitudes.reduce((a, b) => a > b ? a : b) -
-            latitudes.reduce((a, b) => a < b ? a : b),
-        lessThan(.02),
-      );
-      expect(
-        longitudes.reduce((a, b) => a > b ? a : b) -
-            longitudes.reduce((a, b) => a < b ? a : b),
-        lessThan(.02),
-      );
-    },
-  );
-
   testWidgets('both funnels remain single-column and overflow-free at 390px', (
     tester,
   ) async {
@@ -228,14 +233,14 @@ void main() {
     final businessLayoutError = tester.takeException();
     expect(businessLayoutError, isNull);
     expect(
-      find.bySemanticsLabel(RegExp('ScaledCircle for Local Businesses')),
+      find.bySemanticsLabel(RegExp('Scaled Circle for Local Businesses')),
       findsOneWidget,
     );
 
     await tester.pumpWidget(app(home: const ScalerFunnelScreen()));
     expect(tester.takeException(), isNull);
     expect(
-      find.bySemanticsLabel(RegExp('ScaledCircle for Scalers')),
+      find.bySemanticsLabel(RegExp('Scaled Circle for Scalers')),
       findsOneWidget,
     );
     semantics.dispose();
@@ -250,10 +255,12 @@ void main() {
       600,
     );
     expect(find.text('Start Your Business'), findsWidgets);
-    expect(find.text('Join Business Waitlist'), findsWidgets);
     expect(find.text('Log In'), findsWidgets);
+    expect(find.text('Join Business Waitlist'), findsNothing);
     expect(
-      find.textContaining('Marketplace access is being rolled out in stages'),
+      find.textContaining(
+        'Campaign work depends on current eligibility, funding and assignment',
+      ),
       findsOneWidget,
     );
   });
@@ -310,9 +317,6 @@ void main() {
     final scaler = File(
       'lib/screens/public/scaler_funnel_screen.dart',
     ).readAsStringSync();
-    final maps = File(
-      'lib/screens/public/authentic_product_map.dart',
-    ).readAsStringSync();
     final landing = File(
       'lib/screens/public/public_landing_screen.dart',
     ).readAsStringSync();
@@ -320,31 +324,22 @@ void main() {
 
     expect(
       components,
-      contains("'assets/brand/scaledcircle-lockup-dark-surface.png'"),
+      contains(
+        "'assets/brand/wordmark-20260928/scaledcircle-lockup-dark-surface.png'",
+      ),
     );
-    expect(components, contains('How do you want to use ScaledCircle?'));
-    expect(business, contains('Selected Area'));
-    expect(business, contains('Smart Zone A'));
-    expect(business, contains('Route not verified'));
-    expect(business, contains("ProductLine('Route', 'Not yet verified')"));
+    expect(components, contains('How do you want to use Scaled Circle?'));
+    expect(business, contains('CampaignWorkflowIllustration('));
     expect(scaler, contains('EXAMPLE ACTIVE-WORK GPS EVIDENCE'));
     expect(scaler, contains('Recording during active work'));
     expect(scaler, isNot(contains('Suggested Walking Route')));
     expect(scaler, isNot(contains('Optimized Route')));
     expect(business, isNot(contains('_CampaignMapPainter')));
     expect(scaler, isNot(contains('_ScalerZonePainter')));
-    expect(maps, contains('FlutterMap('));
-    expect(maps, contains('PolygonLayer('));
-    expect(maps, contains('MarkerLayer('));
-    expect(maps, contains('MapAttributionFrame('));
-    expect(maps, isNot(contains('PolylineLayer(')));
-    expect(maps, contains('InteractiveFlag.none'));
-    expect(maps, contains('SmartZonePlanningV3'));
-    expect(maps, contains('smart-zone_d6c32ad2cde31cdf49808f31'));
-    expect(maps, contains('conservative estimate'));
-    expect(maps, isNot(contains('Geolocator')));
-    expect(maps, isNot(contains('requestPermission')));
-    expect(maps, isNot(contains('startTracking')));
+    expect(business, contains('CampaignWorkflowIllustration('));
+    expect(scaler, contains('CampaignWorkflowIllustration('));
+    expect(business, isNot(contains('AuthenticProductMap(')));
+    expect(scaler, isNot(contains('AuthenticProductMap(')));
     expect(landing, contains('ScaledCircleBrand'));
     expect(landing, contains('openPublicRoleChooser(context)'));
     expect(html, contains('og:type'));
@@ -358,11 +353,6 @@ void main() {
     expect(html, contains('twitter:image'));
     expect(html, contains('href="favicon.png"'));
     expect(html, isNot(contains('scaled-circle-mark.svg')));
-    expect(
-      html,
-      contains(
-        'ScaledCircle — Local Growth Intelligence + Verified Field Campaigns',
-      ),
-    );
+    // Web metadata stays on the independently deployed Hosting source.
   });
 }

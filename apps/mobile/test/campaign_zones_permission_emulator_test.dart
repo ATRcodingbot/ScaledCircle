@@ -136,7 +136,10 @@ void main() {
       expect(area.searchBoundary, boundary);
       expect(area.initialArea, boundary);
       expect(find.text('Polygon • 3 verification points'), findsOneWidget);
-      expect(find.textContaining('The saved area could not be loaded'), findsNothing);
+      expect(
+        find.textContaining('The saved area could not be loaded'),
+        findsNothing,
+      );
       expect(area.pendingZoneData?['businessId'], uid);
       expect(area.pendingZoneData?['campaignId'], campaignId);
       expect(
@@ -153,15 +156,15 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('Cancel'));
       await tester.pumpAndSettle();
-      await tester.ensureVisible(find.text('Draw My Own Area'));
-      await tester.tap(find.text('Draw My Own Area'));
+      await tester.ensureVisible(find.text('Draw My Area'));
+      await tester.tap(find.text('Draw My Area'));
       await tester.pumpAndSettle();
       final manual = tester.widget<CampaignAreaScreen>(
         find.byType(CampaignAreaScreen),
       );
       expect(manual.initialArea, isEmpty);
       expect(manual.searchBoundary, boundary);
-      expect(find.text('Polygon • 0 verification points'), findsOneWidget);
+      expect(find.text('Browse Map'), findsOneWidget);
       // A retained route must lose access when the account is no longer approved.
       await tester.pumpWidget(const SizedBox.shrink());
       await _adminSeed('users/$uid', {'role': 'business', 'active': false});

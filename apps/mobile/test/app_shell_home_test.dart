@@ -55,7 +55,7 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('Open preview'));
       await tester.pumpAndSettle();
-      await tester.tap(find.byTooltip('ScaledCircle Home'));
+      await tester.tap(find.byTooltip('Scaled Circle Home'));
       await tester.pumpAndSettle();
       expect(
         delegate.currentConfiguration.path,

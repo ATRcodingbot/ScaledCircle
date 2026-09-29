@@ -75,7 +75,7 @@ void main() {
       expect(find.text('Scalers Referred'), findsOneWidget);
       expect(
         find.text(
-          "Paid by ScaledCircle — never deducted from the Scaler's earnings.",
+          "Paid by Scaled Circle — never deducted from the Scaler's earnings.",
         ),
         findsOneWidget,
       );

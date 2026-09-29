@@ -53,20 +53,20 @@ void main() {
     await tester.pumpAndSettle();
     expect(
       tester
-          .getSemantics(find.byTooltip('ScaledCircle Home'))
+          .getSemantics(find.byTooltip('Scaled Circle Home'))
           .getSemanticsData()
           .label,
-      'ScaledCircle Home',
+      'Scaled Circle Home',
     );
     expect(
       tester
-          .getSemantics(find.byTooltip('ScaledCircle Home'))
+          .getSemantics(find.byTooltip('Scaled Circle Home'))
           .getSemanticsData()
           .hasAction(SemanticsAction.tap),
       isTrue,
     );
     semantics.dispose();
-    await tester.tap(find.byTooltip('ScaledCircle Home'));
+    await tester.tap(find.byTooltip('Scaled Circle Home'));
     await tester.pumpAndSettle();
     expect(find.text('Destination /business'), findsOneWidget);
   });
@@ -75,7 +75,7 @@ void main() {
   ) async {
     await tester.pumpWidget(fixture(owner: false));
     await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('ScaledCircle Home'));
+    await tester.tap(find.byTooltip('Scaled Circle Home'));
     await tester.pumpAndSettle();
     expect(find.text('Destination /business/schedule'), findsOneWidget);
   });

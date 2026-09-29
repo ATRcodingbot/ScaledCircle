@@ -1,9 +1,12 @@
+import '../../widgets/campaign_list_actions.dart';
+import '../../navigation/protected_route_gate.dart';
 import 'package:flutter_app/widgets/map_source_credit.dart';
 import 'package:flutter_app/navigation/authenticated_app_bar.dart';
 import '../../widgets/campaign_card_header.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import '../business/campaign_planner_screen.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import '../../models/campaign_card_compensation.dart';
@@ -31,11 +34,13 @@ import '../reviews/create_review_screen.dart';
 class CampaignDetailsScreen extends StatefulWidget {
   final DocumentSnapshot campaign;
   final String fallbackRoute;
+  final bool plannerReview;
 
   const CampaignDetailsScreen({
     super.key,
     required this.campaign,
     this.fallbackRoute = AppRoutes.businessDashboard,
+    this.plannerReview = false,
   });
 
   @override
@@ -850,70 +855,6 @@ class _CampaignDetailsScreenState extends State<CampaignDetailsScreen> {
     await liveCampaign.reference.update(updateData);
   }
 
-  Future<void> _deleteCampaign(
-    BuildContext context,
-    DocumentReference reference,
-  ) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) {
-        return AlertDialog(
-          title: const Text('Delete Campaign'),
-          content: const Text(
-            'Permanently delete this unfunded draft and its zone setup? This cannot be undone.',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.pop(dialogContext, false);
-              },
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.red,
-                foregroundColor: Colors.white,
-              ),
-              onPressed: () {
-                Navigator.pop(dialogContext, true);
-              },
-              child: const Text('Delete'),
-            ),
-          ],
-        );
-      },
-    );
-
-    if (confirmed != true) {
-      return;
-    }
-
-    try {
-      await _secureFunctions.call(
-        functionName: 'deleteDraftCampaign',
-        data: {'campaignId': reference.id},
-      );
-
-      if (!context.mounted) {
-        return;
-      }
-
-      Navigator.pop(context);
-    } catch (e) {
-      if (!context.mounted) {
-        return;
-      }
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Your campaign could not be deleted. Check its status and try again.',
-          ),
-        ),
-      );
-    }
-  }
-
   Future<void> _cancelAndRefundCampaign(
     BuildContext context,
     DocumentSnapshot liveCampaign,
@@ -1085,7 +1026,11 @@ class _CampaignDetailsScreenState extends State<CampaignDetailsScreen> {
         ),
       );
     }
-    if (status != 'open' || fundingStatus != 'funded') {
+    final refundPolicyStatus =
+        status == 'closed' && data['workEntryClosed'] == true
+        ? data['closedFromStatus']?.toString()
+        : status;
+    if (refundPolicyStatus != 'open' || fundingStatus != 'funded') {
       return const SizedBox.shrink();
     }
     return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
@@ -2048,14 +1993,23 @@ class _CampaignDetailsScreenState extends State<CampaignDetailsScreen> {
 
         final liveCampaign = snapshot.data!;
 
-        if (!liveCampaign.exists) {
-          return Scaffold(
-            appBar: _campaignAppBar(),
-            body: const Center(child: Text('This campaign no longer exists.')),
+        if (!liveCampaign.exists ||
+            (liveCampaign.data() as Map?)?['status'] == 'deleted') {
+          return const RouteRecoveryScreen(
+            title: 'Campaign no longer available',
+            destination: '/business/campaigns',
+            actionLabel: 'Return to Campaigns',
           );
         }
 
         final data = liveCampaign.data() as Map<String, dynamic>;
+
+        if (!widget.plannerReview &&
+            (data['executionMode'] == 'own_team' ||
+                (data['planningVersion'] != null &&
+                    data['status'] == 'draft'))) {
+          return CampaignPlannerScreen(campaignId: campaign.id);
+        }
 
         final campaignName = campaignDisplayName(
           data['campaignName']?.toString() ?? 'Untitled Campaign',
@@ -2197,7 +2151,7 @@ class _CampaignDetailsScreenState extends State<CampaignDetailsScreen> {
                                   'Maximum Scaler Pay  \$${quote.workerCompensation.toStringAsFixed(2)}',
                                 ),
                                 Text(
-                                  'ScaledCircle Fee (${quote.platformFeePercentLabel}), up to  \$${quote.platformFee.toStringAsFixed(2)}',
+                                  'Scaled Circle Fee (${quote.platformFeePercentLabel}), up to  \$${quote.platformFee.toStringAsFixed(2)}',
                                 ),
                                 Text(
                                   'Maximum Campaign Cost  \$${quote.estimatedTotal.toStringAsFixed(2)}',
@@ -2477,19 +2431,16 @@ class _CampaignDetailsScreenState extends State<CampaignDetailsScreen> {
               ],
 
               if (status == 'draft')
-                SizedBox(
-                  height: 55,
-                  child: ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.red,
-                      foregroundColor: Colors.white,
-                    ),
-                    icon: const Icon(Icons.delete),
-                    label: const Text('Delete Draft'),
-                    onPressed: () {
-                      _deleteCampaign(context, liveCampaign.reference);
-                    },
-                  ),
+                CampaignListActions(
+                  businessId: data['businessId'] as String,
+                  campaignId: liveCampaign.id,
+                  directAction: 'delete',
+                  onManage: () {},
+                  onConfirmed: () {
+                    if (mounted) {
+                      AppNavigation.afterCampaignRemoval(this.context);
+                    }
+                  },
                 ),
             ],
           ),

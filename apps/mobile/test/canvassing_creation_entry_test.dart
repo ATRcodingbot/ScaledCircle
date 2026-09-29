@@ -1,3 +1,4 @@
+import 'package:flutter_app/screens/business/campaign_planner_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_app/screens/business/create/campaigns/canvassing/canvassing_campaign_screen.dart';
@@ -18,12 +19,7 @@ void main() {
             .campaignType,
         'neighborhoodCanvassing',
       );
-      expect(find.text('Plan campaign'), findsOneWidget);
-      await tester.dragUntilVisible(
-        find.text('Create & Define Zones'),
-        find.byType(ListView),
-        const Offset(0, -450),
-      );
+      expect(find.byType(CampaignPlannerScreen), findsOneWidget);
       expect(find.text('Create & Define Locations'), findsNothing);
       expect(find.text('Material Quantity'), findsNothing);
       expect(find.text('Before Photo'), findsNothing);

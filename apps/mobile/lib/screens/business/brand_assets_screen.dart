@@ -448,7 +448,7 @@ class _BrandAssetsScreenState extends State<BrandAssetsScreen> {
                   ),
                   const SizedBox(height: 8),
                   const Text(
-                    'ScaledCircle keeps text contrast readable when these colors are used in future customer-facing designs.',
+                    'Scaled Circle keeps text contrast readable when these colors are used in future customer-facing designs.',
                   ),
                   const Divider(height: 32),
                   Text(
@@ -457,7 +457,7 @@ class _BrandAssetsScreenState extends State<BrandAssetsScreen> {
                   ),
                   const SizedBox(height: 6),
                   const Text(
-                    'Choose the services ScaledCircle can use when creating marketing visuals.',
+                    'Choose the services Scaled Circle can use when creating marketing visuals.',
                   ),
                   const SizedBox(height: 12),
                   if (manualMode) ...[
@@ -649,7 +649,7 @@ class _BrandAssetsScreenState extends State<BrandAssetsScreen> {
             ),
             const SizedBox(height: 8),
             const Text(
-              'Keep reusable Business images here. You can still use ScaledCircle without uploading photos.',
+              'Keep reusable Business images here. You can still use Scaled Circle without uploading photos.',
             ),
             const SizedBox(height: 18),
             if (_generation['businessAuthorized'] == true)

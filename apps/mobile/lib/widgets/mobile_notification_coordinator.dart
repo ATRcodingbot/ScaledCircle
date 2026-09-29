@@ -56,7 +56,7 @@ class _MobileNotificationCoordinatorState
       }
       ScaffoldMessenger.maybeOf(context)?.showSnackBar(
         SnackBar(
-          content: const Text('You have a new ScaledCircle notification.'),
+          content: const Text('You have a new Scaled Circle notification.'),
           action: SnackBarAction(
             label: 'View',
             onPressed: () {

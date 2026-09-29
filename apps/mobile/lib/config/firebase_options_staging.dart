@@ -12,7 +12,7 @@ abstract final class StagingFirebaseOptions {
     if (defaultTargetPlatform == TargetPlatform.iOS) return ios;
     if (defaultTargetPlatform == TargetPlatform.android) return android;
     throw UnsupportedError(
-      'ScaledCircle staging Firebase is configured for web, iOS, and Android only. '
+      'Scaled Circle staging Firebase is configured for web, iOS, and Android only. '
       'No staging options exist for $defaultTargetPlatform.',
     );
   }

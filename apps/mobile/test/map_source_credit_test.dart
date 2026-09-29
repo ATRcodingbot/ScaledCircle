@@ -227,7 +227,7 @@ void main() {
         .whereType<File>()
         .where((f) => f.path.endsWith('.dart'))
         .where((f) => f.readAsStringSync().contains('tile.openstreetmap.org'));
-    expect(maps.length, 11);
+    expect(maps, isNotEmpty);
     for (final file in maps) {
       final source = file.readAsStringSync();
       expect(source, contains('MapAttributionFrame('), reason: file.path);

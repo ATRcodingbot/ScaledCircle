@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
@@ -176,12 +177,14 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 padding: const EdgeInsets.all(24),
                 children: [
                   const Text(
-                    'Join ScaledCircle',
+                    'Join Scaled Circle',
                     style: TextStyle(fontSize: 32, fontWeight: FontWeight.w800),
                   ),
                   const SizedBox(height: 8),
                   const Text(
-                    'Choose how you will use ScaledCircle. Maryland Scaler registration is open; other states remain pending. Paid assignments are not yet available. Business account signup is open.',
+                    kIsWeb
+                        ? 'Business signup and Core memberships are available now. Maryland Scaler registration is open; other states remain pending. Supported Maryland campaigns require payment, assignment, consent and worker-funding checks before work can begin.'
+                        : 'Choose how you will use Scaled Circle. Maryland Scaler registration is open; other states remain pending. Paid assignments are not yet available. Business account signup is open.',
                   ),
                   const SizedBox(height: 24),
                   SegmentedButton<UserRole>(
