@@ -51,6 +51,8 @@ import 'screens/business/social_operations_screen.dart';
 import 'screens/campaigns/campaign_funding_return_screen.dart';
 import 'screens/auth/login_screen.dart';
 import 'screens/auth/register_screen.dart';
+import 'navigation/public_auth_navigation.dart';
+import 'navigation/registration_entry_gate.dart';
 import 'screens/auth/verify_email_screen.dart';
 import 'screens/auth/complete_scaler_profile_screen.dart';
 import 'screens/public/public_landing_screen.dart';
@@ -158,7 +160,15 @@ class ScaledCircleApp extends StatelessWidget {
     if (route?.path == AppRoutes.login) {
       return MaterialPageRoute(
         settings: settings,
-        builder: (_) => const AuthenticatedLandingGate(),
+        builder: (_) => StartupSessionGate(
+          signedOut: LoginScreen(
+            registrationRole: publicAuthRole(route),
+            referralCode: publicAuthReferral(route),
+            returnRoute: settings.arguments is PublicAuthArguments
+                ? (settings.arguments as PublicAuthArguments).returnRoute
+                : null,
+          ),
+        ),
       );
     }
     final membershipPath = AppRoutes.membershipPath(route?.path);
@@ -182,7 +192,15 @@ class ScaledCircleApp extends StatelessWidget {
     if (route?.path == AppRoutes.createAccount) {
       return MaterialPageRoute(
         settings: settings,
-        builder: (_) => const RegisterScreen(),
+        builder: (_) => RegistrationEntryGate(
+          signedOut: RegisterScreen(
+            initialRole: publicAuthRole(route),
+            referralCode: publicAuthReferral(route),
+            returnRoute: settings.arguments is PublicAuthArguments
+                ? (settings.arguments as PublicAuthArguments).returnRoute
+                : null,
+          ),
+        ),
       );
     }
     if (route?.path == AppRoutes.publicExperience) {

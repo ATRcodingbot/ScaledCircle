@@ -8,6 +8,27 @@ from prepare_marketing_delivery import documents, content
 
 
 class DeliveryTest(unittest.TestCase):
+    def test_business_signup_ctas_open_named_registration_without_changing_other_roles(self):
+        docs = documents()
+        destination = '/#/create-account?role=business'
+        for route, label, count in [('/', 'Get Started for Business', 1),
+                                    ('/', 'Create Business Account', 1),
+                                    ('/businesses', 'Get Started', 2),
+                                    ('/pricing', 'Start Your Business', 1),
+                                    ('/pricing', 'Start Starter', 1),
+                                    ('/pricing', 'Start Growth', 1),
+                                    ('/pricing', 'Start Scale', 1)]:
+            matching = re.findall(r'<a\b[^>]*href="([^"]+)"[^>]*>' + label +
+                                  r'(?:\s*<span[^>]*>.*?</span>)?</a>', docs[route])
+            self.assertEqual(matching, [destination] * count, (route, label))
+        for route in ['/', '/businesses', '/pricing']:
+            self.assertRegex(docs[route], r'href="/#/login">Log in')
+        self.assertIn('href="/#/businesses">Choose Your Account', docs['/'])
+        self.assertIn('href="/#/scalers">Join as a Scaler', docs['/'])
+        self.assertNotIn(destination, docs['/scalers'])
+        self.assertIn('mailto:support@scaledcircle.com?subject=Managed%20Growth%20access',
+                      docs['/pricing'])
+
     def test_metadata_and_structured_data_are_complete_for_each_route(self):
         titles, descriptions = set(), set()
         for route, page in documents().items():
@@ -28,7 +49,7 @@ class DeliveryTest(unittest.TestCase):
 const vm=require('node:vm'), assert=require('node:assert/strict');
 const script=JSON.parse(require('node:fs').readFileSync(0,'utf8'));
 for(const pathname of ['/','/pricing']) for(const ref of ['abc234','invalid-secret-value','']) {
- const anchors=['/#/businesses','/pricing','mailto:support@scaledcircle.com'].map(href=>({href,getAttribute(){return this.href},setAttribute(k,v){this.href=v}}));
+ const anchors=['/#/businesses','/pricing','mailto:support@scaledcircle.com','/#/create-account?role=business'].map(href=>({href,getAttribute(){return this.href},setAttribute(k,v){this.href=v}}));
  let appended=0,removed=0;const listeners={};
  const location={href:'https://scaledcircle.com'+pathname+'?ref='+ref,pathname,origin:'https://scaledcircle.com',search:'?ref='+ref,hash:''};
  const context={URL,URLSearchParams,location,setTimeout:()=>1,clearTimeout:()=>{},addEventListener:(k,v)=>listeners[k]=v,document:{querySelectorAll:()=>anchors,getElementById:()=>({remove:()=>removed++}),createElement:()=>({remove:()=>removed++}),body:{appendChild:()=>appended++}}};
@@ -36,6 +57,7 @@ for(const pathname of ['/','/pricing']) for(const ref of ['abc234','invalid-secr
  assert.equal(appended,pathname==='/'?2:0);
  assert.equal(anchors[0].href,ref==='abc234'? '/?ref=ABC234#/businesses':'/#/businesses');
  assert.equal(anchors[2].href,'mailto:support@scaledcircle.com');
+ assert.equal(anchors[3].href,ref==='abc234'? '/?ref=ABC234#/create-account?role=business':'/#/create-account?role=business');
  location.hash='#/job-room/example';listeners.hashchange();listeners.hashchange();
  assert.equal(appended,2);assert.equal(removed,1);listeners['flutter-first-frame']();assert.equal(removed,2);
 }

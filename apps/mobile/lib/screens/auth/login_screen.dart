@@ -10,7 +10,8 @@ import '../../widgets/scaled_circle_brand.dart';
 import '../notifications/notifications_screen.dart';
 import '../public/waitlist_screen.dart';
 import 'forgot_password_screen.dart';
-import 'register_screen.dart';
+import '../../navigation/public_auth_navigation.dart';
+import '../../models/user/user_profile.dart';
 
 int notificationCreatedAtEpochMillis(Object? value) {
   if (value is Timestamp) {
@@ -41,7 +42,14 @@ int compareLoginNotificationsNewestFirst(
 }
 
 class LoginScreen extends StatefulWidget {
-  const LoginScreen({super.key, this.returnRoute});
+  const LoginScreen({
+    super.key,
+    this.returnRoute,
+    this.registrationRole = UserRole.business,
+    this.referralCode,
+  });
+  final UserRole registrationRole;
+  final String? referralCode;
   final String? returnRoute;
 
   @override
@@ -236,11 +244,11 @@ class _LoginScreenState extends State<LoginScreen> {
                 onPressed: loading
                     ? null
                     : () {
-                        Navigator.push(
+                        openNamedRegistration(
                           context,
-                          MaterialPageRoute(
-                            builder: (_) => const RegisterScreen(),
-                          ),
+                          widget.registrationRole,
+                          returnRoute: widget.returnRoute,
+                          referralCode: widget.referralCode,
                         );
                       },
                 child: const Text('Create Account'),

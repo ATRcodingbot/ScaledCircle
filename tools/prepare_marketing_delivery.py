@@ -74,7 +74,9 @@ def documents(*, staging=False):
     result = {}
     for route, sections in content().items():
         document = render(template, route).replace('$FLUTTER_BASE_HREF', '/')
-        primary = ('Join as a Scaler', '/#/scalers') if route == '/scalers' else ('Get Started for Business' if route == '/' else 'Start Your Business', '/#/businesses')
+        primary = (('Join as a Scaler', '/#/scalers') if route == '/scalers' else
+                   ('Get Started for Business', '/#/create-account?role=business') if route == '/' else
+                   ('Start Your Business', '/#/businesses'))
         cta = lambda label: f'<p><a class="cta" href="{primary[1]}">{label}</a></p>'
         blocks = []
         for index, (title, body) in enumerate(sections):

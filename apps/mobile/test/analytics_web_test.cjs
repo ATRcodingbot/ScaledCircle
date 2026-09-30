@@ -11,7 +11,8 @@ const disableKey = 'ga-disable-G-9VY50190LG';
 
 function harness({ hostname = 'scaledcircle.com', protocol = 'https:', storedChoice = null,
   hash = '#/businesses?workspace=secret&utm_medium=ig', cookieText = '',
-  settingsPage = false, privacy = {}, storageBlocked = false, pathname = '/' } = {}) {
+  settingsPage = false, privacy = {}, storageBlocked = false, pathname = '/',
+  search = '?token=secret&utm_source=facebook', windowDoNotTrack } = {}) {
   const store = new Map(storedChoice ? [[choiceKey, storedChoice]] : []);
   const elements = new Map();
   const listeners = new Map();
@@ -48,7 +49,7 @@ function harness({ hostname = 'scaledcircle.com', protocol = 'https:', storedCho
   };
   const location = {
     protocol, hostname, pathname: settingsPage ? '/analytics-settings.html' : pathname,
-    hash: settingsPage ? '' : hash, search: '?token=secret&utm_source=facebook',
+    hash: settingsPage ? '' : hash, search,
     reload() { reloads++; },
   };
   const history = {
@@ -56,7 +57,7 @@ function harness({ hostname = 'scaledcircle.com', protocol = 'https:', storedCho
     replaceState(_state, _title, url) { location.hash = url; },
   };
   const context = {
-    document, location, history, navigator: privacy, localStorage: {
+    document, location, history, navigator: privacy, doNotTrack: windowDoNotTrack, localStorage: {
       getItem(key) {
         if (storageBlocked) throw new Error('Storage blocked');
         return store.get(key) ?? null;
@@ -118,6 +119,135 @@ test('page counts sanitize initial data and distinct SPA routes without duplicat
   site.flush();
   assert.equal(site.events().length, 3);
   assert.equal(site.events()[2][2].page_location, 'https://scaledcircle.com/pricing?utm_source=facebook');
+});
+
+test('named Business registration deep link counts only a sanitized form page view', () => {
+  const site = harness({ hash: '#/create-account?role=business', search: '' });
+  assert.equal(site.scriptLoads(), 1);
+  assert.equal(site.injectedElements(), 0);
+  assert.equal(site.events().length, 1);
+  const [command, eventName, page] = site.events()[0];
+  assert.equal(command, 'event');
+  assert.equal(eventName, 'page_view');
+  assert.equal(page.page_location, 'https://scaledcircle.com/create-account');
+  assert.equal(page.page_title, 'Scaled Circle — Create account');
+  assert.equal(page.page_referrer, 'https://facebook.com');
+  assert.ok(site.context.dataLayer
+    .filter((entry) => entry[0] === 'config')
+    .every((entry) => entry[1] === 'G-9VY50190LG' && entry[2].send_page_view === false));
+  assert.ok(!JSON.stringify(site.context.dataLayer).includes('sign_up'));
+  assert.ok(!JSON.stringify(site.context.dataLayer).includes('purchase'));
+});
+
+test('public navigation to registration counts once despite duplicate browser notifications', () => {
+  const site = harness({ hash: '#/businesses', search: '' });
+  site.context.history.pushState(null, '', '#/create-account?role=business');
+  site.listeners.get('hashchange')();
+  site.listeners.get('popstate')();
+  site.flush();
+  assert.equal(site.events().length, 2);
+  assert.equal(site.events()[1][2].page_location, 'https://scaledcircle.com/create-account');
+  assert.equal(site.events()[1][2].page_referrer, 'https://scaledcircle.com/businesses');
+
+  // Repeated route synchronization/rebuilds must not become extra form entries.
+  for (let i = 0; i < 3; i++) {
+    site.context.history.replaceState(null, '', '#/create-account?role=business');
+    site.listeners.get('hashchange')();
+    site.flush();
+  }
+  site.context.history.pushState(null, '', '#/create-account?role=scaler&plan=scale');
+  site.flush();
+  assert.equal(site.events().length, 2);
+  assert.equal(site.scriptLoads(), 1);
+
+  // A real Back/forward transition is a new page view, still not account creation.
+  site.context.history.pushState(null, '', '#/businesses');
+  site.flush();
+  site.context.history.pushState(null, '', '#/create-account?role=business');
+  site.flush();
+  assert.deepEqual(Array.from(site.events(), (event) => event[2].page_location), [
+    'https://scaledcircle.com/businesses', 'https://scaledcircle.com/create-account',
+    'https://scaledcircle.com/businesses', 'https://scaledcircle.com/create-account',
+  ]);
+});
+
+test('registration document reload emits one page view per document, not a conversion', () => {
+  const options = { hash: '#/create-account?role=business', search: '' };
+  // A fresh JS document models a real reload; it is intentionally another visit.
+  for (const site of [harness(options), harness(options)]) {
+    site.listeners.get('hashchange')();
+    site.listeners.get('popstate')();
+    site.flush();
+    assert.equal(site.scriptLoads(), 1);
+    assert.equal(site.events().length, 1);
+    assert.equal(site.events()[0][1], 'page_view');
+    assert.equal(site.events()[0][2].page_location, 'https://scaledcircle.com/create-account');
+  }
+});
+
+test('registration strips role, plan, return route, referral and PII from every analytics command', () => {
+  const privateQuery = new URLSearchParams({
+    role: 'business', plan: 'scale', returnTo: '/business/customer/private-customer-id',
+    next: '/campaign/private-campaign-id', referral: 'private-referral-code',
+    ref: 'private-referrer-id', email: 'fixture@example.invalid', name: 'Fixture Customer',
+    phone: '2025550199', address: '123 Fixture Street', latitude: '39.1688',
+    longitude: '-76.6093', workspaceId: 'private-workspace-id',
+    notes: 'private form text', token: 'private-auth-token',
+  }).toString();
+  for (const queryPlacement of ['hash', 'search']) {
+    const site = harness({
+      hash: '#/create-account' + (queryPlacement === 'hash' ? '?' + privateQuery : ''),
+      search: queryPlacement === 'search' ? '?' + privateQuery : '',
+    });
+    assert.equal(site.events()[0][2].page_location, 'https://scaledcircle.com/create-account');
+    const serialized = JSON.stringify(site.context.dataLayer);
+    for (const [key, value] of new URLSearchParams(privateQuery)) {
+      assert.ok(!serialized.includes(key + '='), 'must not forward private query keys');
+      assert.ok(!serialized.includes('"' + key + '":'), 'must not add private event fields');
+      // Short role/plan values may occur inside the public site/brand name.
+      if (key === 'role' || key === 'plan') continue;
+      assert.ok(!serialized.includes(value), `must not emit ${queryPlacement} query value`);
+      assert.ok(!serialized.includes(encodeURIComponent(value)), 'must not emit encoded query value');
+    }
+    site.context.history.pushState(null, '', '#/pricing');
+    site.flush();
+    assert.equal(site.events()[1][2].page_referrer, 'https://scaledcircle.com/create-account');
+  }
+});
+
+test('registration retains permitted campaign attribution without forwarding private parameters', () => {
+  const site = harness({
+    hash: '#/create-account?role=business&plan=growth&ref=private-code&utm_medium=qa&utm_term=fixture%40example.invalid',
+    search: '?utm_source=deployment_check&utm_campaign=direct_registration_qa&email=fixture%40example.invalid',
+  });
+  assert.equal(site.events()[0][2].page_location,
+    'https://scaledcircle.com/create-account?utm_source=deployment_check&utm_medium=qa&utm_campaign=direct_registration_qa');
+  const serialized = JSON.stringify(site.context.dataLayer);
+  for (const excluded of ['role=', 'plan=', 'private-code', 'fixture', 'email=']) {
+    assert.ok(!serialized.includes(excluded));
+  }
+});
+
+test('registration entry and route updates honor saved opt-out, GPC and both DNT sources', () => {
+  const cases = [
+    { storedChoice: 'denied' },
+    { storedChoice: 'granted', privacy: { globalPrivacyControl: true } },
+    { storedChoice: 'granted', privacy: { doNotTrack: '1' } },
+    { storedChoice: 'granted', privacy: { doNotTrack: 'yes' } },
+    { storedChoice: 'granted', windowDoNotTrack: '1' },
+  ];
+  for (const options of cases) {
+    const site = harness({ ...options, hash: '#/create-account?role=business', search: '' });
+    site.context.history.replaceState(null, '', '#/create-account?role=business&plan=scale');
+    site.listeners.get('hashchange')();
+    site.flush();
+    site.context.history.pushState(null, '', '#/login');
+    site.flush();
+    assert.equal(site.scriptLoads(), 0);
+    assert.equal(site.events().length, 0);
+    assert.equal(site.injectedElements(), 0);
+    assert.equal(site.context[disableKey], true);
+  }
 });
 
 test('previous opt-outs prevent tag loading and clear only analytics cookies', () => {

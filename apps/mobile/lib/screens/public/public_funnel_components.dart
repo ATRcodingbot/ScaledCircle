@@ -7,7 +7,7 @@ import '../../models/user/user_profile.dart';
 import '../../navigation/app_routes.dart';
 import '../../navigation/app_router.dart';
 import '../../navigation/public_page_navigation.dart';
-import '../auth/register_screen.dart';
+import '../../navigation/public_auth_navigation.dart';
 import 'waitlist_screen.dart';
 
 const publicBackground = Color(0xFF020914);
@@ -18,13 +18,9 @@ const scalerBlue = Color(0xFF287EFF);
 const publicMuted = Color(0xFFB8C9D8);
 
 void openPublicAccountRegistration(BuildContext context, String role) {
-  Navigator.push(
+  openNamedRegistration(
     context,
-    MaterialPageRoute(
-      builder: (_) => RegisterScreen(
-        initialRole: role == 'scaler' ? UserRole.scaler : UserRole.business,
-      ),
-    ),
+    role == 'scaler' ? UserRole.scaler : UserRole.business,
   );
 }
 

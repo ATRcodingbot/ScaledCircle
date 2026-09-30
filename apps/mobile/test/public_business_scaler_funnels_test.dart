@@ -324,7 +324,8 @@ void main() {
       'lib/navigation/startup_session_gate.dart',
     ).readAsStringSync();
 
-    expect(funnelSource, contains('RegisterScreen('));
+    expect(funnelSource, contains('openNamedRegistration('));
+    expect(File('lib/main.dart').readAsStringSync(), contains('signedOut: RegisterScreen('));
     expect(funnelSource, contains('UserRole.scaler : UserRole.business'));
     expect(funnelSource, contains('WaitlistScreen(initialRole: role)'));
     expect(profileSource, contains("'active': false"));

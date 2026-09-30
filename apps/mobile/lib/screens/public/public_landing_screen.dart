@@ -8,7 +8,10 @@ import '../../navigation/app_router.dart';
 import '../../services/subscription_plan_service.dart';
 import 'campaign_workflow_illustration.dart';
 import 'public_funnel_components.dart'
-    show ScaledCircleBrand, openPublicRoleChooser;
+    show
+        ScaledCircleBrand,
+        openPublicRoleChooser,
+        openPublicAccountRegistration;
 import 'public_legal_footer.dart';
 import '../../widgets/customer_capability_status.dart';
 
@@ -23,10 +26,16 @@ class PublicLandingScreen extends StatelessWidget {
   const PublicLandingScreen({super.key, this.page});
   final String? page;
 
-  void _start(BuildContext context, String role) => AppNavigation.push(
-    context,
-    role == 'scaler' ? AppRoutes.scalers : AppRoutes.businesses,
-  );
+  void _start(BuildContext context, String role) {
+    if (kIsWeb && role == 'business') {
+      openPublicAccountRegistration(context, role);
+    } else {
+      AppNavigation.push(
+        context,
+        role == 'scaler' ? AppRoutes.scalers : AppRoutes.businesses,
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -76,10 +85,7 @@ class PublicLandingScreen extends StatelessWidget {
                           ),
                         if (page == null) ...[
                           _Hero(
-                            onBusiness: () => AppNavigation.push(
-                              context,
-                              AppRoutes.businesses,
-                            ),
+                            onBusiness: () => _start(context, 'business'),
                             onScaler: () =>
                                 AppNavigation.push(context, AppRoutes.scalers),
                           ),

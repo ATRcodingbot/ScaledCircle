@@ -10,11 +10,20 @@ import '../public/legal_document_screen.dart';
 import '../../widgets/referral_source_fields.dart';
 import '../../widgets/scaled_circle_brand.dart';
 import '../../navigation/app_router.dart';
+import '../../navigation/app_routes.dart';
+import '../../navigation/public_auth_navigation.dart';
 
 class RegisterScreen extends StatefulWidget {
   final UserRole initialRole;
 
-  const RegisterScreen({super.key, this.initialRole = UserRole.business});
+  const RegisterScreen({
+    super.key,
+    this.initialRole = UserRole.business,
+    this.referralCode,
+    this.returnRoute,
+  });
+  final String? referralCode;
+  final String? returnRoute;
 
   @override
   State<RegisterScreen> createState() => _RegisterScreenState();
@@ -47,8 +56,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
     _role = widget.initialRole == UserRole.scaler
         ? UserRole.scaler
         : UserRole.business;
-    _affiliateReferralCode = AffiliateService.referralCodeFromUri(Uri.base);
-    if (_affiliateReferralCode != null &&
+    _affiliateReferralCode =
+        widget.referralCode ?? AffiliateService.referralCodeFromUri(Uri.base);
+    if (!kIsWeb &&
+        _affiliateReferralCode != null &&
         Uri.tryParse(Uri.base.fragment)?.queryParameters['role'] == 'scaler') {
       _role = UserRole.scaler;
     }
@@ -166,7 +177,21 @@ class _RegisterScreenState extends State<RegisterScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const ScaledCircleBrand(compact: true)),
+      appBar: AppBar(
+        title: const ScaledCircleBrand(compact: true),
+        leading: BackButton(
+          onPressed: _loading
+              ? null
+              : () {
+                  if (AppRouterScope.maybeOf(
+                        context,
+                      )?.popPreviousRoute(context) !=
+                      true) {
+                    AppNavigation.replace(context, '/');
+                  }
+                },
+        ),
+      ),
       body: SafeArea(
         child: Center(
           child: ConstrainedBox(
@@ -186,7 +211,27 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         ? 'Business signup and Core memberships are available now. Maryland Scaler registration is open; other states remain pending. Supported Maryland campaigns require payment, assignment, consent and worker-funding checks before work can begin.'
                         : 'Choose how you will use Scaled Circle. Maryland Scaler registration is open; other states remain pending. Paid assignments are not yet available. Business account signup is open.',
                   ),
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 8),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: TextButton(
+                      onPressed: _loading
+                          ? null
+                          : () => AppNavigation.push(
+                              context,
+                              publicAuthLocation(
+                                AppRoutes.login,
+                                _role,
+                                referralCode: _affiliateReferralCode,
+                              ),
+                              arguments: PublicAuthArguments(
+                                returnRoute: widget.returnRoute,
+                              ),
+                            ),
+                      child: const Text('Already have an account? Log In'),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
                   SegmentedButton<UserRole>(
                     segments: const [
                       ButtonSegment(
