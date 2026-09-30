@@ -4519,7 +4519,7 @@ function smartZoneAnchor(campaign = {}) {
 
 async function smartZoneSelectedArea(request, campaign) {
   let analysisBoundary;
-  try { analysisBoundary = smartZoneEntryContract.normalizeAnalysisBoundary(request.data?.analysisBoundary); }
+  try { analysisBoundary = smartZoneEntryContract.recommendationScope(request.data || {}).boundary; }
   catch (_) { throw new HttpsError("invalid-argument", "Draw a simple area without crossing or retracing its boundary."); }
   if (analysisBoundary) {
     return {geometry: analysisBoundary, name: "Drawn analysis area",
@@ -4630,9 +4630,10 @@ async function smartZoneCampaign(request, {requireCached = false} = {}) {
   if(!executionMode)throw new HttpsError('failed-precondition','Review this campaign’s execution mode before requesting a recommendation.');
   let teamCapacity=null;
   if(executionMode==='own_team') {
-    if(campaign.campaignWorkload?.version!==require('./own_team_capacity').VERSION)
+    if(!request.data?.teamCapacity&&campaign.campaignWorkload?.version!==require('./own_team_capacity').VERSION)
       throw new HttpsError('failed-precondition','Review team session duration, marketer count and coverage pattern before recommending an area.');
-    teamCapacity=require('./own_team_capacity').requirement(campaign.campaignWorkload);
+    try {teamCapacity=require('./own_team_capacity').requirement(request.data?.teamCapacity||campaign.campaignWorkload);}
+    catch(error){throw new HttpsError('invalid-argument',error.message);}
   }
   let desiredHours;
   try { desiredHours = smartZoneEntryContract.workloadHours(request.data?.desiredHours); }
@@ -4643,18 +4644,30 @@ async function smartZoneCampaign(request, {requireCached = false} = {}) {
   }
   const intelligence = await smartZoneRecommendationContext(context, campaign, request);
   const runtimeModule = require('./smart_zone_intelligence_runtime');
-  let requestFingerprint = runtimeModule.requestFingerprint({campaignId, campaign, data: request.data || {},
-    desiredHours, objective: intelligence.context.goal});
+  let requestFingerprint;
+  try {requestFingerprint = runtimeModule.requestFingerprint({campaignId, campaign, data: request.data || {},
+    desiredHours, objective: intelligence.context.goal});}
+  catch(error) {throw new HttpsError('invalid-argument',error.message==='preview_boundary_required'?
+    'Draw a valid preview boundary before recommending within this area.':'Review the recommendation scope and boundary.');}
   if (request.data?.resumeSavedPlan === true) {
     const retained = (await db.doc(`propertyRecommendationWorkspaces/${context.uid}/mappingRuns/${campaign.smartZoneRecommendationRunId || 'missing'}`).get()).data();
     if (!retained || retained.businessId !== context.uid || retained.campaignId !== campaignId ||
         retained.contextVersion !== intelligence.contextVersion ||
         retained.searchEvidence?.requestedHours !== desiredHours ||
-        retained.searchEvidence?.goal !== intelligence.context.goal) {
+        retained.searchEvidence?.goal !== intelligence.context.goal ||
+        (retained.searchEvidence?.executionMode||'marketplace') !== executionMode ||
+        executionMode==='own_team'&&JSON.stringify(retained.searchEvidence?.teamCapacity)!==JSON.stringify(teamCapacity)) {
       throw new HttpsError('failed-precondition', 'The saved recommendation context changed. Review your location and workload.');
     }
+    // Legacy re-entry may omit its location inputs. An explicit scope, location
+    // or preview must match the full retained fingerprint, never override it.
+    if ((request.data?.recommendationScope !== undefined ||
+         request.data?.analysisBoundary !== undefined || request.data?.areaSelection) &&
+        requestFingerprint !== retained.requestFingerprint)
+      throw new HttpsError('failed-precondition','The preview boundary or location changed. Request a recommendation for the current area.');
     requestFingerprint = retained.requestFingerprint;
   }
+  if(executionMode==='own_team'&&teamCapacity.sessionHours!==desiredHours)throw new HttpsError('failed-precondition','Review the team session duration.');
   const cacheAuthority = {businessId: context.uid, actorUid: context.actorUid || context.uid, campaignId,
     contextVersion: intelligence.contextVersion, requestFingerprint};
   let cachedRecommendation = null;
@@ -4736,6 +4749,7 @@ exports.getCampaignZoneIntelligence = onCall(
     }
     try {
       return await require('./zone_intelligence_runtime').preview({db, context, data:request.data || {},onDiagnostic:trace=>logger.info('Manual Zone evidence',trace),
+        loadPropertyAnalysis:require('./property_service_area_runtime').createAnalyzer({db,FieldValue,budgetMs:12000}),
         fetchSnapshot:require('./smart_zone_public_cache_runtime').createAcquirer({
           db, bucket:getStorage().bucket(), liveFetch:smartZoneGeography.fetchSnapshot,allowPartialRegional:true}), endpoint:OVERPASS_URL});
     } catch (error) {
@@ -4830,7 +4844,7 @@ exports.applySmartZonePlan = onCall(
         throw new HttpsError("failed-precondition", "The campaign changed. Review the plan again.");
       }
       if ((currentCampaign.workloadVersion || 0) !== (input.campaign.workloadVersion || 0) ||
-          (currentCampaign.campaignWorkload && currentCampaign.campaignWorkload.requestedHours !== input.desiredHours)) {
+          (input.executionMode!=='own_team' && currentCampaign.campaignWorkload && currentCampaign.campaignWorkload.requestedHours !== input.desiredHours)) {
         throw new HttpsError('aborted', 'The requested workload changed. Review the current campaign Zones.');
       }
       const currentWorkspace = await businessWorkspaceService().authority({uid: input.context.actorUid || input.context.uid,
@@ -5112,16 +5126,10 @@ exports.analyzePropertyIntelligence = onCall(
         cached: true, analysis: cachedAnalysis,
         aiContext: propertyIntelligence.aiGrounding(cachedAnalysis, request.data?.objective)};
     }
-    const providers = [new propertyIntelligence.MarylandPropertyProvider(),
-      new propertyIntelligence.CensusPropertyProvider({apiKey: CENSUS_API_KEY.value() || ""})];
-    const analysis = await propertyIntelligence.analyzeWithFallback({geometry, providers});
-    const sanitized = addPhysicalChannelSuitability({...analysis, analysisId: cacheId,
-      geometryDigest: digest, generatedAt: new Date().toISOString()});
-    delete sanitized.providerFailures;
-    await cacheReference.set({analysisVersion: propertyIntelligence.ANALYSIS_VERSION,
-      dataSourceBundleVersion: propertyIntelligence.DATA_SOURCE_BUNDLE_VERSION,
-      geometryDigest: digest, source: sanitized.source, sourceVersion: sanitized.sourceVersion,
-      generatedAt: FieldValue.serverTimestamp(), analysis: sanitized});
+    // One neutral, bounded acquisition/cache authority for exploratory,
+    // saved-service-area and campaign analysis; transient outage is not cached.
+    const sanitized = await propertyServiceAreaRuntime.createAnalyzer({db,FieldValue,
+      apiKey:CENSUS_API_KEY.value()||""})(geometry);
     if (zoneReference) {
       await zoneReference.update({propertyIntelligenceCacheId: cacheId,
         propertyIntelligenceGeometryDigest: digest, propertyIntelligenceStatus: sanitized.confidence === "INSUFFICIENT" ? "unavailable" : "complete",

@@ -61,10 +61,10 @@ void main() {
                   savedAreaName: '',
                   initialHours: 4,
                   initialSelection: h.glenBurnie,
-                  onSaveTeamCapacity: (hours, input) async {
-                    saved = input;
-                    return true;
-                  },
+                  onManualTeamCapacity: (input) => saved = input,
+                  onSaveTeamCapacity: (_, _) async => throw StateError(
+                    'Recommendation preview must not persist workload',
+                  ),
                   onPlan: (_, hours, goal) async {
                     calls++;
                   },

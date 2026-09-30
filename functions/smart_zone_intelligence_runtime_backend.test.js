@@ -16,7 +16,8 @@ test('multipart re-entry and replacing one saved Zone retain the other identity 
  const candidates=[0,1,2].map(i=>({...first,id:'synthetic_'+i,
    geometry:first.geometry.map(p=>({...p,longitude:p.longitude+i*.0003})),
    networkSegments:first.networkSegments.map(e=>({from:{...e.from,longitude:e.from.longitude+i*.0003},to:{...e.to,longitude:e.to.longitude+i*.0003}})),
-   features:first.features.map(f=>({...f,id:f.id+'_'+i,longitude:f.longitude+i*.0003}))}));
+   features:first.features.map(f=>({...f,id:f.id+'_'+i,addressKey:f.addressKey?f.addressKey+'synthetic'+i:null,longitude:f.longitude+i*.0003,
+  footprint:f.footprint?.map(p=>({...p,longitude:p.longitude+i*.0003}))||null}))}));
  await runRef.update({'searchEvidence.candidates':candidates});
  const plan=await s.api.getSmartZonePlan({data:{...data,recommendationRunId:initial.recommendationRunId}});
  assert.equal(plan.zones.length,2);
@@ -107,6 +108,7 @@ test('real transaction Business lease blocks parallel members; fresh replay, coo
   const entered=new Promise(resolve=>started=resolve),gate=new Promise(resolve=>release=resolve);
   const cache=runtime.createRuntime({db,now:()=>clock});
   const first=cache.obtain(input,async()=>{calls++;started();await gate;return emptyEvidence(input);});await entered;
+  await assert.rejects(cache.obtain({...input,requestFingerprint:'new_preview_and_team'},async()=>{calls++;return emptyEvidence(input);}),{code:'aborted'});
   await assert.rejects(cache.obtain({...input,actorUid:'another_member'},async()=>{calls++;return emptyEvidence(input);}),{code:'aborted'});
   release();const record=await first;assert.equal(calls,1);
   assert.equal((await cache.obtain(input,async()=>{calls++;})).runId,record.runId);assert.equal(calls,1);
@@ -181,4 +183,30 @@ test('older client cannot silently replace two legacy areas with a new one-Zone 
  await assert.rejects(s.api.applySmartZonePlan({data:{...s.data,planId:plan.planId}}),e=>e.details?.reason==='LEGACY_ZONE_ADJUSTMENT_REQUIRED');
  assert.deepEqual((await db.doc('campaigns/'+s.campaignId).get()).data(),before);
  assert.equal((await db.collection('campaignZones').where('campaignId','==',s.campaignId).get()).size,2);
+});
+
+test('within-preview scope requires actual polygon and team changes cannot resume an old input-bound run',async()=>{
+ const s=await setup(),before=(await db.doc('campaigns/'+s.campaignId).get()).data();
+ await assert.rejects(s.api.getSmartZonePlan({data:{campaignId:s.campaignId,desiredHours:5,recommendationScope:'within_preview'}}));
+ assert.equal(s.api.calls.provider,0);assert.equal(s.api.calls.resolver,0);
+ const data={...s.data,recommendationScope:'within_preview',teamCapacity:{sessionHours:4,marketerCount:2,coveragePattern:'stay_together'},desiredHours:4};
+ const plan=await s.api.getSmartZonePlan({data});assert.deepEqual(plan.selectedTerritory,s.data.analysisBoundary);assert.equal(plan.teamCapacity.plannedLaborHours,8);
+ assert.equal(plan.teamCapacity.uniqueCoverageTargetMinutes,240);assert.equal(plan.teamCapacity.allocations.length,1);
+ assert.deepEqual((await db.doc('campaigns/'+s.campaignId).get()).data(),before);
+ const calls=s.api.calls.provider;
+ for(const patch of [{teamCapacity:{...data.teamCapacity,marketerCount:3}},{teamCapacity:{...data.teamCapacity,coveragePattern:'split_streets'}},
+  {analysisBoundary:data.analysisBoundary.map(p=>({...p,longitude:p.longitude+.0001}))},{objective:'Different service goal'}])
+  await assert.rejects(s.api.getSmartZonePlan({data:{...data,...patch,recommendationRunId:plan.recommendationRunId}}),{code:'failed-precondition'});
+ assert.equal(s.api.calls.provider,calls);
+});
+
+test('saved-plan compatibility cannot substitute a retained territory for a different explicit preview',async()=>{
+ const s=await setup(),data={...s.data,recommendationScope:'within_preview',teamCapacity:{sessionHours:4,marketerCount:2,coveragePattern:'stay_together'},desiredHours:4};
+ const plan=await s.api.getSmartZonePlan({data}),calls=s.api.calls.provider;
+ await db.doc('campaigns/'+s.campaignId).update({smartZoneRecommendationRunId:plan.recommendationRunId,campaignWorkload:require('./own_team_capacity').requirement(data.teamCapacity)});
+ const same=await s.api.getSmartZonePlan({data:{...data,resumeSavedPlan:true}});assert.equal(same.planId,plan.planId);
+ await assert.rejects(s.api.getSmartZonePlan({data:{...data,resumeSavedPlan:true,analysisBoundary:data.analysisBoundary.map(p=>({...p,longitude:p.longitude+.0001}))}}),{code:'failed-precondition'});
+ await assert.rejects(s.api.getSmartZonePlan({data:{...data,resumeSavedPlan:true,analysisBoundary:undefined,recommendationScope:'location',areaSelection:{query:'Different place',resultId:'other'}}}),{code:'failed-precondition'});
+ await assert.rejects(s.api.getSmartZonePlan({data:{...data,resumeSavedPlan:true,analysisBoundary:undefined,recommendationScope:'location'}}),{code:'failed-precondition'});
+ assert.equal(s.api.calls.provider,calls);
 });

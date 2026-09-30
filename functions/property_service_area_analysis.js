@@ -3,7 +3,7 @@ const {createHash}=require('node:crypto');
 const geometry=require('./property_service_area_geometry');
 const propertyIntelligence=require('./property_intelligence');
 const {validateGeometry}=propertyIntelligence;
-const VERSION='PropertyServiceAreaAnalysisV1',DAY=86400000;
+const VERSION='PropertyServiceAreaAnalysisV2',DAY=86400000;
 const hash=v=>createHash('sha256').update(JSON.stringify(v)).digest('hex');
 const fail=(code,message)=>{throw Object.assign(Error(message),{code});};
 const id=v=>{if(typeof v!=='string'||!/^[-A-Za-z0-9_]{1,128}$/.test(v))fail('invalid-argument','Choose a valid saved request.');return v;};
@@ -29,6 +29,35 @@ function serviceFocus(context={}){
   const priority=list(context.priorityServices).filter(s=>offered.some(v=>v.toLowerCase()===s.toLowerCase()));
   const services=selected.length?selected:(priority.length?priority:offered);
   return {services,error:services.length?null:'No eligible offered service is available for this goal.'};
+}
+function serviceIntents(context={}) {
+  const focus=serviceFocus(context),goal=String(context.goal||'').toLowerCase();
+  // An explicit service goal must not silently acquire unrelated saved priority
+  // services. Profile priorities are fallback context only for general goals.
+  const words=/roof|deck|cement|concrete|driveway/.test(goal)?goal:`${goal} ${focus.services.join(' ')}`.toLowerCase();
+  const requested=[];
+  if(/roof/.test(words))requested.push('roofing');
+  if(/deck/.test(words)) {
+    if(/repair|restor/.test(goal))requested.push('deck_repair');
+    if(/build|new deck|construction/.test(goal))requested.push('deck_build');
+    if(!requested.some(s=>s.startsWith('deck_')))requested.push('deck_unspecified');
+  }
+  if(/cement|concrete|driveway/.test(words))requested.push('concrete');
+  if(!requested.length)requested.push('general_offered_services');
+  const targetIntent=context.targetIntent||marketingTargetIntent(context.campaignType,context.goal);
+  return {version:'PropertyServiceIntentV1',requested,targetIntent,services:focus.services,error:focus.error,
+    propertyConstraint:/\b(?:only|exclusively)\b[^.!?]{0,35}\bdetached\b/.test(goal)?'detached_residential':
+      /\b(?:only|exclusively)\b[^.!?]{0,35}\bsingle.family\b/.test(goal)?'single_family_residential':null};
+}
+function projectPropertyFacts(analysis,sectionGeometry) {
+  if(!Array.isArray(analysis?.propertyRecords))return null;
+  const records=analysis.propertyRecords.filter(r=>propertyIntelligence.pointInPolygon(r,sectionGeometry));
+  const projected=propertyIntelligence.analyzeParcelObservations(records.map(r=>({...r,
+    yearBuiltBucket:propertyIntelligence.yearBucket(r.yearBuilt)})),{geometry:sectionGeometry,
+    partialCoverage:analysis.partialCoverage===true,sourceUpdatedAt:analysis.dataUpdatedAt});
+  return {...projected,source:analysis.source,sourceVersion:analysis.sourceVersion,generatedAt:analysis.generatedAt,
+    geometryDigest:propertyIntelligence.geometryDigest(sectionGeometry),retrievedAt:analysis.retrievedAt,
+    providerPagination:analysis.providerPagination,matchingRule:analysis.recordCoverage?.method};
 }
 function marketingTargetIntent(campaignType,goal){
   const maintained=require('./smart_zone_serviceability').intent(campaignType);
@@ -64,6 +93,38 @@ function buildMarketingContext({businessId,profile,preferences,objective,campaig
     contextVersion:hash([prefs,profile,goal,context.campaignType])};
 }
 function rankAnalysis(analysis,context){
+  if(Array.isArray(analysis?.propertyRecords)) {
+    const intents=serviceIntents(context),records=analysis.propertyRecords;
+    const ground=r=>/standard unit|split foyer|split level|center unit|end unit|detached|house|bungalow|terrace/i.test(r.propertyType||'');
+    const eligible=records.filter(r=>intents.targetIntent==='business'?r.residential===false&&
+      (typeof r.commercial==='boolean'?r.commercial:/commercial|office|store|retail|warehouse|industrial/i.test(r.propertyType||'')):
+      r.residential===true);
+    const constrained=intents.propertyConstraint==='detached_residential'?eligible.filter(r=>/\bdetached\b/i.test(r.propertyType||'')&&!/semi.detached/i.test(r.propertyType||'')):
+      intents.propertyConstraint==='single_family_residential'?eligible.filter(ground):eligible;
+    const limitations=['Recorded structure age/type is a planning proxy, not component condition, component age, buying intent or guaranteed leads.',
+      'Official parcel-point locations are not footprint matches, household counts or verified delivery stops. No nearest-property matching is used.'];
+    if(intents.error||!records.length||!constrained.length||intents.targetIntent==='unsupported')return {fit:null,reasons:[],limitations:[...limitations,intents.error||'No supported property records match this target constraint.'],serviceIntents:intents};
+    const shares=constrained.length/records.length*100,components=[];
+    for(const intent of intents.requested) {
+      const groundRequired=['deck_repair','deck_build','deck_unspecified','concrete'].includes(intent);
+      const typed=constrained.filter(r=>r.propertyType&&r.propertyType!=='unknown'&&
+        (!groundRequired||!/^(residential|residential condominium)$/i.test(r.propertyType)));
+      const typeFit=groundRequired?(typed.length?constrained.filter(ground).length/constrained.length*100:null):shares;
+      const years=constrained.filter(r=>Number.isInteger(r.yearBuilt)&&propertyIntelligence.yearBucket(r.yearBuilt));
+      const ageRule=['roofing','deck_repair'].includes(intent);
+      const ageFit=ageRule?(years.length?years.filter(r=>(analysis.analysisReferenceYear||new Date().getUTCFullYear())-r.yearBuilt>=20).length/years.length*100:null):null;
+      const fit=typeFit===null||ageRule&&ageFit===null?null:ageRule?(typeFit+ageFit)/2:typeFit;
+      components.push({intent,fit,recordCount:constrained.length,knownTypeCount:typed.length,knownYearCount:years.length,
+        groundOrientedCount:constrained.filter(ground).length,typeFit,ageFit,rule:ageRule?'recorded_structure_20plus_proxy_and_type':'recorded_property_type_proxy',
+        scope:'official parcel points inside candidate',assumption:true});
+    }
+    const supported=components.filter(c=>c.fit!==null),fit=supported.length?Math.round(supported.reduce((s,c)=>s+c.fit,0)/supported.length):null;
+    const reasons=components.map(c=>c.fit===null?`${c.intent.replaceAll('_',' ')} suitability unavailable: required recorded property fields are missing.`:
+      `${c.intent.replaceAll('_',' ')}: ${c.knownTypeCount} of ${c.recordCount} matching parcel records have a recorded type; ${c.knownYearCount} have a usable year built. ${c.ageFit===null?(c.intent==='general_offered_services'?'Only recorded target-property share is supported; service-specific suitability is unavailable.':'Ground-oriented property type is a disclosed suitability proxy; outdoor space is unknown.'):'Recorded structures at least 20 years old inform a disclosed outreach suitability proxy; component condition and installation dates are unknown.'}`);
+    if(analysis.partialCoverage)limitations.push('Property pagination is incomplete; these facts cover only the returned subset.');
+    return {fit,reasons,limitations,serviceIntents:intents,scoreComponents:components,recordCoverage:analysis.recordCoverage,
+      version:'PropertyServiceFitV2',personalizationStatus:supported.some(c=>c.intent!=='general_offered_services')?'supported_proxy':'unavailable'};
+  }
   const count=number(analysis?.propertyCount),residential=number(analysis?.residentialStructureCount);
   const unknown=analysis?.confidence==='INSUFFICIENT'||count===null||count<=0||residential===null||residential<=0;
   const limitations=[...list(analysis?.limitations),'Planning heuristic only; this does not establish property condition, homeowner intent, or demand.',
@@ -108,7 +169,7 @@ function rankPropertySection({analysis,context,geometry:sectionGeometry}){
   {label:'Service-area fit',value:'Inside your saved service area',source:'Saved Business service areas'}];
   if(analysis.predominantConstructionEra)signals.push({label:'Predominant construction era',value:analysis.predominantConstructionEra,source:analysis.source});
   if(history.recentCompletedOverlap===true)signals.push({label:'Recent completed-marketing overlap',value:history.overlapPercent===null?'Present':`${history.overlapPercent}%`,source:'Your Business marketing history'});
-  return {...ranking,version:'PropertySectionRecommendationV2',
+  return {...ranking,version:'PropertySectionRecommendationV3',
     fit:ranking.fit===null?null:Math.max(0,ranking.fit-history.penalty),
     limitations:[...new Set(limitations)],displaySignals:signals,
     evidence:{analysisId:analysis.analysisId||null,geometryDigest:digest,source:analysis.source,
@@ -118,7 +179,7 @@ function rankPropertySection({analysis,context,geometry:sectionGeometry}){
     history};
 }
 
-const MARKETING_SCORE_VERSION='PropertyMarketingAreaFitV1';
+const MARKETING_SCORE_VERSION='PropertyMarketingAreaFitV2';
 const BUSINESS_CATEGORIES=[
   {label:'restaurants',tokens:['restaurant'],match:t=>t.amenity==='restaurant'},
   {label:'cafes',tokens:['cafe','coffee'],match:t=>t.amenity==='cafe'},
@@ -222,6 +283,11 @@ function rankMarketingArea({candidate,snapshot,analysis=null,context={}}={}){
     used.add(id);features.push(feature);
   }
   if(!features.length){limitations.push('No source-backed targets match this campaign intent inside the candidate.');return output;}
+  const constraints=serviceIntents(context).propertyConstraint;
+  if(constraints&&features.some(f=>constraints==='detached_residential'?f.observedTags?.building!=='detached':
+    !['house','detached','semidetached_house','bungalow','terrace'].includes(f.observedTags?.building))){
+    limitations.push('Mapped target types cannot establish the requested hard property-type constraint for every selected feature.');return output;
+  }
   const counts={};
   for(const feature of features){const building=text(feature.observedTags?.building,80);if(building)counts[building]=(counts[building]||0)+1;}
   const density=features.length/(areaSquareMeters/1000000),metersPerFeature=candidate.mappedRouteMeters/features.length;
@@ -257,7 +323,7 @@ function rankMarketingArea({candidate,snapshot,analysis=null,context={}}={}){
       limitations.push('No specific supported business-category target was identified from the goal; category-specific customer fit is unavailable.');
     }
   }else{
-    if(/deck|landscap|lawn|garden|fenc/.test(focus.services.join(' ').toLowerCase())){
+    if(serviceIntents(context).requested.some(s=>s.startsWith('deck_')||s==='concrete')||/landscap|lawn|garden|fenc/.test(context.goal||'')){
       const groundTypes=new Set(['house','detached','semidetached_house','bungalow','terrace']);
       const matching=features.filter(feature=>groundTypes.has(feature.observedTags?.building)).length;
       const typed=features.filter(feature=>!!feature.observedTags?.building).length;
@@ -268,16 +334,23 @@ function rankMarketingArea({candidate,snapshot,analysis=null,context={}}={}){
         output.displaySignals.push({label:'Mapped ground-oriented housing types',value:matching,source:'Observed OpenStreetMap building tags; outdoor space unknown'});
       }else limitations.push('Mapped housing-type tags are unavailable; no deck, yard or lawn suitability has been inferred.');
     }
+    const projected=projectPropertyFacts(analysis,candidate.geometry);
+    if(projected)analysis=projected;
     let digest=null;
     try{digest=propertyIntelligence.geometryDigest(candidate.geometry);}catch(_){/* no usable PI geometry */}
     if(analysis&&analysis.geometryDigest!==digest){
       output.signals.propertyIntelligence={status:'geometry_mismatch'};
       limitations.push('Available Property Intelligence describes a different geometry and was not used.');
-    }else if(analysis&&analysis.source&&analysis.source!=='none'&&analysis.confidence!=='INSUFFICIENT'){
+    }else if(analysis&&analysis.source&&analysis.source!=='none'&&(Array.isArray(analysis.propertyRecords)||analysis.confidence!=='INSUFFICIENT')){
       const ranked=rankAnalysis(analysis,context);
       output.signals.propertyIntelligence={status:ranked.fit===null?'insufficient':'used',source:text(analysis.source),
         sourceVersion:text(analysis.sourceVersion),dataUpdatedAt:text(analysis.dataUpdatedAt),geometryDigest:digest,
         inputGranularity:text(analysis.inputGranularity),fit:ranked.fit};
+      output.serviceIntents=ranked.serviceIntents||serviceIntents(context);
+      output.propertyScoreComponents=ranked.scoreComponents||[];
+      output.propertyRecordCoverage=analysis.recordCoverage?{...analysis.recordCoverage,constructionEra:analysis.predominantConstructionEra,sourceVersion:analysis.sourceVersion,dataUpdatedAt:analysis.dataUpdatedAt,retrievedAt:analysis.retrievedAt||analysis.generatedAt||null}:null;
+      output.personalizationStatus=ranked.personalizationStatus||'generic_section_context';
+      if(ranked.fit===null&&output.serviceIntents.propertyConstraint){limitations.push(...ranked.limitations);return output;}
       limitations.push(...ranked.limitations);
       if(ranked.fit!==null){
         serviceFit=(serviceFit+ranked.fit)/2;serviceBasis+=' and maintained Property Intelligence service fit';
@@ -286,6 +359,19 @@ function rankMarketingArea({candidate,snapshot,analysis=null,context={}}={}){
       }
     }
     if(output.signals.propertyIntelligence.status!=='used')limitations.push('Same-area Property Intelligence age/service fit is unavailable; this ranking uses mapped evidence only.');
+  }
+  if(targetIntent==='business') {
+    const projected=projectPropertyFacts(analysis,candidate.geometry);
+    if(projected){
+      const ranked=rankAnalysis(projected,context);
+      output.serviceIntents=ranked.serviceIntents;output.propertyScoreComponents=ranked.scoreComponents||[];
+      output.propertyRecordCoverage=projected.recordCoverage;output.personalizationStatus=ranked.personalizationStatus||'unavailable';
+      output.signals.propertyIntelligence={status:ranked.fit===null?'insufficient':'used',source:projected.source,
+        sourceVersion:projected.sourceVersion,dataUpdatedAt:projected.dataUpdatedAt,geometryDigest:projected.geometryDigest,inputGranularity:projected.inputGranularity,fit:ranked.fit};
+      if(ranked.fit===null)return {...output,limitations:[...limitations,...ranked.limitations]};
+      serviceFit=(serviceFit+ranked.fit)/2;serviceBasis+=' and recorded commercial-property proxy';
+      output.reasons.push(...ranked.reasons);limitations.push(...ranked.limitations);
+    }
   }
   output.signals.scoreComponents={serviceFit:Math.round(serviceFit),densityFit:Math.round(densityFit),
     compactnessFit:Math.round(compactnessFit),serviceBasis,weights:{serviceFit:0.5,densityFit:0.3,compactnessFit:0.2}};
@@ -313,7 +399,7 @@ function createService({db,FieldValue,analyze,now=Date.now}){
   const root=b=>db.doc('propertyRecommendationWorkspaces/'+id(b));
   const profileRef=b=>db.doc('businessGrowthProfiles/'+b),prefsRef=b=>db.doc('discoveryPreferences/'+b);
   function sources(b,prefs,profile,savedAreaId){
-    const source=buildMarketingContext({businessId:b,profile,preferences:prefs});
+    const source=buildMarketingContext({businessId:b,profile,preferences:prefs,campaignType:'flyer_distribution'});
     if(savedAreaId&&!source.normalized.areas.some(a=>a.id===savedAreaId))fail('failed-precondition','This saved area is no longer enabled.');
     return source;
   }
@@ -429,4 +515,4 @@ function createService({db,FieldValue,analyze,now=Date.now}){
   }
   return {run,history,save:input=>change(input,'saved'),reject:input=>change(input,'rejected')};
 }
-module.exports={createService,rankAnalysis,rankPropertySection,rankMarketingArea,buildMarketingContext,marketingTargetIntent,marketingHistorySignal,selectSpread,VERSION,MARKETING_SCORE_VERSION};
+module.exports={serviceIntents,projectPropertyFacts,createService,rankAnalysis,rankPropertySection,rankMarketingArea,buildMarketingContext,marketingTargetIntent,marketingHistorySignal,selectSpread,VERSION,MARKETING_SCORE_VERSION};

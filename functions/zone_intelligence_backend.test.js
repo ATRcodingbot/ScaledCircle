@@ -100,7 +100,7 @@ test('own-team preview inputs update capacity without changing geometry, workloa
  const one=await call(1),three=await call(3);
  assert.equal(one.geometryDigest,three.geometryDigest);assert.deepEqual(one.workload,three.workload);
  assert.equal(one.teamCapacityAnalysis.requestedMinutes,240);assert.equal(three.teamCapacityAnalysis.requestedMinutes,720);
- assert.equal(three.teamCapacityAnalysis.allocations.length,1); // one whole Zone, no invented subdivision
+ assert.equal(three.teamCapacityAnalysis.estimatedFieldElapsedMinutes,null); // incomplete inventory cannot establish full team allocation
  assert.equal(three.teamCapacityAnalysis.estimatedElapsedMinutes,null);
  assert.deepEqual((await db.doc('campaigns/'+s.campaignId).get()).data(),before);
  assert.deepEqual((await db.doc('campaignZones/'+s.zoneId).get()).data(),s.zone);
@@ -142,4 +142,18 @@ test('Growth member needs an active campaign seat; revoked member is denied befo
  await ref.update({permissions:['intelligence']});await assert.rejects(call(),{code:'permission-denied'});
  await ref.update({permissions:['campaigns'],status:'revoked'});await assert.rejects(call(),{code:'permission-denied'});
  assert.equal(s.calls(),1);
+});
+
+test('property acquisition precedes sparse OSM and preserves selected-area facts without premium/write authority',async()=>{
+ const s=await setup();let called=0,trace;
+ const pi=require('./property_intelligence'),record={propertyId:'fixture-account',latitude:fixture.anchor.latitude,longitude:fixture.anchor.longitude,
+  yearBuilt:1970,yearBuiltBucket:'1960To1979',residential:true,propertyType:'DWEL Standard Unit'};
+ const v=await preview({...s.input,onDiagnostic:value=>trace=value,loadPropertyAnalysis:async geometry=>{called++;return {...pi.analyzeParcelObservations([record],{geometry}),geometryDigest:pi.geometryDigest(geometry)};},fetchSnapshot:async()=>({...geo.snapshotFromElements(fixture.selectedBoundary,fixture.elements),targetFeatures:[]})});
+ assert.equal(called,1);assert.equal(v.selectedAreaPropertyFacts.insideRecords,1);assert.equal(v.selectedAreaPropertyFacts.knownYearRecords,1);assert.equal(v.workload,null);
+ assert.deepEqual(trace.geometry,fixture.selectedBoundary);assert.equal(trace.geometryDigest,v.geometryDigest);assert.equal(trace.requestId,v.requestId);
+ assert.equal(trace.selectedAreaPropertyFacts.knownYearRecords,1);assert.equal(trace.propertyRecords,undefined);
+ assert.deepEqual((await db.doc('campaigns/'+s.campaignId).get()).data(),s.campaign);assert.deepEqual((await db.doc('campaignZones/'+s.zoneId).get()).data(),s.zone);
+ const failed=await preview({...s.input,loadPropertyAnalysis:async()=>{throw Error('source unavailable');}});assert.equal(failed.selectedAreaPropertyFacts,null);assert.ok(failed.mappedTargetCount>0);
+ const foreign=await preview({...s.input,loadPropertyAnalysis:async()=>({...pi.analyzeParcelObservations([record],{geometry:fixture.selectedBoundary}),geometryDigest:'different-boundary'})});
+ assert.equal(foreign.selectedAreaPropertyFacts,null);assert.equal(foreign.propertyMatching.status,'unavailable');
 });

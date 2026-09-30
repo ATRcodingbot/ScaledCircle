@@ -36,6 +36,14 @@ function normalizeAnalysisBoundary(value) {
   return points;
 }
 
+function recommendationScope(data={}) {
+  if(data.recommendationScope!=null&&!['within_preview','location'].includes(data.recommendationScope))throw Error('invalid_recommendation_scope');
+  const boundary=normalizeAnalysisBoundary(data.analysisBoundary);
+  if(data.recommendationScope==='within_preview'&&!boundary)throw Error('preview_boundary_required');
+  if(data.recommendationScope==='location'&&boundary)throw Error('invalid_recommendation_scope');
+  return {scope:boundary?'within_preview':'location',boundary};
+}
+
 function text(value, maximum = 180) {
   return String(value || "").trim().replace(/\s+/g, " ").slice(0, maximum);
 }
@@ -94,4 +102,4 @@ function planningFailure(error) {
     message: 'Choose or draw a smaller campaign territory inside your service area. Your saved area is unchanged.'};
   return {code: 'unavailable', message: 'We could not prepare workable Zones for this area. Keep your selection and try again, or draw a smaller territory.'};
 }
-module.exports = {normalizeAnalysisBoundary, normalizeAreaSelection, selectResolvedArea, isExplicitStreetAddress, workloadHours, planningFailure};
+module.exports = {recommendationScope,normalizeAnalysisBoundary, normalizeAreaSelection, selectResolvedArea, isExplicitStreetAddress, workloadHours, planningFailure};

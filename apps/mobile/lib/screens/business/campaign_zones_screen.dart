@@ -1,5 +1,4 @@
 import '../../models/own_team_capacity.dart';
-import '../../widgets/own_team_area_work.dart';
 import 'campaign_map_record_screen.dart';
 import '../../widgets/campaign_workload_summary.dart';
 import '../../widgets/zone_intelligence_summary.dart';
@@ -39,6 +38,7 @@ Map<String, dynamic> smartZoneRecommendationRequest({
   AddressSuggestion? selectedArea,
   List<Map<String, double>>? analysisBoundary,
   String objective = '',
+  Map<String, dynamic>? teamCapacity,
   int alternativeIndex = 0,
   String? recommendationRunId,
   List<String>? selectionIds,
@@ -47,6 +47,10 @@ Map<String, dynamic> smartZoneRecommendationRequest({
 }) => {
   'campaignId': campaignId,
   'desiredHours': desiredHours,
+  'recommendationScope': analysisBoundary != null
+      ? 'within_preview'
+      : 'location',
+  'teamCapacity': ?teamCapacity,
   if (objective.trim().isNotEmpty) 'objective': objective.trim(),
   if (alternativeIndex > 0) 'alternativeIndex': alternativeIndex,
   'recommendationRunId': ?recommendationRunId,
@@ -110,6 +114,7 @@ class CampaignZoneAreaEntry extends StatefulWidget {
     this.initialTeamCapacity,
     this.onSaveTeamCapacity,
     this.onManualTeamCapacity,
+    this.onManualObjective,
     this.onPlanningInputChanged,
     this.initialHours = 5,
   });
@@ -117,6 +122,7 @@ class CampaignZoneAreaEntry extends StatefulWidget {
   final String executionMode;
   final Map? initialTeamCapacity;
   final ValueChanged<Map<String, dynamic>?>? onManualTeamCapacity;
+  final ValueChanged<String>? onManualObjective;
   final Future<bool> Function(double, Map<String, dynamic>)? onSaveTeamCapacity;
   final VoidCallback? onPlanningInputChanged;
   final bool locked;
@@ -207,10 +213,7 @@ class _SmartZoneEntryState extends State<CampaignZoneAreaEntry> {
           _teamCountController.text,
           _coveragePattern,
         );
-        if (widget.onSaveTeamCapacity == null ||
-            !await widget.onSaveTeamCapacity!(hours, capacity)) {
-          return;
-        }
+        widget.onManualTeamCapacity?.call(capacity);
       } else if (widget.onSaveWorkload != null &&
           !await widget.onSaveWorkload!(hours)) {
         return;
@@ -255,6 +258,7 @@ class _SmartZoneEntryState extends State<CampaignZoneAreaEntry> {
       }
     }
     widget.onManualTeamCapacity?.call(previewCapacity);
+    widget.onManualObjective?.call(_objectiveController.text.trim());
     // Manual entry is navigation, not a workload write or recommendation.
     // Explicit acceptance rechecks saved-plan capacity separately.
     if (mounted) {
@@ -858,6 +862,7 @@ class _CampaignZonesScreenState extends State<CampaignZonesScreen> {
     double desiredHours = 5,
     List<Map<String, double>>? analysisBoundary,
     String? objective,
+    Map<String, dynamic>? teamCapacity,
     int alternativeIndex = 0,
     String? recommendationRunId,
     List<String>? selectionIds,
@@ -865,7 +870,7 @@ class _CampaignZonesScreenState extends State<CampaignZonesScreen> {
     bool resumeSavedPlan = false,
   }) async {
     if (!_recommendationEnabled) return null;
-    final revision = _planningRevision;
+    final revision = ++_planningRevision;
     final actorUid = FirebaseAuth.instance.currentUser?.uid;
     final messenger = ScaffoldMessenger.of(context);
     try {
@@ -876,6 +881,9 @@ class _CampaignZonesScreenState extends State<CampaignZonesScreen> {
         selectedArea: selectedArea,
         analysisBoundary: analysisBoundary,
         objective: objective ?? _recommendationObjective,
+        teamCapacity: _ownTeam
+            ? teamCapacity ?? _manualTeamCapacity ?? _workloadState
+            : null,
         alternativeIndex: alternativeIndex,
         recommendationRunId: recommendationRunId,
         selectionIds: selectionIds,
@@ -936,13 +944,16 @@ class _CampaignZonesScreenState extends State<CampaignZonesScreen> {
                     const SizedBox(height: 16),
                     if (_ownTeam && plan['teamCapacity'] is Map) ...[
                       Text(
-                        'Team target: ${plan['teamCapacity']['targetPersonHours']} person-hours of unique coverage',
+                        'One connected marketing area · ${plan['teamCapacity']['marketerCount']} marketers · ${plan['teamCapacity']['sessionHours']} hours each',
                       ),
                       Text(
-                        'Supported: ~${((plan['teamCapacity']['supportedMinutes'] as num) / 60).toStringAsFixed(1)} person-hours across ${zones.length} team sections',
+                        'Planned labor: ${plan['teamCapacity']['plannedLaborHours']} person-hours · unique coverage target: ${plan['teamCapacity']['uniqueCoverageTargetMinutes']} min',
                       ),
                       Text(
-                        'Busiest planned lane: ~${plan['teamCapacity']['estimatedFieldElapsedMinutes']} min of field work. Total elapsed time is unknown until travel and access are reviewed.',
+                        plan['teamCapacity']['coveragePattern'] ==
+                                'stay_together'
+                            ? 'Stay together: shared coverage. Headcount does not multiply unique coverage. Field-only time: ${plan['teamCapacity']['estimatedFieldElapsedMinutes'] ?? 'incomplete'} min; known-target subset ~${plan['teamCapacity']['supportedFieldSubsetMinutes'] ?? plan['teamCapacity']['supportedMinutes']} min.'
+                            : 'Split streets: complementary sections in this area. Slowest planned marketer: ${plan['teamCapacity']['estimatedFieldElapsedMinutes'] ?? 'incomplete'} min. Travel and total elapsed time remain unknown.',
                       ),
                       const Text(
                         'Headcount is planning information, not Assigned to or Worked by.',
@@ -1112,12 +1123,6 @@ class _CampaignZonesScreenState extends State<CampaignZonesScreen> {
                       ),
                     ],
                     const SizedBox(height: 16),
-                    if (_ownTeam)
-                      OwnTeamAreaWork(
-                        businessId: (campaign.data() as Map)['businessId']
-                            .toString(),
-                        campaignId: campaign.id,
-                      ),
                     ...zones.asMap().entries.map((entry) {
                       final index = entry.key;
                       final zone = entry.value;
@@ -1203,10 +1208,14 @@ class _CampaignZonesScreenState extends State<CampaignZonesScreen> {
           selectedArea: selectedArea,
           desiredHours: desiredHours,
           analysisBoundary: analysisBoundary,
+          teamCapacity: teamCapacity,
           objective: objective ?? _recommendationObjective,
           recommendationRunId: plan['recommendationRunId']?.toString(),
-          selectionIds: (plan['selectionIds'] as List).cast<String>(),
-          replaceZoneIndex: selectedZoneIndex,
+          alternativeIndex: _ownTeam ? (alternativeIndex + 1) % 3 : 0,
+          selectionIds: _ownTeam
+              ? null
+              : (plan['selectionIds'] as List).cast<String>(),
+          replaceZoneIndex: _ownTeam ? null : selectedZoneIndex,
           resumeSavedPlan: resumeSavedPlan,
         );
       }
@@ -1299,7 +1308,11 @@ class _CampaignZonesScreenState extends State<CampaignZonesScreen> {
       );
       return const CampaignAreaRecommendationResult.applied();
     } on FirebaseFunctionsException catch (error) {
-      if (!context.mounted) return null;
+      if (!context.mounted ||
+          revision != _planningRevision ||
+          actorUid != FirebaseAuth.instance.currentUser?.uid) {
+        return null;
+      }
       messenger.showSnackBar(
         SnackBar(
           content: Text(
@@ -1491,6 +1504,7 @@ class _CampaignZonesScreenState extends State<CampaignZonesScreen> {
     double recommendationHours = 5,
     String? recommendationObjective,
   }) async {
+    _planningRevision++; // Opening the editor invalidates any older location search.
     final campaignData = campaign.data() as Map<String, dynamic>;
 
     if (searchArea == null &&
@@ -1606,7 +1620,14 @@ class _CampaignZonesScreenState extends State<CampaignZonesScreen> {
                 : (areaContext, boundary) => _reviewSmartZonePlan(
                     areaContext,
                     analysisBoundary: boundary,
-                    desiredHours: recommendationHours,
+                    teamCapacity: _ownTeam
+                        ? _manualTeamCapacity ?? _workloadState
+                        : null,
+                    desiredHours:
+                        _ownTeam && _manualTeamCapacity?['sessionHours'] is num
+                        ? (_manualTeamCapacity!['sessionHours'] as num)
+                              .toDouble()
+                        : recommendationHours,
                     objective:
                         recommendationObjective ?? _recommendationObjective,
                   ),
@@ -1673,6 +1694,7 @@ class _CampaignZonesScreenState extends State<CampaignZonesScreen> {
     BuildContext context,
     QueryDocumentSnapshot<Map<String, dynamic>> zone,
   ) async {
+    _planningRevision++;
     final latestZone = await zone.reference.get();
     if (!context.mounted) {
       return;
@@ -2928,6 +2950,8 @@ class _CampaignZonesScreenState extends State<CampaignZonesScreen> {
                     onSaveWorkload: _saveWorkload,
                     executionMode: _ownTeam ? 'own_team' : 'marketplace',
                     initialTeamCapacity: _ownTeam ? _workloadState : null,
+                    onManualObjective: (value) =>
+                        _recommendationObjective = value,
                     onManualTeamCapacity: (input) =>
                         _manualTeamCapacity = input,
                     onSaveTeamCapacity: (hours, input) =>

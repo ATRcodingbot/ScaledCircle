@@ -29,3 +29,7 @@ test('aggregate Census context never invents polygon density, spacing or address
  assert.equal(result.physicalLogistics.homesPerSquareKm,null);assert.equal(result.physicalLogistics.averagePropertySpacingMeters,null);
  assert.equal(result.physicalLogistics.walkingMinutesPerReachableAddress,null);
 });
+test('bounded shared cache projection cannot imply retained individual facts when record budget is exceeded',()=>{
+ const value=publicAnalysis({source:'Maryland',propertyRecords:Array.from({length:5000},()=>({neutral:'x'.repeat(200)})),limitations:[]});
+ assert.equal(value.propertyRecords,undefined);assert.equal(value.recordProjectionStatus,'unavailable_storage_budget');assert.equal(value.partialCoverage,true);
+});

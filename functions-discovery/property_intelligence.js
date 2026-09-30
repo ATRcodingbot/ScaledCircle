@@ -2,10 +2,10 @@
 
 const crypto = require("node:crypto");
 
-const ANALYSIS_VERSION = "PropertyIntelligenceV2";
+const ANALYSIS_VERSION = "PropertyIntelligenceV3";
 const SIGNAL_VERSION = "PropertyAgeSignalV1";
 const ACS_SOURCE_VERSION = "ACS_2024_5YR_B25034";
-const MARYLAND_SOURCE_VERSION = "MD_OPEN_DATA_ed4q-f8tm";
+const MARYLAND_SOURCE_VERSION = "MD_OPEN_DATA_ed4q-f8tm__MD_ParcelPointsV1";
 const CENSUS_BOUNDARY_VERSION = "TIGERweb_tigerWMS_ACS2024_BlockGroups_Layer10";
 const DATA_SOURCE_BUNDLE_VERSION = `${MARYLAND_SOURCE_VERSION}__${ACS_SOURCE_VERSION}__${CENSUS_BOUNDARY_VERSION}`;
 const CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
@@ -38,6 +38,7 @@ const ACS_FIELDS = Object.freeze([
 ]);
 
 function finite(value) {
+  if (value === null || value === undefined || value === '') return null;
   const number = Number(value);
   return Number.isFinite(number) ? number : null;
 }
@@ -137,7 +138,7 @@ function parseTigerwebBlockGroups(payload) {
 function isResidential(record) {
   const text = `${record.landUse || ""} ${record.propertyType || ""} ${record.propertyCode || ""}`.toLowerCase();
   if (/commercial|industrial|exempt|public|office|retail/.test(text)) return false;
-  return /residential|residence|dwelling|apartment|condo|town|single|multi|^r\b/.test(text) || text.trim() === "";
+  return /residential|residence|dwelling|apartment|condo|town|single|multi|^r\b/.test(text);
 }
 
 function yearBucket(year) {
@@ -153,12 +154,14 @@ function yearBucket(year) {
 function normalizeMarylandRecord(raw) {
   const propertyId = String(raw[MARYLAND_FIELDS.propertyId] || "").trim();
   const latitude = finite(raw[MARYLAND_FIELDS.latitude]); const longitude = finite(raw[MARYLAND_FIELDS.longitude]);
-  const year = Number.parseInt(String(raw[MARYLAND_FIELDS.yearBuilt] || ""), 10);
+  const yearText = String(raw[MARYLAND_FIELDS.yearBuilt] || "").trim();
+  const year = /^\d{4}$/.test(yearText) ? Number(yearText) : null;
   if (!propertyId || latitude === null || longitude === null || latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) return null;
   const propertyType = String(raw[MARYLAND_FIELDS.landUse] || raw[MARYLAND_FIELDS.propertyCode] || "unknown").trim();
   return {source: "Maryland Open Data", sourceVersion: MARYLAND_SOURCE_VERSION, geographyType: "parcel_point",
     propertyId, latitude, longitude, yearBuilt: yearBucket(year) ? year : null, yearBuiltBucket: yearBucket(year),
     residential: isResidential({landUse: raw[MARYLAND_FIELDS.landUse], propertyType, propertyCode: raw[MARYLAND_FIELDS.propertyCode]}),
+    commercial: /commercial|office|retail|industrial/i.test(propertyType)&&!/exempt|public/i.test(propertyType),
     propertyType, county: String(raw[MARYLAND_FIELDS.county] || "").trim(),
     structureAreaSquareFeet: finite(raw[MARYLAND_FIELDS.structureArea]), observedAt: null,
     sourceEdition: String(raw[MARYLAND_FIELDS.sourceEdition] || "").trim() || null,
@@ -170,7 +173,14 @@ function deduplicateParcels(records) {
   for (const record of records) {
     if (!record?.propertyId) continue;
     const existing = byId.get(record.propertyId);
-    if (!existing || (!existing.yearBuilt && record.yearBuilt)) byId.set(record.propertyId, record);
+    if (!existing) byId.set(record.propertyId, record);
+    else if (existing.latitude !== record.latitude || existing.longitude !== record.longitude ||
+      existing.yearBuilt && record.yearBuilt && existing.yearBuilt !== record.yearBuilt ||
+      typeof existing.residential==='boolean'&&typeof record.residential==='boolean'&&existing.residential!==record.residential ||
+      existing.propertyType&&record.propertyType&&existing.propertyType!=='unknown'&&record.propertyType!=='unknown'&&
+        existing.propertyType.toLowerCase()!==record.propertyType.toLowerCase()) {
+      byId.set(record.propertyId, {...existing, yearBuilt:null, yearBuiltBucket:null, ambiguous:true});
+    } else if (!existing.ambiguous && !existing.yearBuilt && record.yearBuilt) byId.set(record.propertyId, record);
   }
   return [...byId.values()];
 }
@@ -199,9 +209,11 @@ function parseCensusB25034(payload) {
   return output;
 }
 
-function pct(value, total) { return total > 0 ? Math.round(value * 1000 / total) / 10 : 0; }
+function pct(value, total) { return total > 0 ? Math.round(value * 1000 / total) / 10 : null; }
 
 function propertyAgeSignal({percent20PlusYearsOld, percent30PlusYearsOld, percent40PlusYearsOld, coverage}) {
+  if([percent20PlusYearsOld,percent30PlusYearsOld,percent40PlusYearsOld].some(v=>v===null||!Number.isFinite(v)))
+    return {score:null,version:SIGNAL_VERSION,category:'UNAVAILABLE'};
   const raw = percent40PlusYearsOld * 0.5 + percent30PlusYearsOld * 0.3 + percent20PlusYearsOld * 0.2;
   const modifier = 0.65 + Math.max(0, Math.min(1, coverage)) * 0.35;
   const score = Math.round(Math.max(0, Math.min(100, raw * modifier)));
@@ -209,6 +221,7 @@ function propertyAgeSignal({percent20PlusYearsOld, percent30PlusYearsOld, percen
 }
 
 function predominantEra(buckets) {
+  if(!Object.values(buckets).some(n=>n>0))return 'Unavailable';
   const key = Object.entries(buckets).sort((a, b) => b[1] - a[1])[0]?.[0];
   const sourceSupportedLabel = ({"1940To1949": "1940-1949", "1950To1959": "1950-1959",
     "1960To1969": "1960-1969", "1970To1979": "1970-1979", "1980To1989": "1980-1989",
@@ -228,7 +241,11 @@ function confidenceFor({coverage, granularity, recordCount}) {
 
 function analyzeParcelObservations(observations, {geometry, sourceUpdatedAt = null,
   referenceYear = new Date().getUTCFullYear(), partialCoverage = false} = {}) {
-  const unique = deduplicateParcels(observations).filter((record) => !geometry || pointInPolygon(record, geometry));
+  const all = deduplicateParcels(observations);
+  const unique = all.filter((record) => !record.ambiguous && (!geometry || pointInPolygon(record, geometry))).map(r=>({...r,
+    yearBuilt:yearBucket(r.yearBuilt)?r.yearBuilt:null,yearBuiltBucket:yearBucket(r.yearBuilt),
+    propertyType:typeof r.propertyType==='string'&&r.propertyType.trim()?r.propertyType.trim():'unknown',
+    structureAreaSquareFeet:finite(r.structureAreaSquareFeet),residential:r.residential===true?true:r.residential===false?false:null}));
   const residential = unique.filter((record) => record.residential);
   const usable = residential.filter((record) => record.yearBuiltBucket);
   const buckets = {pre1940: 0, "1940To1959": 0, "1960To1979": 0, "1980To1999": 0, "2000To2014": 0, "2015Plus": 0};
@@ -244,7 +261,7 @@ function analyzeParcelObservations(observations, {geometry, sourceUpdatedAt = nu
   const signal = propertyAgeSignal({percent20PlusYearsOld: p20, percent30PlusYearsOld: p30, percent40PlusYearsOld: p40, coverage});
   const types = {};
   for (const record of residential) types[record.propertyType || "unknown"] = (types[record.propertyType || "unknown"] || 0) + 1;
-  return analysisShape({source: "Maryland Open Data", sourceVersion: MARYLAND_SOURCE_VERSION, dataUpdatedAt: sourceUpdatedAt,
+  const result = analysisShape({source: "Maryland Open Data", sourceVersion: MARYLAND_SOURCE_VERSION, dataUpdatedAt: sourceUpdatedAt,
     geographyType: "parcel", propertyCount: unique.length, structureCount: unique.filter((r) => r.structureAreaSquareFeet > 0 || r.yearBuilt).length,
     residentialStructureCount: residential.length, usableCount: total, buckets, predominantConstructionEra: predominantEra(buckets),
     median: years.length ? years[Math.floor((years.length - 1) / 2)] : null,
@@ -255,6 +272,16 @@ function analyzeParcelObservations(observations, {geometry, sourceUpdatedAt = nu
     confidence: partialCoverage ? "LOW" : confidenceFor({coverage, granularity: "parcel", recordCount: residential.length}),
     limitations: [...(total ? [] : ["No residential property-age records were available for this area."]),
       ...(partialCoverage ? [`The provider query reached the ${MAX_PARCELS}-record safety limit; coverage is partial.`] : [])]});
+  result.propertyRecords=unique.map(r=>({propertyId:crypto.createHash('sha256').update(r.propertyId).digest('hex').slice(0,24),
+    latitude:r.latitude,longitude:r.longitude,yearBuilt:r.yearBuilt,residential:r.residential,
+    propertyType:r.propertyType,commercial:typeof r.commercial==='boolean'?r.commercial:null,
+    structureAreaSquareFeet:r.structureAreaSquareFeet,unitCount:r.unitCount??null}));
+  result.recordCoverage={insideRecords:unique.length,knownYearRecords:unique.filter(r=>r.yearBuilt!==null).length,
+    knownTypeRecords:unique.filter(r=>r.propertyType&&r.propertyType!=='unknown').length,
+    ambiguousRecords:all.filter(r=>r.ambiguous).length,outsideRecords:all.length-unique.length-all.filter(r=>r.ambiguous).length,
+    method:'official_account_dedup_and_point_in_polygon; no nearest-building or parcel-boundary match',
+    complete:!partialCoverage};
+  return result;
 }
 
 const ACS_YEAR_RANGES = Object.freeze({
@@ -334,7 +361,8 @@ function analysisShape(value) {
     propertyTypeDistribution: value.types, propertyAgeSignal: value.signal.score,
     propertyAgeSignalCategory: value.signal.category, confidence: value.confidence,
     dataCoverage: Math.round(value.coverage * 1000) / 10, limitations: value.limitations,
-    aiSummary: value.signal.score >= 75 ? "This area contains a relatively high concentration of older residential properties." :
+    aiSummary: value.signal.score===null ? "Recorded construction age is unavailable for this area." :
+      value.signal.score >= 75 ? "This area contains a relatively high concentration of older residential properties." :
       value.signal.score >= 50 ? "This area contains a meaningful concentration of older residential properties." :
       value.signal.score >= 25 ? "This area contains a mix of newer and older residential properties." :
       "Available records indicate predominantly newer residential property stock."};
@@ -486,7 +514,8 @@ class MarylandPropertyProvider {
     if (payload.length >= MAX_PARCELS) {
       const sentinelUrl = `https://opendata.maryland.gov/resource/ed4q-f8tm.json?$select=${encodeURIComponent(f.propertyId)}&$where=${encodeURIComponent(where)}&$order=${encodeURIComponent(`${f.propertyId} ASC`)}&$limit=1&$offset=${MAX_PARCELS}`;
       const sentinel = await this.fetchJson(sentinelUrl, {timeoutMs: 12000});
-      truncated = Array.isArray(sentinel) && sentinel.length > 0;
+      if(!Array.isArray(sentinel))throw Error('maryland_pagination_sentinel_invalid');
+      truncated = sentinel.length > 0;
     }
     const observations = deduplicateParcels((Array.isArray(payload) ? payload : []).map(normalizeMarylandRecord).filter(Boolean));
     if (!observations.length) return null;
@@ -495,6 +524,56 @@ class MarylandPropertyProvider {
       sourceUpdatedAt: editions.length ? `MdProperty View edition ${editions.at(-1)}` : null});
     analysis.providerPagination = {pageSize: MARYLAND_PAGE_SIZE, retrievedRecords: payload.length,
       maxRecords: MAX_PARCELS, truncated, coverageStatus: truncated ? "partial" : "complete"};
+    return analysis;
+  }
+}
+
+// Verified official point service fallback. Request neutral structure facts only;
+// no owner, mailing address, valuation or condition fields are collected.
+class MarylandParcelPointProvider {
+  constructor({fetchJson=defaultFetchJson}={}) { this.fetchJson=fetchJson; }
+  async analyze({geometry}) {
+    const fields=['OBJECTID','ACCTID','JURSCODE','YEARBLT','DESCBLDG','DESCLU','SQFTSTRC','BLDG_UNITS','MDPVDATE','SDATDATE'];
+    const box=boundingBox(geometry);
+    const observations=[];let offset=0,truncated=false,lastId=-1,rejectedRecords=0;const dates=new Set();
+    while(offset<MAX_PARCELS) {
+      const limit=Math.min(MARYLAND_PAGE_SIZE,MAX_PARCELS-offset);
+      const query=new URLSearchParams({f:'json',where:lastId<0?'1=1':`OBJECTID > ${lastId}`,
+        geometry:[box.minLongitude,box.minLatitude,box.maxLongitude,box.maxLatitude].join(','),
+        geometryType:'esriGeometryEnvelope',spatialRel:'esriSpatialRelIntersects',inSR:'4326',outSR:'4326',
+        outFields:fields.join(','),returnGeometry:'true',orderByFields:'OBJECTID ASC',resultRecordCount:String(limit)});
+      const value=await this.fetchJson('https://mdgeodata.md.gov/imap/rest/services/PlanningCadastre/MD_PropertyData/MapServer/0/query?'+query,{timeoutMs:12000});
+      if(value?.error||!Array.isArray(value?.features)||value.spatialReference?.wkid!==4326)throw Error('maryland_parcel_response_invalid');
+      for(const f of value.features) {
+        const a=f.attributes||{},oid=Number(a.OBJECTID);
+        if(!Number.isSafeInteger(oid)||oid<=lastId)throw Error('maryland_pagination_nonprogress');lastId=oid;
+        if(!Object.hasOwn(a,'ACCTID')||!Object.hasOwn(a,'YEARBLT')||!Object.hasOwn(a,'DESCBLDG')||!Object.hasOwn(a,'DESCLU'))throw Error('maryland_parcel_schema_missing');
+        const r=normalizeMarylandRecord({[MARYLAND_FIELDS.propertyId]:`${a.JURSCODE||''}:${a.ACCTID||''}`,
+          [MARYLAND_FIELDS.latitude]:f.geometry?.y,[MARYLAND_FIELDS.longitude]:f.geometry?.x,
+          [MARYLAND_FIELDS.yearBuilt]:a.YEARBLT,[MARYLAND_FIELDS.landUse]:a.DESCLU,[MARYLAND_FIELDS.structureArea]:a.SQFTSTRC});
+        if(r&&a.ACCTID){r.propertyType=String(a.DESCBLDG||'unknown');r.unitCount=Number.isSafeInteger(a.BLDG_UNITS)&&a.BLDG_UNITS>0?a.BLDG_UNITS:null;observations.push(r);}
+        else rejectedRecords++;
+        for(const d of [a.MDPVDATE,a.SDATDATE]) {
+          if(typeof d==='number'&&Number.isFinite(d))dates.add(new Date(d).toISOString());
+          else if(typeof d==='string'&&/^\d{4}(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)$/.test(d)) {
+            const month=['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'].indexOf(d.slice(4))+1;
+            dates.add(`${d.slice(0,4)}-${String(month).padStart(2,'0')}`); // Month precision; no invented day.
+          }
+        }
+      }
+      offset+=value.features.length;
+      truncated=value.exceededTransferLimit===true;
+      if(value.exceededTransferLimit!==true)break;
+      if(!value.features.length)throw Error('maryland_pagination_incomplete');
+    }
+    if(!observations.length)return null;
+    // A continued page establishes completeness; reaching the bounded cap does not.
+    truncated=offset>=MAX_PARCELS&&truncated;
+    const analysis=analyzeParcelObservations(observations,{geometry,partialCoverage:truncated||rejectedRecords>0,sourceUpdatedAt:[...dates].sort().at(-1)||null});
+    analysis.source='Maryland MD iMAP Parcel Points';analysis.sourceVersion='MD_ParcelPointsV1';
+    analysis.sourceDates=[...dates].sort();analysis.retrievedAt=new Date().toISOString();
+    analysis.providerPagination={pageSize:MARYLAND_PAGE_SIZE,retrievedRecords:offset,maxRecords:MAX_PARCELS,truncated,
+      rejectedRecords,coverageStatus:truncated||rejectedRecords>0?'partial':'complete'};
     return analysis;
   }
 }
@@ -568,11 +647,11 @@ function assertBusinessAccess({uid, role, isAdmin, businessId}) {
 
 module.exports = {ANALYSIS_VERSION, SIGNAL_VERSION, ACS_SOURCE_VERSION, MARYLAND_SOURCE_VERSION, CENSUS_BOUNDARY_VERSION, DATA_SOURCE_BUNDLE_VERSION, CACHE_TTL_MS,
   MAX_PARCELS, MARYLAND_PAGE_SIZE, MAX_CENSUS_GEOGRAPHIES, TIGERWEB_BLOCK_GROUP_LAYER, ACS_REFERENCE_YEAR,
-  MARYLAND_FIELDS, ACS_FIELDS, validateGeometry, geometryDigest, boundingBox, pointInPolygon, arcGisPolygon,
+  yearBucket, MARYLAND_FIELDS, ACS_FIELDS, validateGeometry, geometryDigest, boundingBox, pointInPolygon, arcGisPolygon,
   parseTigerwebBlockGroups, normalizeMarylandRecord, deduplicateParcels, parseCensusB25034,
   analyzeParcelObservations, analyzeCensusAggregates, estimatedOlderCount, propertyAgeSignal, aiGrounding,
   ASSISTANT_CONTEXT_VERSION, ASSISTANT_PROMPT_VERSION, sanitizeWeatherIntelligence,
   buildPropertyIntelligenceAssistantContext, intelligenceCacheIdentity, sanitizeAssistantResponse,
   analyzeBusinessOpportunity,
-  MarylandPropertyProvider, CensusPropertyProvider, analyzeWithFallback, cacheIsReusable,
+  MarylandPropertyProvider, MarylandParcelPointProvider, CensusPropertyProvider, analyzeWithFallback, cacheIsReusable,
   assertBusinessAccess};

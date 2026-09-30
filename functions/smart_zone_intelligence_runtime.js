@@ -1,6 +1,6 @@
 'use strict';
 const {createHash} = require('node:crypto');
-const VERSION = 'SmartZoneIntelligenceCacheV5';
+const VERSION = 'SmartZoneIntelligenceCacheV6';
 const TTL_MS = 15 * 60 * 1000, LEASE_MS = 180000, COOLDOWN_MS = 60000, MAX_BYTES = 500 * 1024;
 const hash = value => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const fail = (code, message) => {throw Object.assign(Error(message), {code});};
@@ -64,12 +64,16 @@ async function loadMarketingHistory({db, businessId, transaction = null, now = D
 }
 function requestFingerprint({campaignId, campaign, data, desiredHours, objective}) {
   // Routing/business/plan labels supplied by the client never grant authority.
-  const location = data.analysisBoundary !== undefined ? {analysisBoundary: data.analysisBoundary} :
+  const scope=require('./smart_zone_entry_contract').recommendationScope(data);
+  const location = scope.boundary ? {previewGeometryDigest:require('./operational_layer').zoneGeometryDigest(scope.boundary)} :
     data.areaSelection ? {areaSelection: data.areaSelection} :
       {savedCampaignArea: campaign.serviceArea || []};
-  return hash({campaignId, campaignType: campaign.campaignType || campaign.type || 'field_distribution',
-    location, desiredHours, objective,executionMode:campaign.executionMode||null,
-    teamCapacity:campaign.executionMode==='own_team'?campaign.campaignWorkload||null:null});
+  return hash({version:VERSION,modelVersion:require('./smart_zone_intelligence').VERSION,
+    serviceScoreVersion:require('./property_service_area_analysis').MARKETING_SCORE_VERSION,
+    propertySourceVersion:require('./property_intelligence').DATA_SOURCE_BUNDLE_VERSION,campaignId,
+    campaignType: campaign.campaignType || campaign.type || 'field_distribution',
+    scope:scope.scope,location,desiredHours,objective,executionMode:campaign.executionMode||null,
+    teamCapacity:campaign.executionMode==='own_team'?require('./own_team_capacity').requirement(data.teamCapacity||campaign.campaignWorkload):null});
 }
 function recommendationRunId(input) {
   return hash([VERSION, input.businessId, input.actorUid, input.campaignId,

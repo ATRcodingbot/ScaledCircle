@@ -68,10 +68,17 @@ function project({geometry, features, segments, workload, source, intent, workTy
     executionRouteVerified:false};
 }
 function recommended(candidate, workType, intent) {
-  return project({geometry:candidate.geometry,features:candidate.features,segments:candidate.networkSegments,
-    workload:candidate.workload,source:candidate.source,intent,workType,ranking:candidate.ranking,
+  const result=project({geometry:candidate.geometry,features:candidate.features,segments:candidate.networkSegments,
+    workload:candidate.incompleteTargetInventory?null:candidate.workload,source:candidate.source,intent,workType,ranking:candidate.ranking,
     limitations:candidate.source?.uncertaintyGuards>0?
       ['Incomplete mapped exclusion features have conservative avoidance areas.']:[]});
+  if(candidate.incompleteTargetInventory){result.status='partial';result.partialTargetEstimate={minutes:candidate.workload.estimatedMinutes,
+    supportedTargetCount:candidate.features.length,completeAreaWorkload:false};result.unclassifiedMappedFeatureCount=candidate.unclassifiedMappedFeatureCount;
+    result.limitations.push('Supported target subset only. A complete target inventory and full area/team workload are not established.');}
+  result.selectedAreaPropertyFacts=candidate.ranking?.propertyRecordCoverage?{...candidate.ranking.propertyRecordCoverage,
+    source:candidate.ranking.signals?.propertyIntelligence?.source||null,scope:'official parcel points inside candidate'}:null;
+  result.serviceSuitability=candidate.ranking?.propertyScoreComponents||[];
+  return result;
 }
 function analyze({geometry, snapshot, workType, propertyContext, acquisition=null}) {
   const intent=serviceability.intent(workType);
@@ -93,8 +100,9 @@ function analyze({geometry, snapshot, workType, propertyContext, acquisition=nul
   const incompleteClassification=unclassified.length>0||!inventoryComplete;
   const segments=a.supportedFeatures.length?a.segments:a.availableSegments;
   const meters=a.supportedFeatures.length?a.streetMeters:a.availableStreetMeters;
-  const workload=!partialCoverage&&a.supportedFeatures.length&&meters>0?planning.estimateWorkload({
+  const observedWorkload=a.supportedFeatures.length&&meters>0?planning.estimateWorkload({
     estimatedProperties:a.supportedFeatures.length,estimatedWalkingMeters:meters*2,propertiesPerHour:45,workType}):null;
+  const workload=!partialCoverage&&!incompleteClassification&&a.supportedFeatures.length===a.features.length?observedWorkload:null;
   const empty=inventoryComplete&&!partialCoverage&&!unclassified.length&&!a.features.length;
   const status=partialCoverage||incompleteClassification||a.supportedFeatures.length<a.features.length?'partial':empty?'empty':'available';
   const result=project({geometry,features:a.features.length||(!incompleteClassification&&!partialCoverage)?a.features:null,
@@ -113,8 +121,11 @@ function analyze({geometry, snapshot, workType, propertyContext, acquisition=nul
     unclassifiedMappedFeatureCount:unclassified.length,
     walkingEvidence:meters>0?{minutes:meters*2/80,networkTraversalFactor:2,walkingMetersPerMinute:80,
       walkingOnly:workload==null,partialCoverage,executionRouteVerified:false}:null,
-    workloadComponents:workload?{targetHandlingMinutes:a.supportedFeatures.length*60/45,walkingMinutes:meters*2/80,
-      totalPersonMinutes:workload.estimatedMinutes,estimatedTeamElapsedMinutes:null,sharedTravelMinutes:null}:null,
+    partialTargetEstimate:observedWorkload&&!workload?{minutes:observedWorkload.estimatedMinutes,
+      supportedTargetCount:a.supportedFeatures.length,completeAreaWorkload:false}:null,
+    workloadComponents:observedWorkload?{targetHandlingMinutes:a.supportedFeatures.length*60/45,walkingMinutes:meters*2/80,
+      totalPersonMinutes:workload?.estimatedMinutes??null,knownTargetSubtotalMinutes:observedWorkload.estimatedMinutes,
+      completeAreaWorkload:workload!=null,estimatedTeamElapsedMinutes:null,sharedTravelMinutes:null}:null,
     diagnostics:{acquisitionState:'supported_snapshot',inputTargetFeatureCount:snapshot.targetFeatures?.length??null,
       filterCounts:a.filterCounts,
       inputRoadWayCount:snapshot.routeWays?.length??null,inputExclusionCount:snapshot.landFeatures?.length??null,

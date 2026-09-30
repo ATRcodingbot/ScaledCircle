@@ -45,7 +45,7 @@ class SmartZoneRecommendationEvidence extends StatelessWidget {
         children: [
           Text(
             plan['executionMode'] == 'own_team'
-                ? 'Team section ${selectedZoneIndex + 1}'
+                ? 'One connected area · section ${selectedZoneIndex + 1}'
                 : 'Zone ${selectedZoneIndex + 1}',
             style: Theme.of(context).textTheme.titleLarge,
           ),
@@ -62,14 +62,18 @@ class SmartZoneRecommendationEvidence extends StatelessWidget {
           if (recommendation['goal'] != null)
             Text('Campaign goal: ${recommendation['goal']}'),
           if (plan['executionMode'] == 'own_team')
-            Text('Team coverage sections: ${zones.length} · Unsaved preview')
+            Text(
+              'One connected plan · ${zones.length} complementary sections · Unsaved preview',
+            )
           else if (plan['campaignWorkload'] is Map)
             Text(
               'Required Zones: ${plan['campaignWorkload']['requiredZoneCount']} · Preview: ${zones.length} (not saved)',
             ),
           if (recommendation['supportedMinutes'] is num)
             Text(
-              'Combined advisory workload for these areas: ${advisoryWorkload(recommendation['supportedMinutes'] as num)}',
+              plan['completeAreaWorkload'] == false
+                  ? 'Known-target subset: ${advisoryWorkload(recommendation['supportedMinutes'] as num)}. Full area/team workload is incomplete.'
+                  : 'Combined advisory workload for this plan: ${advisoryWorkload(recommendation['supportedMinutes'] as num)}',
             ),
           if (recommendation['supportedMinutes'] is num &&
               recommendation['requestedHours'] is num &&

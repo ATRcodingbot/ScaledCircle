@@ -27,7 +27,7 @@ test('preview uses exact selected boundary and validated local streets with no p
  const result=z.analyze({geometry:shape,workType:'flyer_distribution',snapshot:snapshot()});
  assert.ok(result.mappedTargetCount>0);assert.ok(result.supportingStreetMeters>0);
  assert.equal(result.mode,'manual');assert.equal(result.executionRouteVerified,false);
- assert.equal(result.workload.propertiesPerHour,45);assert.equal(result.workload.networkTraversalFactor,2);
+ assert.equal(result.partialTargetEstimate.supportedTargetCount, result.diagnostics.streetSupportedTargetCount);assert.equal(result.workload,null);assert.equal(result.walkingEvidence.networkTraversalFactor,2);
  assert.equal(result.geometryDigest,require('./operational_layer').zoneGeometryDigest(shape));
 });
 test('no local roads cannot fabricate walking distance or field time',()=>{
@@ -57,8 +57,8 @@ test('segment lengths are deduplicated, with no invented connector between separ
 test('campaign work factors retain the existing model, never invent conversation durations',()=>{
  for(const type of ['flyer_distribution','door_hanger_distribution','door_to_door_outreach']){
   const r=z.analyze({geometry:shape,snapshot:snapshot(),workType:type});
-  assert.equal(r.workload.campaignType,type);assert.equal(r.workload.conversationDuration,null);
-  assert.equal(r.workload.minutes,z.analyze({geometry:shape,snapshot:snapshot(),workType:'flyer_distribution'}).workload.minutes);
+  assert.equal(r.workload,null);assert.equal(r.workloadComponents.completeAreaWorkload,false);
+  assert.equal(r.partialTargetEstimate.minutes,z.analyze({geometry:shape,snapshot:snapshot(),workType:'flyer_distribution'}).partialTargetEstimate.minutes);
  }
  const base=planning.estimateWorkload({estimatedProperties:45,estimatedWalkingMeters:160,workType:'flyer_distribution'});
  const yard=planning.estimateWorkload({estimatedProperties:45,estimatedWalkingMeters:160,workType:'yard_sign_installation'});

@@ -2,11 +2,12 @@
 
 // Provider URLs are constructed by maintained adapters, never by the caller.
 // Never follow an error redirect carrying a Census key, or retain its body/URL.
-const HOSTS = new Set(["opendata.maryland.gov", "api.census.gov", "tigerweb.geo.census.gov"]);
+const HOSTS = new Set(["opendata.maryland.gov", "api.census.gov", "tigerweb.geo.census.gov", "mdgeodata.md.gov"]);
 async function fetchJson(url, {timeoutMs = 10000, fetchImpl = fetch,
   onDiagnostic = () => {}} = {}) {
   const u = new URL(url);
-  if (u.protocol !== "https:" || !HOSTS.has(u.hostname) || u.port || u.username || u.password) {
+  if (u.protocol !== "https:" || !HOSTS.has(u.hostname) || u.port || u.username || u.password ||
+      u.hostname==='mdgeodata.md.gov'&&u.pathname!=='/imap/rest/services/PlanningCadastre/MD_PropertyData/MapServer/0/query') {
     throw Error("property_source_endpoint_not_allowed");
   }
   const base = {host: u.hostname, path: u.pathname, keySupplied: u.searchParams.has("key")};

@@ -11,6 +11,7 @@ function requirement(input) {
   if(!Number.isFinite(requestedMinutes)||requestedMinutes>Number.MAX_SAFE_INTEGER)fail('The combined planning target is too large.');
   return {version:VERSION,sessionHours,requestedHours:sessionHours,marketerCount,coveragePattern,
     requestedMinutes,targetPersonHours:requestedMinutes/60,requiredZoneCount:null,
+    plannedLaborHours:sessionHours*marketerCount,uniqueCoverageTargetMinutes:requestedMinutes,
     durationMeaning:'per_person_session',headcountIsAssignment:false};
 }
 function allocate(input,sections) {
@@ -25,14 +26,28 @@ function allocate(input,sections) {
   // Only occupied lanes are materialized, so arbitrary headcount cannot allocate
   // unbounded memory or create people records.
   const lanes=[];
-  for(const section of [...sections].sort((a,b)=>b.workload.estimatedMinutes-a.workload.estimatedMinutes||a.id.localeCompare(b.id))) {
+  const ordered=[...sections].sort((a,b)=>b.workload.estimatedMinutes-a.workload.estimatedMinutes||a.id.localeCompare(b.id));
+  const connectedAllocation=r.coveragePattern==='split_streets'&&sections.every(s=>s.geometry&&s.networkSegments&&s.features?.length);
+  if(connectedAllocation){
+    const remaining=new Set(ordered),adjacent=require('./smart_zone_connected_territory').compatible;
+    for(const seed of ordered){if(lanes.length>=r.marketerCount)break;if(!remaining.has(seed))continue;
+      lanes.push({lane:lanes.length+1,minutes:seed.workload.estimatedMinutes,sectionIds:[seed.id]});remaining.delete(seed);}
+    while(remaining.size){
+      const eligible=lanes.flatMap(l=>[...remaining].filter(s=>l.sectionIds.some(id=>adjacent(sections.find(x=>x.id===id),s))).map(s=>({l,s})))
+        .sort((a,b)=>a.l.minutes-b.l.minutes||a.l.lane-b.l.lane||a.s.id.localeCompare(b.s.id))[0];
+      if(!eligible)fail('Connected complementary team sections could not be established.');
+      eligible.l.minutes+=eligible.s.workload.estimatedMinutes;eligible.l.sectionIds.push(eligible.s.id);remaining.delete(eligible.s);
+    }
+  }
+  for(const section of connectedAllocation?[]:ordered) {
     let lane=r.coveragePattern==='stay_together'?lanes[0]:
       lanes.length<r.marketerCount?null:[...lanes].sort((a,b)=>a.minutes-b.minutes||a.lane-b.lane)[0];
     if(!lane){lane={lane:lanes.length+1,minutes:0,sectionIds:[]};lanes.push(lane);}
     lane.minutes+=section.workload.estimatedMinutes;lane.sectionIds.push(section.id);
   }
-  return {...r,supportedMinutes,supportedPersonHours:supportedMinutes/60,
-    coverageSectionCount:sections.length,allocations:lanes,
+  return {...r,supportedMinutes,supportedPersonHours:supportedMinutes/60,supportedCoverageMinutes:supportedMinutes,
+    allocationKind:r.coveragePattern==='stay_together'?'shared_coverage':'complementary_sections',
+    coverageSectionCount:sections.length,allocations:lanes,connectedComplementarySections:connectedAllocation,
     estimatedFieldElapsedMinutes:lanes.length?Math.max(...lanes.map(l=>l.minutes)):null,
     estimatedElapsedMinutes:null,sharedTravelMinutes:null,
     shortfallMinutes:Math.max(0,r.requestedMinutes-supportedMinutes),

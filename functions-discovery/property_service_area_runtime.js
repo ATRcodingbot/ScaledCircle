@@ -27,6 +27,12 @@ function withPhysicalChannel(value, geometry) {
 // rankings belong to the workspace-specific recommendation service.
 function publicAnalysis(value) {
   const result = {...value};
+  if(Buffer.byteLength(JSON.stringify(result),'utf8')>800*1024&&Array.isArray(result.propertyRecords)) {
+    delete result.propertyRecords;
+    result.recordProjectionStatus='unavailable_storage_budget';
+    result.partialCoverage=true;
+    result.limitations=[...(result.limitations||[]),'Individual neutral-record projection exceeded the retained evidence budget. Only aggregate facts are available.'];
+  }
   const failures = new Set(result.providerFailures || []);
   delete result.providerFailures;
   result.limitations = result.source === "none"
@@ -54,6 +60,7 @@ function createAnalyzer({db, FieldValue, apiKey = "", now = Date.now,
     return responses.get(key);
   };
   const providers = [new property.MarylandPropertyProvider({fetchJson}),
+    new property.MarylandParcelPointProvider({fetchJson}),
     new property.CensusPropertyProvider({fetchJson, apiKey})];
   return async geometry => {
     property.validateGeometry(geometry);

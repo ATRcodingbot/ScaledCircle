@@ -119,6 +119,23 @@ class ZoneIntelligenceSummary extends StatelessWidget {
             ),
         ] else
           const Text('Property type unavailable'),
+        if (data['selectedAreaPropertyFacts'] is Map) ...[
+          const SizedBox(height: 12),
+          const Text('Recorded properties inside this area'),
+          Text(
+            '${data['selectedAreaPropertyFacts']['knownTypeRecords']} of ${data['selectedAreaPropertyFacts']['insideRecords']} parcel records have a recorded type',
+          ),
+          Text(
+            '${data['selectedAreaPropertyFacts']['knownYearRecords']} of ${data['selectedAreaPropertyFacts']['insideRecords']} parcel records have a usable construction year',
+          ),
+          if (data['selectedAreaPropertyFacts']['constructionEra'] != null)
+            Text(
+              'Recorded construction era: ${data['selectedAreaPropertyFacts']['constructionEra']}',
+            ),
+          const Text('Parcel points, not verified homes or delivery stops'),
+          if (data['selectedAreaPropertyFacts']['complete'] == false)
+            const Text('Property records: partial returned coverage'),
+        ],
         const SizedBox(height: 16),
         const Text('Estimated field time'),
         Text(
@@ -127,6 +144,10 @@ class ZoneIntelligenceSummary extends StatelessWidget {
               : 'Not established',
           style: theme.textTheme.headlineMedium,
         ),
+        if (data['partialTargetEstimate'] is Map)
+          Text(
+            'Known-target subset: ~${fieldWorkload(data['partialTargetEstimate']['minutes'] as num)} for ${data['partialTargetEstimate']['supportedTargetCount']} street-supported targets including walking. Full area/team workload is incomplete.',
+          ),
         if (workload != null)
           Text(
             workload['oneScaler'] == true
@@ -145,8 +166,10 @@ class ZoneIntelligenceSummary extends StatelessWidget {
           Text(
             'Team planning: ${team!['marketerCount']} marketers · ${team['sessionHours']} hr each',
           ),
-          const Text(
-            'Whole-area evidence does not establish an even split between marketers. Travel and total team elapsed time remain unknown.',
+          Text(
+            team['coveragePattern'] == 'stay_together'
+                ? 'Stay together: one shared coverage area. Headcount does not multiply unique coverage. Travel and total team elapsed time remain unknown.'
+                : 'Split streets: complementary coverage must be planned within this area; an even split is not established. Travel and total team elapsed time remain unknown.',
           ),
         ],
         const SizedBox(height: 16),
@@ -197,6 +220,23 @@ class ZoneIntelligenceSummary extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  if (data['selectedAreaPropertyFacts'] is Map)
+                    Text(
+                      'Property source: ${data['selectedAreaPropertyFacts']['source']} · scope: ${data['selectedAreaPropertyFacts']['scope']} · matching: ${data['selectedAreaPropertyFacts']['method']}',
+                    ),
+                  if (data['selectedAreaPropertyFacts'] is Map)
+                    Text(
+                      'Record source date: ${data['selectedAreaPropertyFacts']['dataUpdatedAt'] ?? 'Not supplied'} · Retrieved: ${data['selectedAreaPropertyFacts']['retrievedAt'] ?? 'Not recorded'} · Version: ${data['selectedAreaPropertyFacts']['sourceVersion'] ?? 'Not recorded'}',
+                    ),
+                  if (data['propertyMatching'] is Map)
+                    Text(
+                      'Footprint matching: ${data['propertyMatching']['matchedFootprints'] ?? 'Unavailable'} unique matches · ${data['propertyMatching']['ambiguousFootprints'] ?? 'Unavailable'} ambiguous footprints. Individual property ages are not attached to mapped buildings.',
+                    ),
+                  for (final component
+                      in data['serviceSuitability'] as List? ?? [])
+                    Text(
+                      '${component['intent']}: ${component['rule']} · ${component['scope']} · planning assumption, not component condition or customer intent',
+                    ),
                   for (final reason in data['reasons'] as List? ?? [])
                     Text('• $reason'),
                   if (comparisonReason != null) Text(comparisonReason!),
@@ -247,7 +287,9 @@ class ZoneIntelligenceSummary extends StatelessWidget {
                       'Advisory walking component: ${(data['workloadComponents']['walkingMinutes'] as num).toStringAsFixed(1)} min',
                     ),
                     Text(
-                      'Supported person-work: ${data['workloadComponents']['totalPersonMinutes']} min · total team elapsed time not established',
+                      data['workloadComponents']['completeAreaWorkload'] == true
+                          ? 'Supported person-work: ${data['workloadComponents']['totalPersonMinutes']} min · total team elapsed time not established'
+                          : 'Known-target subset: ${data['workloadComponents']['knownTargetSubtotalMinutes']} min including walking. Complete area/team workload is not established; unclassified observations are excluded.',
                     ),
                   ],
                   if (workload != null)

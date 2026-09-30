@@ -3,6 +3,19 @@ const {test}=require('node:test'),assert=require('node:assert/strict'),fs=requir
 const parser=require('@babel/parser'),generate=require('@babel/generator').default;
 const source=fs.readFileSync(require.resolve('./index'),'utf8');
 const node=parser.parse(source).program.body.find(s=>s.expression?.left?.object?.name==='exports'&&s.expression.left.property?.name==='analyzePropertyIntelligence');
+test('exploratory PI uses the same bounded acquisition authority, not a second provider configuration',async()=>{
+ const geometry=[{latitude:39,longitude:-77},{latitude:39,longitude:-76.999},{latitude:39.001,longitude:-76.999},{latitude:39.001,longitude:-77}];
+ const exports={},acquired=[],runtime=require('./property_service_area_runtime');
+ const context={exports,onCall:(_,fn)=>fn,businessOperation:(_,fn)=>fn,HttpsError:Error,
+  authenticatedUserContext:async()=>({uid:'owner',role:'business'}),readText:v=>v||'',crypto:require('crypto'),
+  PROPERTY_INTELLIGENCE_CACHE_COLLECTION:'propertyIntelligenceCache',FieldValue:{},CENSUS_API_KEY:{value:()=>''},
+  db:{collection:name=>({doc:()=>({get:async()=>({data:()=>name==='businessSubscriptions'?{active:true}:null})})})},
+  subscriptionEntitlements:{hasActiveScaleEntitlement:()=>true},propertyIntelligence:require('./property_intelligence'),
+  propertyServiceAreaRuntime:{withPhysicalChannel:runtime.withPhysicalChannel,createAnalyzer:()=>async g=>{acquired.push(g);return {source:'MD iMAP',propertyRecords:[],confidence:'LOW'};}}};
+ vm.runInNewContext(generate(node).code,context);
+ const result=await exports.analyzePropertyIntelligence({data:{geometry,objective:'deck repairs'}});
+ assert.equal(acquired.length,1);assert.deepEqual(acquired[0],geometry);assert.equal(result.analysis.source,'MD iMAP');assert.equal(result.analysisScope,'exploratory');
+});
 function fixture(entitled=true){
  const calls=[],exports={};class HttpsError extends Error{constructor(code,message){super(message);this.code=code;}}
  const service={run:async input=>{calls.push(input);return {recommendations:[{id:'bounded'}]};},history:async input=>{calls.push(input);return [];},save:async input=>{calls.push(input);return {id:input.recommendationId,status:'saved'};}};

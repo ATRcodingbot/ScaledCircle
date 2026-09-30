@@ -57,6 +57,50 @@ Widget page(Widget child, {double scale = 1}) => MaterialApp(
 );
 void main() {
   testWidgets(
+    'Ferndale partial subtotal never reads as full team workload at 2x text',
+    (t) async {
+      final value = evidence()
+        ..addAll({
+          'status': 'partial',
+          'workload': null,
+          'mappedTargetCount': 3,
+          'unclassifiedMappedFeatureCount': 1581,
+          'partialTargetEstimate': {'minutes': 154, 'supportedTargetCount': 2},
+          'walkingEvidence': {'minutes': 150.7, 'walkingOnly': true},
+          'teamCapacityAnalysis': {
+            'marketerCount': 2,
+            'sessionHours': 4,
+            'coveragePattern': 'stay_together',
+          },
+          'selectedAreaPropertyFacts': {
+            'insideRecords': 5,
+            'knownTypeRecords': 4,
+            'knownYearRecords': 3,
+            'scope': 'official parcel points inside this boundary',
+            'method': 'point in polygon',
+            'source': 'fixture',
+          },
+        });
+      await t.pumpWidget(
+        page(ZoneIntelligenceSummary(data: value, geometry: area), scale: 2),
+      );
+      expect(find.text('Not established'), findsOneWidget);
+      expect(
+        find.textContaining('Stay together: one shared coverage'),
+        findsOneWidget,
+      );
+      expect(
+        find.textContaining('Known-target subset: ~2 hr 34 min'),
+        findsOneWidget,
+      );
+      expect(
+        find.text('3 of 5 parcel records have a usable construction year'),
+        findsOneWidget,
+      );
+      expect(t.takeException(), isNull);
+    },
+  );
+  testWidgets(
     'acquisition failure cannot display zero even from a legacy response',
     (t) async {
       final value = evidence()

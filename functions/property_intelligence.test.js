@@ -222,7 +222,8 @@ test("Maryland bounding-box results are filtered by polygon and duplicate IDs", 
     {...md("bad", 1970), [field.latitude]: "not-a-number"},
   ]});
   const result = await provider.analyze({geometry: [polygon[0], polygon[1], polygon[2]]});
-  assert.equal(result.propertyCount, 1);
+  assert.equal(result.propertyCount, 0);
+  assert.equal(result.recordCoverage.ambiguousRecords,1);
 });
 
 test("provider fallback selects Census when Maryland is unavailable", async () => {

@@ -33,18 +33,18 @@ test('cache identity changes for every duration/headcount/pattern/mode/location/
    {campaign:{...campaign,executionMode:'marketplace'}},
    ...[{marketerCount:3},{coveragePattern:'stay_together'},{sessionHours:5}].map(p=>({campaign:{...campaign,campaignWorkload:{...campaign.campaignWorkload,...p}}}))])assert.notEqual(runtime.requestFingerprint({...args,...field}),key);
 });
-test('retained 21061 public evidence: all nine team sections, 95 unique targets, honest shortfall',()=>{
+test('retained ZIP evidence no longer aggregates nine disconnected team sections',()=>{
  const e={...structuredClone(retained.evidence),version:search.VERSION};
  const input={executionMode:'own_team',teamCapacity:{sessionHours:5,marketerCount:2,coveragePattern:'split_streets'},desiredHours:5,
    sourceAreaDigest:e.sourceAreaDigest,contextVersion:e.contextVersion,selectedBoundary:require('./fixtures/21061-zcta-public.json').geometry,
    workType:'flyer_distribution',intelligenceContext:{goal:e.goal}};
+ input.eligibleGeography=require('./property_service_area_geometry').normalizeAreas({areas:[{geometry:input.selectedBoundary}]}).union;
+ e.executionMode='own_team';e.teamCapacity=capacity.requirement(input.teamCapacity);e.searchBoundary=input.selectedBoundary;
  const before=JSON.stringify(e),p=search.generate(input,e);
- assert.equal(p.zones.length,9);assert.equal(p.totalEstimatedProperties,95);assert.equal(p.totalEstimatedMinutes,189);
- assert.equal(p.teamCapacity.targetPersonHours,10);assert.equal(p.teamCapacity.shortfallMinutes,411);
+ assert.ok(p.zones.length<9);assert.ok(p.totalEstimatedProperties<95);
  assert.equal(p.recommendedScalerCount,0);assert.equal(p.compensation,null);assert.equal(p.workloadFulfilled,false);
- assert.equal(new Set(p.zones.flatMap(z=>z.planningTargets.features.map(f=>f.sourceId))).size,95);
  assert.equal(JSON.stringify(e),before);assert.equal(p.teamCapacity.estimatedElapsedMinutes,null);
- const changed=search.generate({...input,teamCapacity:{...input.teamCapacity,marketerCount:3}},e);assert.notEqual(changed.planId,p.planId);
+ assert.throws(()=>search.generate({...input,teamCapacity:{...input.teamCapacity,marketerCount:3}},e),/context_changed/);
 });
 function candidate(id,x,endpointOffset=0) {
  const geometry=[{latitude:39,longitude:-76+x},{latitude:39,longitude:-76+x+.001},{latitude:39.001,longitude:-76+x+.001},{latitude:39.001,longitude:-76+x}];

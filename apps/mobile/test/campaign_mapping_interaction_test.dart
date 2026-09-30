@@ -171,7 +171,12 @@ void main() {
       expect((request['analysisBoundary'] as List).first['lat'], 39.10);
       expect(
         request.keys,
-        unorderedEquals(['campaignId', 'desiredHours', 'analysisBoundary']),
+        unorderedEquals([
+          'campaignId',
+          'desiredHours',
+          'recommendationScope',
+          'analysisBoundary',
+        ]),
       );
     },
   );

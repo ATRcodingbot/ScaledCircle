@@ -1,0 +1,3274 @@
+{
+  "scope": "Offline retained Corkran public comparison — NOT exact Ferndale boundary or production acceptance",
+  "source": {
+    "property": "MD iMAP Parcel Points",
+    "propertyRetrievedAt": "2026-09-30T16:21:59.377128+00:00",
+    "propertyMonths": {
+      "publication": "2026-02",
+      "assessmentLinkage": "2026-05"
+    },
+    "osmSnapshot": "2026-09-26T18:45:17Z",
+    "osmRetrievedAt": "2026-09-26T18:46:46.541Z"
+  },
+  "coverage": {
+    "insideRecords": 1025,
+    "knownYearRecords": 876,
+    "knownTypeRecords": 915,
+    "ambiguousRecords": 0,
+    "outsideRecords": 0,
+    "method": "official_account_dedup_and_point_in_polygon; no nearest-building or parcel-boundary match",
+    "complete": true
+  },
+  "comparisons": [
+    {
+      "goal": "residential roofing",
+      "normalized": {
+        "version": "PropertyServiceIntentV1",
+        "requested": [
+          "roofing"
+        ],
+        "targetIntent": "residential",
+        "services": [
+          "build decks",
+          "fences",
+          "contracting MHIC work"
+        ],
+        "error": null,
+        "propertyConstraint": null
+      },
+      "wholeFixtureRanking": {
+        "fit": 85,
+        "reasons": [
+          "roofing: 814 of 888 matching parcel records have a recorded type; 814 have a usable year built. Recorded structures at least 20 years old inform a disclosed outreach suitability proxy; component condition and installation dates are unknown."
+        ],
+        "limitations": [
+          "Recorded structure age/type is a planning proxy, not component condition, component age, buying intent or guaranteed leads.",
+          "Official parcel-point locations are not footprint matches, household counts or verified delivery stops. No nearest-property matching is used."
+        ],
+        "serviceIntents": {
+          "version": "PropertyServiceIntentV1",
+          "requested": [
+            "roofing"
+          ],
+          "targetIntent": "residential",
+          "services": [
+            "build decks",
+            "fences",
+            "contracting MHIC work"
+          ],
+          "error": null,
+          "propertyConstraint": null
+        },
+        "scoreComponents": [
+          {
+            "intent": "roofing",
+            "fit": 84.84041469407323,
+            "recordCount": 888,
+            "knownTypeCount": 814,
+            "knownYearCount": 814,
+            "groundOrientedCount": 814,
+            "typeFit": 86.63414634146342,
+            "ageFit": 83.04668304668304,
+            "rule": "recorded_structure_20plus_proxy_and_type",
+            "scope": "official parcel points inside candidate",
+            "assumption": true
+          }
+        ],
+        "recordCoverage": {
+          "insideRecords": 1025,
+          "knownYearRecords": 876,
+          "knownTypeRecords": 915,
+          "ambiguousRecords": 0,
+          "outsideRecords": 0,
+          "method": "official_account_dedup_and_point_in_polygon; no nearest-building or parcel-boundary match",
+          "complete": true
+        },
+        "version": "PropertyServiceFitV2",
+        "personalizationStatus": "supported_proxy"
+      },
+      "sourceAreaDigest": "884c4a264124048415c29e3c40d5786ba11bacf8c7233970bab2ec844f25db60",
+      "windowCount": 2,
+      "candidates": [
+        {
+          "id": "45f3423dfa8b8a5fe55712a5",
+          "geometry": [
+            {
+              "latitude": 39.1588247,
+              "longitude": -76.6379037
+            },
+            {
+              "latitude": 39.1585015,
+              "longitude": -76.6376395
+            },
+            {
+              "latitude": 39.1584246,
+              "longitude": -76.6373301
+            },
+            {
+              "latitude": 39.1579948,
+              "longitude": -76.6355407
+            },
+            {
+              "latitude": 39.1579948,
+              "longitude": -76.6353553
+            },
+            {
+              "latitude": 39.1582506,
+              "longitude": -76.6315528
+            },
+            {
+              "latitude": 39.1583645,
+              "longitude": -76.631282
+            },
+            {
+              "latitude": 39.1585082,
+              "longitude": -76.631282
+            },
+            {
+              "latitude": 39.1587208,
+              "longitude": -76.6313186
+            },
+            {
+              "latitude": 39.159263,
+              "longitude": -76.6326291
+            },
+            {
+              "latitude": 39.159263,
+              "longitude": -76.6328145
+            },
+            {
+              "latitude": 39.1589685,
+              "longitude": -76.6379037
+            }
+          ],
+          "features": [
+            {
+              "latitude": 39.15866965,
+              "longitude": -76.6328481
+            },
+            {
+              "latitude": 39.15861888271839,
+              "longitude": -76.6325866009682
+            },
+            {
+              "latitude": 39.15866416746747,
+              "longitude": -76.63271664869481
+            },
+            {
+              "latitude": 39.158573017426896,
+              "longitude": -76.63245814876974
+            },
+            {
+              "latitude": 39.15853145,
+              "longitude": -76.63232935
+            },
+            {
+              "latitude": 39.158489833050666,
+              "longitude": -76.63219670042105
+            },
+            {
+              "latitude": 39.158443649999995,
+              "longitude": -76.63206745
+            },
+            {
+              "latitude": 39.15840205,
+              "longitude": -76.6319369
+            },
+            {
+              "latitude": 39.158350549999994,
+              "longitude": -76.63181455
+            },
+            {
+              "latitude": 39.15849643509855,
+              "longitude": -76.63723745510275
+            },
+            {
+              "latitude": 39.15832241882192,
+              "longitude": -76.63164544374364
+            },
+            {
+              "latitude": 39.15857333701569,
+              "longitude": -76.63754678819508
+            },
+            {
+              "latitude": 39.15902919905211,
+              "longitude": -76.63262811503714
+            },
+            {
+              "latitude": 39.1588888,
+              "longitude": -76.63220895
+            },
+            {
+              "latitude": 39.158942200000006,
+              "longitude": -76.6323323
+            },
+            {
+              "latitude": 39.1588547,
+              "longitude": -76.63207505
+            },
+            {
+              "latitude": 39.158810010009226,
+              "longitude": -76.63194516720208
+            },
+            {
+              "latitude": 39.15876235,
+              "longitude": -76.6318106
+            },
+            {
+              "latitude": 39.158712660012085,
+              "longitude": -76.6316896789135
+            },
+            {
+              "latitude": 39.15864895,
+              "longitude": -76.63141125
+            }
+          ],
+          "networkSegments": [
+            {
+              "from": {
+                "latitude": 39.1589507,
+                "longitude": -76.6328502
+              },
+              "to": {
+                "latitude": 39.1587053,
+                "longitude": -76.63299726666666
+              }
+            },
+            {
+              "from": {
+                "latitude": 39.15869354,
+                "longitude": -76.63211244
+              },
+              "to": {
+                "latitude": 39.158822119999996,
+                "longitude": -76.63248132
+              }
+            },
+            {
+              "from": {
+                "latitude": 39.158822119999996,
+                "longitude": -76.63248132
+              },
+              "to": {
+                "latitude": 39.1589507,
+                "longitude": -76.6328502
+              }
+            },
+            {
+              "from": {
+                "latitude": 39.15856496,
+                "longitude": -76.63174355999999
+              },
+              "to": {
+                "latitude": 39.15869354,
+                "longitude": -76.63211244
+              }
+            },
+            {
+              "from": {
+                "latitude": 39.158436380000005,
+                "longitude": -76.63137468
+              },
+              "to": {
+                "latitude": 39.15856496,
+                "longitude": -76.63174355999999
+              }
+            },
+            {
+              "from": {
+                "latitude": 39.15861996666666,
+                "longitude": -76.63702333333333
+              },
+              "to": {
+                "latitude": 39.158758283333334,
+                "longitude": -76.63741716666667
+              }
+            },
+            {
+              "from": {
+                "latitude": 39.15848165,
+                "longitude": -76.6366295
+              },
+              "to": {
+                "latitude": 39.15861996666666,
+                "longitude": -76.63702333333333
+              }
+            },
+            {
+              "from": {
+                "latitude": 39.158343333333335,
+                "longitude": -76.63623566666666
+              },
+              "to": {
+                "latitude": 39.15848165,
+                "longitude": -76.6366295
+              }
+            },
+            {
+              "from": {
+                "latitude": 39.15820501666666,
+                "longitude": -76.63584183333333
+              },
+              "to": {
+                "latitude": 39.158343333333335,
+                "longitude": -76.63623566666666
+              }
+            },
+            {
+              "from": {
+                "latitude": 39.1580667,
+                "longitude": -76.635448
+              },
+              "to": {
+                "latitude": 39.15820501666666,
+                "longitude": -76.63584183333333
+              }
+            },
+            {
+              "from": {
+                "latitude": 39.158317,
+                "longitude": -76.63531026666666
+              },
+              "to": {
+                "latitude": 39.1580667,
+                "longitude": -76.635448
+              }
+            },
+            {
+              "from": {
+                "latitude": 39.1585673,
+                "longitude": -76.63517253333333
+              },
+              "to": {
+                "latitude": 39.158317,
+                "longitude": -76.63531026666666
+              }
+            },
+            {
+              "from": {
+                "latitude": 39.1588176,
+                "longitude": -76.6350348
+              },
+              "to": {
+                "latitude": 39.1585673,
+                "longitude": -76.63517253333333
+              }
+            },
+            {
+              "from": {
+                "latitude": 39.15869698,
+                "longitude": -76.63468612
+              },
+              "to": {
+                "latitude": 39.1588176,
+                "longitude": -76.6350348
+              }
+            },
+            {
+              "from": {
+                "latitude": 39.15857636,
+                "longitude": -76.63433744
+              },
+              "to": {
+                "latitude": 39.15869698,
+                "longitude": -76.63468612
+              }
+            },
+            {
+              "from": {
+                "latitude": 39.15845574,
+                "longitude": -76.63398876000001
+              },
+              "to": {
+                "latitude": 39.15857636,
+                "longitude": -76.63433744
+              }
+            },
+            {
+              "from": {
+                "latitude": 39.15833512,
+                "longitude": -76.63364008
+              },
+              "to": {
+                "latitude": 39.15845574,
+                "longitude": -76.63398876000001
+              }
+            },
+            {
+              "from": {
+                "latitude": 39.1582145,
+                "longitude": -76.6332914
+              },
+              "to": {
+                "latitude": 39.15833512,
+                "longitude": -76.63364008
+              }
+            },
+            {
+              "from": {
+                "latitude": 39.1584599,
+                "longitude": -76.63314433333333
+              },
+              "to": {
+                "latitude": 39.1582145,
+                "longitude": -76.6332914
+              }
+            },
+            {
+              "from": {
+                "latitude": 39.1587053,
+                "longitude": -76.63299726666666
+              },
+              "to": {
+                "latitude": 39.1584599,
+                "longitude": -76.63314433333333
+              }
+            },
+            {
+              "from": {
+                "latitude": 39.158758283333334,
+                "longitude": -76.63741716666667
+              },
+              "to": {
+                "latitude": 39.1588966,
+                "longitude": -76.637811
+              }
+            },
+            {
+              "from": {
+                "latitude": 39.15919113333333,
+                "longitude": -76.6327218
+              },
+              "to": {
+                "latitude": 39.1589507,
+                "longitude": -76.6328502
+              }
+            }
+          ],
+          "targets": 20,
+          "streetMeters": 739,
+          "knownSubsetMinutes": 46,
+          "ranking": {
+            "version": "PropertyMarketingAreaFitV2",
+            "fit": 75,
+            "reasons": [
+              "20 mapped residential target features inside this candidate; approximately 347 mapped features per km².",
+              "739 m of supporting local-street linework; this is not an approved execution route.",
+              "roofing: 77 of 86 matching parcel records have a recorded type; 77 have a usable year built. Recorded structures at least 20 years old inform a disclosed outreach suitability proxy; component condition and installation dates are unknown."
+            ],
+            "limitations": [
+              "Relative planning fit only; mapped features are not verified households, delivery points, buying intent or guaranteed leads.",
+              "Building type and age do not establish ownership, outdoor space, component condition or a need for the offered service.",
+              "Supporting streets are mapped evidence; access permission and a final execution route remain unverified.",
+              "CRM outcomes and customer conversion are not inferred from geography or completed-marketing records.",
+              "Recorded structure age/type is a planning proxy, not component condition, component age, buying intent or guaranteed leads.",
+              "Official parcel-point locations are not footprint matches, household counts or verified delivery stops. No nearest-property matching is used.",
+              "Completed-marketing history is unavailable or incomplete; no absence of prior marketing or history-based advantage is assumed."
+            ],
+            "serviceFocus": [
+              "build decks",
+              "fences",
+              "contracting MHIC work"
+            ],
+            "signals": {
+              "targetIntent": "residential",
+              "mappedTargetCount": 20,
+              "verifiedDeliveryPoints": false,
+              "mappedTargetsPerSquareKm": 347.4,
+              "mappedNetworkMeters": 739,
+              "mappedNetworkMetersPerTarget": 37,
+              "buildingTypes": {
+                "house": 19,
+                "yes": 1
+              },
+              "source": "openstreetmap_bounded_snapshot_v1",
+              "sourceDataTimestamp": "2026-09-26T18:45:17.000Z",
+              "fetchedAt": "2026-09-26T18:46:46.541Z",
+              "propertyIntelligence": {
+                "status": "used",
+                "source": "MD iMAP Parcel Points",
+                "sourceVersion": "MD_ParcelPointsV1",
+                "dataUpdatedAt": "2026-05",
+                "geometryDigest": "678d91b3ed679828dcfa2c4f5c80b534a43a4696e40ff28efeb6c51d0319273d",
+                "inputGranularity": "parcel_level",
+                "fit": 97
+              },
+              "scoreComponents": {
+                "serviceFit": 74,
+                "densityFit": 78,
+                "compactnessFit": 73,
+                "serviceBasis": "generic mapped target type and maintained Property Intelligence service fit",
+                "weights": {
+                  "serviceFit": 0.5,
+                  "densityFit": 0.3,
+                  "compactnessFit": 0.2
+                },
+                "completedHistoryPenalty": 0
+              },
+              "marketingHistory": {
+                "status": "unknown",
+                "recentCompletedOverlap": null,
+                "overlapPercent": null,
+                "penalty": 0
+              }
+            },
+            "displaySignals": [
+              {
+                "label": "Mapped target features",
+                "value": 20,
+                "source": "OpenStreetMap"
+              },
+              {
+                "label": "Mapped features per km²",
+                "value": 347,
+                "source": "Mapped count / candidate area"
+              },
+              {
+                "label": "Supporting street network",
+                "value": "739 m",
+                "source": "OpenStreetMap; access unverified"
+              },
+              {
+                "label": "Property Intelligence service-fit proxy",
+                "value": 97,
+                "source": "MD iMAP Parcel Points"
+              }
+            ],
+            "serviceIntents": {
+              "version": "PropertyServiceIntentV1",
+              "requested": [
+                "roofing"
+              ],
+              "targetIntent": "residential",
+              "services": [
+                "build decks",
+                "fences",
+                "contracting MHIC work"
+              ],
+              "error": null,
+              "propertyConstraint": null
+            },
+            "propertyScoreComponents": [
+              {
+                "intent": "roofing",
+                "fit": 97.25274725274724,
+                "recordCount": 86,
+                "knownTypeCount": 77,
+                "knownYearCount": 77,
+                "groundOrientedCount": 77,
+                "typeFit": 94.5054945054945,
+                "ageFit": 100,
+                "rule": "recorded_structure_20plus_proxy_and_type",
+                "scope": "official parcel points inside candidate",
+                "assumption": true
+              }
+            ],
+            "propertyRecordCoverage": {
+              "insideRecords": 91,
+              "knownYearRecords": 77,
+              "knownTypeRecords": 77,
+              "ambiguousRecords": 0,
+              "outsideRecords": 0,
+              "method": "official_account_dedup_and_point_in_polygon; no nearest-building or parcel-boundary match",
+              "complete": true,
+              "constructionEra": "1980–1999",
+              "sourceVersion": "MD_ParcelPointsV1",
+              "dataUpdatedAt": "2026-05",
+              "retrievedAt": "2026-09-30T16:21:59.377128+00:00"
+            },
+            "personalizationStatus": "supported_proxy"
+          }
+        }
+      ],
+      "selectedCandidateIds": [
+        "45f3423dfa8b8a5fe55712a5"
+      ],
+      "selectedZoneCount": 1,
+      "mappedTargets": 20,
+      "knownSubsetMinutes": 46,
+      "team": {
+        "version": "OwnTeamCapacityV1",
+        "sessionHours": 4,
+        "requestedHours": 4,
+        "marketerCount": 2,
+        "coveragePattern": "stay_together",
+        "requestedMinutes": 240,
+        "targetPersonHours": 4,
+        "requiredZoneCount": null,
+        "plannedLaborHours": 8,
+        "uniqueCoverageTargetMinutes": 240,
+        "durationMeaning": "per_person_session",
+        "headcountIsAssignment": false,
+        "supportedMinutes": 46,
+        "supportedPersonHours": 0.7666666666666667,
+        "supportedCoverageMinutes": 46,
+        "allocationKind": "shared_coverage",
+        "coverageSectionCount": 1,
+        "allocations": [
+          {
+            "lane": 1,
+            "minutes": 46,
+            "sectionIds": [
+              "45f3423dfa8b8a5fe55712a5"
+            ]
+          }
+        ],
+        "connectedComplementarySections": false,
+        "estimatedFieldElapsedMinutes": null,
+        "estimatedElapsedMinutes": null,
+        "sharedTravelMinutes": null,
+        "shortfallMinutes": null,
+        "limitations": [
+          "Whole-section allocation is advisory; travel between sections and local access are not verified.",
+          "Field-only elapsed time reflects the busiest planned lane. Total elapsed session time is unknown.",
+          "Staying together does not multiply unique coverage; no group efficiency is assumed."
+        ],
+        "supportedFieldSubsetMinutes": 46,
+        "completeAreaWorkload": false
+      },
+      "propertyMatching": [
+        {
+          "status": "available",
+          "insidePropertyRecords": 71,
+          "matchedFootprints": 0,
+          "newlyClassifiedFootprints": 0,
+          "ambiguousFootprints": 1,
+          "unmatchedPropertyRecords": 69,
+          "rule": "one-to-one point-in-footprint containment; no nearest matching or individual age transfer"
+        },
+        {
+          "status": "available",
+          "insidePropertyRecords": 954,
+          "matchedFootprints": 24,
+          "newlyClassifiedFootprints": 8,
+          "ambiguousFootprints": 15,
+          "unmatchedPropertyRecords": 865,
+          "rule": "one-to-one point-in-footprint containment; no nearest matching or individual age transfer"
+        }
+      ],
+      "incomplete": true,
+      "planStatus": "review_required"
+    },
+    {
+      "goal": "deck repair",
+      "normalized": {
+        "version": "PropertyServiceIntentV1",
+        "requested": [
+          "deck_repair"
+        ],
+        "targetIntent": "residential",
+        "services": [
+          "build decks"
+        ],
+        "error": null,
+        "propertyConstraint": null
+      },
+      "wholeFixtureRanking": {
+        "fit": 87,
+        "reasons": [
+          "deck repair: 814 of 888 matching parcel records have a recorded type; 814 have a usable year built. Recorded structures at least 20 years old inform a disclosed outreach suitability proxy; component condition and installation dates are unknown."
+        ],
+        "limitations": [
+          "Recorded structure age/type is a planning proxy, not component condition, component age, buying intent or guaranteed leads.",
+          "Official parcel-point locations are not footprint matches, household counts or verified delivery stops. No nearest-property matching is used."
+        ],
+        "serviceIntents": {
+          "version": "PropertyServiceIntentV1",
+          "requested": [
+            "deck_repair"
+          ],
+          "targetIntent": "residential",
+          "services": [
+            "build decks"
+          ],
+          "error": null,
+          "propertyConstraint": null
+        },
+        "scoreComponents": [
+          {
+            "intent": "deck_repair",
+            "fit": 87.35667485667486,
+            "recordCount": 888,
+            "knownTypeCount": 814,
+            "knownYearCount": 814,
+            "groundOrientedCount": 814,
+            "typeFit": 91.66666666666666,
+            "ageFit": 83.04668304668304,
+            "rule": "recorded_structure_20plus_proxy_and_type",
+            "scope": "official parcel points inside candidate",
+            "assumption": true
+          }
+        ],
+        "recordCoverage": {
+          "insideRecords": 1025,
+          "knownYearRecords": 876,
+          "knownTypeRecords": 915,
+          "ambiguousRecords": 0,
+          "outsideRecords": 0,
+          "method": "official_account_dedup_and_point_in_polygon; no nearest-building or parcel-boundary match",
+          "complete": true
+        },
+        "version": "PropertyServiceFitV2",
+        "personalizationStatus": "supported_proxy"
+      },
+      "sourceAreaDigest": "884c4a264124048415c29e3c40d5786ba11bacf8c7233970bab2ec844f25db60",
+      "windowCount": 2,
+      "candidates": [
+        {
+          "id": "45f3423dfa8b8a5fe55712a5",
+          "geometry": [
+            {
+              "latitude": 39.1588247,
+              "longitude": -76.6379037
+            },
+            {
+              "latitude": 39.1585015,
+              "longitude": -76.6376395
+            },
+            {
+              "latitude": 39.1584246,
+              "longitude": -76.6373301
+            },
+            {
+              "latitude": 39.1579948,
+              "longitude": -76.6355407
+            },
+            {
+              "latitude": 39.1579948,
+              "longitude": -76.6353553
+            },
+            {
+              "latitude": 39.1582506,
+              "longitude": -76.6315528
+            },
+            {
+              "latitude": 39.1583645,
+              "longitude": -76.631282
+            },
+            {
+              "latitude": 39.1585082,
+              "longitude": -76.631282
+            },
+            {
+              "latitude": 39.1587208,
+              "longitude": -76.6313186
+            },
+            {
+              "latitude": 39.159263,
+              "longitude": -76.6326291
+            },
+            {
+              "latitude": 39.159263,
+              "longitude": -76.6328145
+            },
+            {
+              "latitude": 39.1589685,
+              "longitude": -76.6379037
+            }
+          ],
+          "features": [
+            {
+              "latitude": 39.15866965,
+              "longitude": -76.6328481
+            },
+            {
+              "latitude": 39.15861888271839,
+              "longitude": -76.6325866009682
+            },
+            {
+              "latitude": 39.15866416746747,
+              "longitude": -76.63271664869481
+            },
+            {
+              "latitude": 39.158573017426896,
+              "longitude": -76.63245814876974
+            },
+            {
+              "latitude": 39.15853145,
+              "longitude": -76.63232935
+            },
+            {
+              "latitude": 39.158489833050666,
+              "longitude": -76.63219670042105
+            },
+            {
+              "latitude": 39.158443649999995,
+              "longitude": -76.63206745
+            },
+            {
+              "latitude": 39.15840205,
+              "longitude": -76.6319369
+            },
+            {
+              "latitude": 39.158350549999994,
+              "longitude": -76.63181455
+            },
+            {
+              "latitude": 39.15849643509855,
+              "longitude": -76.63723745510275
+            },
+            {
+              "latitude": 39.15832241882192,
+              "longitude": -76.63164544374364
+            },
+            {
+              "latitude": 39.15857333701569,
+              "longitude": -76.63754678819508
+            },
+            {
+              "latitude": 39.15902919905211,
+              "longitude": -76.63262811503714
+            },
+            {
+              "latitude": 39.1588888,
+              "longitude": -76.63220895
+            },
+            {
+              "latitude": 39.158942200000006,
+              "longitude": -76.6323323
+            },
+            {
+              "latitude": 39.1588547,
+              "longitude": -76.63207505
+            },
+            {
+              "latitude": 39.158810010009226,
+              "longitude": -76.63194516720208
+            },
+            {
+              "latitude": 39.15876235,
+              "longitude": -76.6318106
+            },
+            {
+              "latitude": 39.158712660012085,
+              "longitude": -76.6316896789135
+            },
+            {
+              "latitude": 39.15864895,
+              "longitude": -76.63141125
+            }
+          ],
+          "networkSegments": [
+            {
+              "from": {
+                "latitude": 39.1589507,
+                "longitude": -76.6328502
+              },
+              "to": {
+                "latitude": 39.1587053,
+                "longitude": -76.63299726666666
+              }
+            },
+            {
+              "from": {
+                "latitude": 39.15869354,
+                "longitude": -76.63211244
+              },
+              "to": {
+                "latitude": 39.158822119999996,
+                "longitude": -76.63248132
+              }
+            },
+            {
+              "from": {
+                "latitude": 39.158822119999996,
+                "longitude": -76.63248132
+              },
+              "to": {
+                "latitude": 39.1589507,
+                "longitude": -76.6328502
+              }
+            },
+            {
+              "from": {
+                "latitude": 39.15856496,
+                "longitude": -76.63174355999999
+              },
+              "to": {
+                "latitude": 39.15869354,
+                "longitude": -76.63211244
+              }
+            },
+            {
+              "from": {
+                "latitude": 39.158436380000005,
+                "longitude": -76.63137468
+              },
+              "to": {
+                "latitude": 39.15856496,
+                "longitude": -76.63174355999999
+              }
+            },
+            {
+              "from": {
+                "latitude": 39.15861996666666,
+                "longitude": -76.63702333333333
+              },
+              "to": {
+                "latitude": 39.158758283333334,
+                "longitude": -76.63741716666667
+              }
+            },
+            {
+              "from": {
+                "latitude": 39.15848165,
+                "longitude": -76.6366295
+              },
+              "to": {
+                "latitude": 39.15861996666666,
+                "longitude": -76.63702333333333
+              }
+            },
+            {
+              "from": {
+                "latitude": 39.158343333333335,
+                "longitude": -76.63623566666666
+              },
+              "to": {
+                "latitude": 39.15848165,
+                "longitude": -76.6366295
+              }
+            },
+            {
+              "from": {
+                "latitude": 39.15820501666666,
+                "longitude": -76.63584183333333
+              },
+              "to": {
+                "latitude": 39.158343333333335,
+                "longitude": -76.63623566666666
+              }
+            },
+            {
+              "from": {
+                "latitude": 39.1580667,
+                "longitude": -76.635448
+              },
+              "to": {
+                "latitude": 39.15820501666666,
+                "longitude": -76.63584183333333
+              }
+            },
+            {
+              "from": {
+                "latitude": 39.158317,
+                "longitude": -76.63531026666666
+              },
+              "to": {
+                "latitude": 39.1580667,
+                "longitude": -76.635448
+              }
+            },
+            {
+              "from": {
+                "latitude": 39.1585673,
+                "longitude": -76.63517253333333
+              },
+              "to": {
+                "latitude": 39.158317,
+                "longitude": -76.63531026666666
+              }
+            },
+            {
+              "from": {
+                "latitude": 39.1588176,
+                "longitude": -76.6350348
+              },
+              "to": {
+                "latitude": 39.1585673,
+                "longitude": -76.63517253333333
+              }
+            },
+            {
+              "from": {
+                "latitude": 39.15869698,
+                "longitude": -76.63468612
+              },
+              "to": {
+                "latitude": 39.1588176,
+                "longitude": -76.6350348
+              }
+            },
+            {
+              "from": {
+                "latitude": 39.15857636,
+                "longitude": -76.63433744
+              },
+              "to": {
+                "latitude": 39.15869698,
+                "longitude": -76.63468612
+              }
+            },
+            {
+              "from": {
+                "latitude": 39.15845574,
+                "longitude": -76.63398876000001
+              },
+              "to": {
+                "latitude": 39.15857636,
+                "longitude": -76.63433744
+              }
+            },
+            {
+              "from": {
+                "latitude": 39.15833512,
+                "longitude": -76.63364008
+              },
+              "to": {
+                "latitude": 39.15845574,
+                "longitude": -76.63398876000001
+              }
+            },
+            {
+              "from": {
+                "latitude": 39.1582145,
+                "longitude": -76.6332914
+              },
+              "to": {
+                "latitude": 39.15833512,
+                "longitude": -76.63364008
+              }
+            },
+            {
+              "from": {
+                "latitude": 39.1584599,
+                "longitude": -76.63314433333333
+              },
+              "to": {
+                "latitude": 39.1582145,
+                "longitude": -76.6332914
+              }
+            },
+            {
+              "from": {
+                "latitude": 39.1587053,
+                "longitude": -76.63299726666666
+              },
+              "to": {
+                "latitude": 39.1584599,
+                "longitude": -76.63314433333333
+              }
+            },
+            {
+              "from": {
+                "latitude": 39.158758283333334,
+                "longitude": -76.63741716666667
+              },
+              "to": {
+                "latitude": 39.1588966,
+                "longitude": -76.637811
+              }
+            },
+            {
+              "from": {
+                "latitude": 39.15919113333333,
+                "longitude": -76.6327218
+              },
+              "to": {
+                "latitude": 39.1589507,
+                "longitude": -76.6328502
+              }
+            }
+          ],
+          "targets": 20,
+          "streetMeters": 739,
+          "knownSubsetMinutes": 46,
+          "ranking": {
+            "version": "PropertyMarketingAreaFitV2",
+            "fit": 85,
+            "reasons": [
+              "20 mapped residential target features inside this candidate; approximately 347 mapped features per km².",
+              "739 m of supporting local-street linework; this is not an approved execution route.",
+              "19 mapped features are tagged as house, detached, semidetached, bungalow or terrace; used as a housing-type planning proxy for build decks.",
+              "deck repair: 77 of 86 matching parcel records have a recorded type; 77 have a usable year built. Recorded structures at least 20 years old inform a disclosed outreach suitability proxy; component condition and installation dates are unknown."
+            ],
+            "limitations": [
+              "Relative planning fit only; mapped features are not verified households, delivery points, buying intent or guaranteed leads.",
+              "Building type and age do not establish ownership, outdoor space, component condition or a need for the offered service.",
+              "Supporting streets are mapped evidence; access permission and a final execution route remain unverified.",
+              "CRM outcomes and customer conversion are not inferred from geography or completed-marketing records.",
+              "Recorded structure age/type is a planning proxy, not component condition, component age, buying intent or guaranteed leads.",
+              "Official parcel-point locations are not footprint matches, household counts or verified delivery stops. No nearest-property matching is used.",
+              "Completed-marketing history is unavailable or incomplete; no absence of prior marketing or history-based advantage is assumed."
+            ],
+            "serviceFocus": [
+              "build decks"
+            ],
+            "signals": {
+              "targetIntent": "residential",
+              "mappedTargetCount": 20,
+              "verifiedDeliveryPoints": false,
+              "mappedTargetsPerSquareKm": 347.4,
+              "mappedNetworkMeters": 739,
+              "mappedNetworkMetersPerTarget": 37,
+              "buildingTypes": {
+                "house": 19,
+                "yes": 1
+              },
+              "source": "openstreetmap_bounded_snapshot_v1",
+              "sourceDataTimestamp": "2026-09-26T18:45:17.000Z",
+              "fetchedAt": "2026-09-26T18:46:46.541Z",
+              "propertyIntelligence": {
+                "status": "used",
+                "source": "MD iMAP Parcel Points",
+                "sourceVersion": "MD_ParcelPointsV1",
+                "dataUpdatedAt": "2026-05",
+                "geometryDigest": "678d91b3ed679828dcfa2c4f5c80b534a43a4696e40ff28efeb6c51d0319273d",
+                "inputGranularity": "parcel_level",
+                "fit": 95
+              },
+              "housingTypeFit": {
+                "matchingMappedFeatures": 19,
+                "featuresWithBuildingType": 20
+              },
+              "scoreComponents": {
+                "serviceFit": 95,
+                "densityFit": 78,
+                "compactnessFit": 73,
+                "serviceBasis": "observed ground-oriented housing tags and maintained Property Intelligence service fit",
+                "weights": {
+                  "serviceFit": 0.5,
+                  "densityFit": 0.3,
+                  "compactnessFit": 0.2
+                },
+                "completedHistoryPenalty": 0
+              },
+              "marketingHistory": {
+                "status": "unknown",
+                "recentCompletedOverlap": null,
+                "overlapPercent": null,
+                "penalty": 0
+              }
+            },
+            "displaySignals": [
+              {
+                "label": "Mapped target features",
+                "value": 20,
+                "source": "OpenStreetMap"
+              },
+              {
+                "label": "Mapped features per km²",
+                "value": 347,
+                "source": "Mapped count / candidate area"
+              },
+              {
+                "label": "Supporting street network",
+                "value": "739 m",
+                "source": "OpenStreetMap; access unverified"
+              },
+              {
+                "label": "Mapped ground-oriented housing types",
+                "value": 19,
+                "source": "Observed OpenStreetMap building tags; outdoor space unknown"
+              },
+              {
+                "label": "Property Intelligence service-fit proxy",
+                "value": 95,
+                "source": "MD iMAP Parcel Points"
+              }
+            ],
+            "serviceIntents": {
+              "version": "PropertyServiceIntentV1",
+              "requested": [
+                "deck_repair"
+              ],
+              "targetIntent": "residential",
+              "services": [
+                "build decks"
+              ],
+              "error": null,
+              "propertyConstraint": null
+            },
+            "propertyScoreComponents": [
+              {
+                "intent": "deck_repair",
+                "fit": 94.76744186046511,
+                "recordCount": 86,
+                "knownTypeCount": 77,
+                "knownYearCount": 77,
+                "groundOrientedCount": 77,
+                "typeFit": 89.53488372093024,
+                "ageFit": 100,
+                "rule": "recorded_structure_20plus_proxy_and_type",
+                "scope": "official parcel points inside candidate",
+                "assumption": true
+              }
+            ],
+            "propertyRecordCoverage": {
+              "insideRecords": 91,
+              "knownYearRecords": 77,
+              "knownTypeRecords": 77,
+              "ambiguousRecords": 0,
+              "outsideRecords": 0,
+              "method": "official_account_dedup_and_point_in_polygon; no nearest-building or parcel-boundary match",
+              "complete": true,
+              "constructionEra": "1980–1999",
+              "sourceVersion": "MD_ParcelPointsV1",
+              "dataUpdatedAt": "2026-05",
+              "retrievedAt": "2026-09-30T16:21:59.377128+00:00"
+            },
+            "personalizationStatus": "supported_proxy"
+          }
+        }
+      ],
+      "selectedCandidateIds": [
+        "45f3423dfa8b8a5fe55712a5"
+      ],
+      "selectedZoneCount": 1,
+      "mappedTargets": 20,
+      "knownSubsetMinutes": 46,
+      "team": {
+        "version": "OwnTeamCapacityV1",
+        "sessionHours": 4,
+        "requestedHours": 4,
+        "marketerCount": 2,
+        "coveragePattern": "stay_together",
+        "requestedMinutes": 240,
+        "targetPersonHours": 4,
+        "requiredZoneCount": null,
+        "plannedLaborHours": 8,
+        "uniqueCoverageTargetMinutes": 240,
+        "durationMeaning": "per_person_session",
+        "headcountIsAssignment": false,
+        "supportedMinutes": 46,
+        "supportedPersonHours": 0.7666666666666667,
+        "supportedCoverageMinutes": 46,
+        "allocationKind": "shared_coverage",
+        "coverageSectionCount": 1,
+        "allocations": [
+          {
+            "lane": 1,
+            "minutes": 46,
+            "sectionIds": [
+              "45f3423dfa8b8a5fe55712a5"
+            ]
+          }
+        ],
+        "connectedComplementarySections": false,
+        "estimatedFieldElapsedMinutes": null,
+        "estimatedElapsedMinutes": null,
+        "sharedTravelMinutes": null,
+        "shortfallMinutes": null,
+        "limitations": [
+          "Whole-section allocation is advisory; travel between sections and local access are not verified.",
+          "Field-only elapsed time reflects the busiest planned lane. Total elapsed session time is unknown.",
+          "Staying together does not multiply unique coverage; no group efficiency is assumed."
+        ],
+        "supportedFieldSubsetMinutes": 46,
+        "completeAreaWorkload": false
+      },
+      "propertyMatching": [
+        {
+          "status": "available",
+          "insidePropertyRecords": 71,
+          "matchedFootprints": 0,
+          "newlyClassifiedFootprints": 0,
+          "ambiguousFootprints": 1,
+          "unmatchedPropertyRecords": 69,
+          "rule": "one-to-one point-in-footprint containment; no nearest matching or individual age transfer"
+        },
+        {
+          "status": "available",
+          "insidePropertyRecords": 954,
+          "matchedFootprints": 24,
+          "newlyClassifiedFootprints": 8,
+          "ambiguousFootprints": 15,
+          "unmatchedPropertyRecords": 865,
+          "rule": "one-to-one point-in-footprint containment; no nearest matching or individual age transfer"
+        }
+      ],
+      "incomplete": true,
+      "planStatus": "review_required"
+    },
+    {
+      "goal": "new deck construction",
+      "normalized": {
+        "version": "PropertyServiceIntentV1",
+        "requested": [
+          "deck_build"
+        ],
+        "targetIntent": "residential",
+        "services": [
+          "build decks"
+        ],
+        "error": null,
+        "propertyConstraint": null
+      },
+      "wholeFixtureRanking": {
+        "fit": 92,
+        "reasons": [
+          "deck build: 814 of 888 matching parcel records have a recorded type; 814 have a usable year built. Ground-oriented property type is a disclosed suitability proxy; outdoor space is unknown."
+        ],
+        "limitations": [
+          "Recorded structure age/type is a planning proxy, not component condition, component age, buying intent or guaranteed leads.",
+          "Official parcel-point locations are not footprint matches, household counts or verified delivery stops. No nearest-property matching is used."
+        ],
+        "serviceIntents": {
+          "version": "PropertyServiceIntentV1",
+          "requested": [
+            "deck_build"
+          ],
+          "targetIntent": "residential",
+          "services": [
+            "build decks"
+          ],
+          "error": null,
+          "propertyConstraint": null
+        },
+        "scoreComponents": [
+          {
+            "intent": "deck_build",
+            "fit": 91.66666666666666,
+            "recordCount": 888,
+            "knownTypeCount": 814,
+            "knownYearCount": 814,
+            "groundOrientedCount": 814,
+            "typeFit": 91.66666666666666,
+            "ageFit": null,
+            "rule": "recorded_property_type_proxy",
+            "scope": "official parcel points inside candidate",
+            "assumption": true
+          }
+        ],
+        "recordCoverage": {
+          "insideRecords": 1025,
+          "knownYearRecords": 876,
+          "knownTypeRecords": 915,
+          "ambiguousRecords": 0,
+          "outsideRecords": 0,
+          "method": "official_account_dedup_and_point_in_polygon; no nearest-building or parcel-boundary match",
+          "complete": true
+        },
+        "version": "PropertyServiceFitV2",
+        "personalizationStatus": "supported_proxy"
+      },
+      "sourceAreaDigest": "884c4a264124048415c29e3c40d5786ba11bacf8c7233970bab2ec844f25db60",
+      "windowCount": 2,
+      "candidates": [
+        {
+          "id": "45f3423dfa8b8a5fe55712a5",
+          "geometry": [
+            {
+              "latitude": 39.1588247,
+              "longitude": -76.6379037
+            },
+            {
+              "latitude": 39.1585015,
+              "longitude": -76.6376395
+            },
+            {
+              "latitude": 39.1584246,
+              "longitude": -76.6373301
+            },
+            {
+              "latitude": 39.1579948,
+              "longitude": -76.6355407
+            },
+            {
+              "latitude": 39.1579948,
+              "longitude": -76.6353553
+            },
+            {
+              "latitude": 39.1582506,
+              "longitude": -76.6315528
+            },
+            {
+              "latitude": 39.1583645,
+              "longitude": -76.631282
+            },
+            {
+              "latitude": 39.1585082,
+              "longitude": -76.631282
+            },
+            {
+              "latitude": 39.1587208,
+              "longitude": -76.6313186
+            },
+            {
+              "latitude": 39.159263,
+              "longitude": -76.6326291
+            },
+            {
+              "latitude": 39.159263,
+              "longitude": -76.6328145
+            },
+            {
+              "latitude": 39.1589685,
+              "longitude": -76.6379037
+            }
+          ],
+          "features": [
+            {
+              "latitude": 39.15866965,
+              "longitude": -76.6328481
+            },
+            {
+              "latitude": 39.15861888271839,
+              "longitude": -76.6325866009682
+            },
+            {
+              "latitude": 39.15866416746747,
+              "longitude": -76.63271664869481
+            },
+            {
+              "latitude": 39.158573017426896,
+              "longitude": -76.63245814876974
+            },
+            {
+              "latitude": 39.15853145,
+              "longitude": -76.63232935
+            },
+            {
+              "latitude": 39.158489833050666,
+              "longitude": -76.63219670042105
+            },
+            {
+              "latitude": 39.158443649999995,
+              "longitude": -76.63206745
+            },
+            {
+              "latitude": 39.15840205,
+              "longitude": -76.6319369
+            },
+            {
+              "latitude": 39.158350549999994,
+              "longitude": -76.63181455
+            },
+            {
+              "latitude": 39.15849643509855,
+              "longitude": -76.63723745510275
+            },
+            {
+              "latitude": 39.15832241882192,
+              "longitude": -76.63164544374364
+            },
+            {
+              "latitude": 39.15857333701569,
+              "longitude": -76.63754678819508
+            },
+            {
+              "latitude": 39.15902919905211,
+              "longitude": -76.63262811503714
+            },
+            {
+              "latitude": 39.1588888,
+              "longitude": -76.63220895
+            },
+            {
+              "latitude": 39.158942200000006,
+              "longitude": -76.6323323
+            },
+            {
+              "latitude": 39.1588547,
+              "longitude": -76.63207505
+            },
+            {
+              "latitude": 39.158810010009226,
+              "longitude": -76.63194516720208
+            },
+            {
+              "latitude": 39.15876235,
+              "longitude": -76.6318106
+            },
+            {
+              "latitude": 39.158712660012085,
+              "longitude": -76.6316896789135
+            },
+            {
+              "latitude": 39.15864895,
+              "longitude": -76.63141125
+            }
+          ],
+          "networkSegments": [
+            {
+              "from": {
+                "latitude": 39.1589507,
+                "longitude": -76.6328502
+              },
+              "to": {
+                "latitude": 39.1587053,
+                "longitude": -76.63299726666666
+              }
+            },
+            {
+              "from": {
+                "latitude": 39.15869354,
+                "longitude": -76.63211244
+              },
+              "to": {
+                "latitude": 39.158822119999996,
+                "longitude": -76.63248132
+              }
+            },
+            {
+              "from": {
+                "latitude": 39.158822119999996,
+                "longitude": -76.63248132
+              },
+              "to": {
+                "latitude": 39.1589507,
+                "longitude": -76.6328502
+              }
+            },
+            {
+              "from": {
+                "latitude": 39.15856496,
+                "longitude": -76.63174355999999
+              },
+              "to": {
+                "latitude": 39.15869354,
+                "longitude": -76.63211244
+              }
+            },
+            {
+              "from": {
+                "latitude": 39.158436380000005,
+                "longitude": -76.63137468
+              },
+              "to": {
+                "latitude": 39.15856496,
+                "longitude": -76.63174355999999
+              }
+            },
+            {
+              "from": {
+                "latitude": 39.15861996666666,
+                "longitude": -76.63702333333333
+              },
+              "to": {
+                "latitude": 39.158758283333334,
+                "longitude": -76.63741716666667
+              }
+            },
+            {
+              "from": {
+                "latitude": 39.15848165,
+                "longitude": -76.6366295
+              },
+              "to": {
+                "latitude": 39.15861996666666,
+                "longitude": -76.63702333333333
+              }
+            },
+            {
+              "from": {
+                "latitude": 39.158343333333335,
+                "longitude": -76.63623566666666
+              },
+              "to": {
+                "latitude": 39.15848165,
+                "longitude": -76.6366295
+              }
+            },
+            {
+              "from": {
+                "latitude": 39.15820501666666,
+                "longitude": -76.63584183333333
+              },
+              "to": {
+                "latitude": 39.158343333333335,
+                "longitude": -76.63623566666666
+              }
+            },
+            {
+              "from": {
+                "latitude": 39.1580667,
+                "longitude": -76.635448
+              },
+              "to": {
+                "latitude": 39.15820501666666,
+                "longitude": -76.63584183333333
+              }
+            },
+            {
+              "from": {
+                "latitude": 39.158317,
+                "longitude": -76.63531026666666
+              },
+              "to": {
+                "latitude": 39.1580667,
+                "longitude": -76.635448
+              }
+            },
+            {
+              "from": {
+                "latitude": 39.1585673,
+                "longitude": -76.63517253333333
+              },
+              "to": {
+                "latitude": 39.158317,
+                "longitude": -76.63531026666666
+              }
+            },
+            {
+              "from": {
+                "latitude": 39.1588176,
+                "longitude": -76.6350348
+              },
+              "to": {
+                "latitude": 39.1585673,
+                "longitude": -76.63517253333333
+              }
+            },
+            {
+              "from": {
+                "latitude": 39.15869698,
+                "longitude": -76.63468612
+              },
+              "to": {
+                "latitude": 39.1588176,
+                "longitude": -76.6350348
+              }
+            },
+            {
+              "from": {
+                "latitude": 39.15857636,
+                "longitude": -76.63433744
+              },
+              "to": {
+                "latitude": 39.15869698,
+                "longitude": -76.63468612
+              }
+            },
+            {
+              "from": {
+                "latitude": 39.15845574,
+                "longitude": -76.63398876000001
+              },
+              "to": {
+                "latitude": 39.15857636,
+                "longitude": -76.63433744
+              }
+            },
+            {
+              "from": {
+                "latitude": 39.15833512,
+                "longitude": -76.63364008
+              },
+              "to": {
+                "latitude": 39.15845574,
+                "longitude": -76.63398876000001
+              }
+            },
+            {
+              "from": {
+                "latitude": 39.1582145,
+                "longitude": -76.6332914
+              },
+              "to": {
+                "latitude": 39.15833512,
+                "longitude": -76.63364008
+              }
+            },
+            {
+              "from": {
+                "latitude": 39.1584599,
+                "longitude": -76.63314433333333
+              },
+              "to": {
+                "latitude": 39.1582145,
+                "longitude": -76.6332914
+              }
+            },
+            {
+              "from": {
+                "latitude": 39.1587053,
+                "longitude": -76.63299726666666
+              },
+              "to": {
+                "latitude": 39.1584599,
+                "longitude": -76.63314433333333
+              }
+            },
+            {
+              "from": {
+                "latitude": 39.158758283333334,
+                "longitude": -76.63741716666667
+              },
+              "to": {
+                "latitude": 39.1588966,
+                "longitude": -76.637811
+              }
+            },
+            {
+              "from": {
+                "latitude": 39.15919113333333,
+                "longitude": -76.6327218
+              },
+              "to": {
+                "latitude": 39.1589507,
+                "longitude": -76.6328502
+              }
+            }
+          ],
+          "targets": 20,
+          "streetMeters": 739,
+          "knownSubsetMinutes": 46,
+          "ranking": {
+            "version": "PropertyMarketingAreaFitV2",
+            "fit": 84,
+            "reasons": [
+              "20 mapped residential target features inside this candidate; approximately 347 mapped features per km².",
+              "739 m of supporting local-street linework; this is not an approved execution route.",
+              "19 mapped features are tagged as house, detached, semidetached, bungalow or terrace; used as a housing-type planning proxy for build decks.",
+              "deck build: 77 of 86 matching parcel records have a recorded type; 77 have a usable year built. Ground-oriented property type is a disclosed suitability proxy; outdoor space is unknown."
+            ],
+            "limitations": [
+              "Relative planning fit only; mapped features are not verified households, delivery points, buying intent or guaranteed leads.",
+              "Building type and age do not establish ownership, outdoor space, component condition or a need for the offered service.",
+              "Supporting streets are mapped evidence; access permission and a final execution route remain unverified.",
+              "CRM outcomes and customer conversion are not inferred from geography or completed-marketing records.",
+              "Recorded structure age/type is a planning proxy, not component condition, component age, buying intent or guaranteed leads.",
+              "Official parcel-point locations are not footprint matches, household counts or verified delivery stops. No nearest-property matching is used.",
+              "Completed-marketing history is unavailable or incomplete; no absence of prior marketing or history-based advantage is assumed."
+            ],
+            "serviceFocus": [
+              "build decks"
+            ],
+            "signals": {
+              "targetIntent": "residential",
+              "mappedTargetCount": 20,
+              "verifiedDeliveryPoints": false,
+              "mappedTargetsPerSquareKm": 347.4,
+              "mappedNetworkMeters": 739,
+              "mappedNetworkMetersPerTarget": 37,
+              "buildingTypes": {
+                "house": 19,
+                "yes": 1
+              },
+              "source": "openstreetmap_bounded_snapshot_v1",
+              "sourceDataTimestamp": "2026-09-26T18:45:17.000Z",
+              "fetchedAt": "2026-09-26T18:46:46.541Z",
+              "propertyIntelligence": {
+                "status": "used",
+                "source": "MD iMAP Parcel Points",
+                "sourceVersion": "MD_ParcelPointsV1",
+                "dataUpdatedAt": "2026-05",
+                "geometryDigest": "678d91b3ed679828dcfa2c4f5c80b534a43a4696e40ff28efeb6c51d0319273d",
+                "inputGranularity": "parcel_level",
+                "fit": 90
+              },
+              "housingTypeFit": {
+                "matchingMappedFeatures": 19,
+                "featuresWithBuildingType": 20
+              },
+              "scoreComponents": {
+                "serviceFit": 93,
+                "densityFit": 78,
+                "compactnessFit": 73,
+                "serviceBasis": "observed ground-oriented housing tags and maintained Property Intelligence service fit",
+                "weights": {
+                  "serviceFit": 0.5,
+                  "densityFit": 0.3,
+                  "compactnessFit": 0.2
+                },
+                "completedHistoryPenalty": 0
+              },
+              "marketingHistory": {
+                "status": "unknown",
+                "recentCompletedOverlap": null,
+                "overlapPercent": null,
+                "penalty": 0
+              }
+            },
+            "displaySignals": [
+              {
+                "label": "Mapped target features",
+                "value": 20,
+                "source": "OpenStreetMap"
+              },
+              {
+                "label": "Mapped features per km²",
+                "value": 347,
+                "source": "Mapped count / candidate area"
+              },
+              {
+                "label": "Supporting street network",
+                "value": "739 m",
+                "source": "OpenStreetMap; access unverified"
+              },
+              {
+                "label": "Mapped ground-oriented housing types",
+                "value": 19,
+                "source": "Observed OpenStreetMap building tags; outdoor space unknown"
+              },
+              {
+                "label": "Property Intelligence service-fit proxy",
+                "value": 90,
+                "source": "MD iMAP Parcel Points"
+              }
+            ],
+            "serviceIntents": {
+              "version": "PropertyServiceIntentV1",
+              "requested": [
+                "deck_build"
+              ],
+              "targetIntent": "residential",
+              "services": [
+                "build decks"
+              ],
+              "error": null,
+              "propertyConstraint": null
+            },
+            "propertyScoreComponents": [
+              {
+                "intent": "deck_build",
+                "fit": 89.53488372093024,
+                "recordCount": 86,
+                "knownTypeCount": 77,
+                "knownYearCount": 77,
+                "groundOrientedCount": 77,
+                "typeFit": 89.53488372093024,
+                "ageFit": null,
+                "rule": "recorded_property_type_proxy",
+                "scope": "official parcel points inside candidate",
+                "assumption": true
+              }
+            ],
+            "propertyRecordCoverage": {
+              "insideRecords": 91,
+              "knownYearRecords": 77,
+              "knownTypeRecords": 77,
+              "ambiguousRecords": 0,
+              "outsideRecords": 0,
+              "method": "official_account_dedup_and_point_in_polygon; no nearest-building or parcel-boundary match",
+              "complete": true,
+              "constructionEra": "1980–1999",
+              "sourceVersion": "MD_ParcelPointsV1",
+              "dataUpdatedAt": "2026-05",
+              "retrievedAt": "2026-09-30T16:21:59.377128+00:00"
+            },
+            "personalizationStatus": "supported_proxy"
+          }
+        }
+      ],
+      "selectedCandidateIds": [
+        "45f3423dfa8b8a5fe55712a5"
+      ],
+      "selectedZoneCount": 1,
+      "mappedTargets": 20,
+      "knownSubsetMinutes": 46,
+      "team": {
+        "version": "OwnTeamCapacityV1",
+        "sessionHours": 4,
+        "requestedHours": 4,
+        "marketerCount": 2,
+        "coveragePattern": "stay_together",
+        "requestedMinutes": 240,
+        "targetPersonHours": 4,
+        "requiredZoneCount": null,
+        "plannedLaborHours": 8,
+        "uniqueCoverageTargetMinutes": 240,
+        "durationMeaning": "per_person_session",
+        "headcountIsAssignment": false,
+        "supportedMinutes": 46,
+        "supportedPersonHours": 0.7666666666666667,
+        "supportedCoverageMinutes": 46,
+        "allocationKind": "shared_coverage",
+        "coverageSectionCount": 1,
+        "allocations": [
+          {
+            "lane": 1,
+            "minutes": 46,
+            "sectionIds": [
+              "45f3423dfa8b8a5fe55712a5"
+            ]
+          }
+        ],
+        "connectedComplementarySections": false,
+        "estimatedFieldElapsedMinutes": null,
+        "estimatedElapsedMinutes": null,
+        "sharedTravelMinutes": null,
+        "shortfallMinutes": null,
+        "limitations": [
+          "Whole-section allocation is advisory; travel between sections and local access are not verified.",
+          "Field-only elapsed time reflects the busiest planned lane. Total elapsed session time is unknown.",
+          "Staying together does not multiply unique coverage; no group efficiency is assumed."
+        ],
+        "supportedFieldSubsetMinutes": 46,
+        "completeAreaWorkload": false
+      },
+      "propertyMatching": [
+        {
+          "status": "available",
+          "insidePropertyRecords": 71,
+          "matchedFootprints": 0,
+          "newlyClassifiedFootprints": 0,
+          "ambiguousFootprints": 1,
+          "unmatchedPropertyRecords": 69,
+          "rule": "one-to-one point-in-footprint containment; no nearest matching or individual age transfer"
+        },
+        {
+          "status": "available",
+          "insidePropertyRecords": 954,
+          "matchedFootprints": 24,
+          "newlyClassifiedFootprints": 8,
+          "ambiguousFootprints": 15,
+          "unmatchedPropertyRecords": 865,
+          "rule": "one-to-one point-in-footprint containment; no nearest matching or individual age transfer"
+        }
+      ],
+      "incomplete": true,
+      "planStatus": "review_required"
+    },
+    {
+      "goal": "concrete work",
+      "normalized": {
+        "version": "PropertyServiceIntentV1",
+        "requested": [
+          "concrete"
+        ],
+        "targetIntent": "residential",
+        "services": [
+          "contracting MHIC work"
+        ],
+        "error": null,
+        "propertyConstraint": null
+      },
+      "wholeFixtureRanking": {
+        "fit": 92,
+        "reasons": [
+          "concrete: 814 of 888 matching parcel records have a recorded type; 814 have a usable year built. Ground-oriented property type is a disclosed suitability proxy; outdoor space is unknown."
+        ],
+        "limitations": [
+          "Recorded structure age/type is a planning proxy, not component condition, component age, buying intent or guaranteed leads.",
+          "Official parcel-point locations are not footprint matches, household counts or verified delivery stops. No nearest-property matching is used."
+        ],
+        "serviceIntents": {
+          "version": "PropertyServiceIntentV1",
+          "requested": [
+            "concrete"
+          ],
+          "targetIntent": "residential",
+          "services": [
+            "contracting MHIC work"
+          ],
+          "error": null,
+          "propertyConstraint": null
+        },
+        "scoreComponents": [
+          {
+            "intent": "concrete",
+            "fit": 91.66666666666666,
+            "recordCount": 888,
+            "knownTypeCount": 814,
+            "knownYearCount": 814,
+            "groundOrientedCount": 814,
+            "typeFit": 91.66666666666666,
+            "ageFit": null,
+            "rule": "recorded_property_type_proxy",
+            "scope": "official parcel points inside candidate",
+            "assumption": true
+          }
+        ],
+        "recordCoverage": {
+          "insideRecords": 1025,
+          "knownYearRecords": 876,
+          "knownTypeRecords": 915,
+          "ambiguousRecords": 0,
+          "outsideRecords": 0,
+          "method": "official_account_dedup_and_point_in_polygon; no nearest-building or parcel-boundary match",
+          "complete": true
+        },
+        "version": "PropertyServiceFitV2",
+        "personalizationStatus": "supported_proxy"
+      },
+      "sourceAreaDigest": "884c4a264124048415c29e3c40d5786ba11bacf8c7233970bab2ec844f25db60",
+      "windowCount": 2,
+      "candidates": [
+        {
+          "id": "45f3423dfa8b8a5fe55712a5",
+          "geometry": [
+            {
+              "latitude": 39.1588247,
+              "longitude": -76.6379037
+            },
+            {
+              "latitude": 39.1585015,
+              "longitude": -76.6376395
+            },
+            {
+              "latitude": 39.1584246,
+              "longitude": -76.6373301
+            },
+            {
+              "latitude": 39.1579948,
+              "longitude": -76.6355407
+            },
+            {
+              "latitude": 39.1579948,
+              "longitude": -76.6353553
+            },
+            {
+              "latitude": 39.1582506,
+              "longitude": -76.6315528
+            },
+            {
+              "latitude": 39.1583645,
+              "longitude": -76.631282
+            },
+            {
+              "latitude": 39.1585082,
+              "longitude": -76.631282
+            },
+            {
+              "latitude": 39.1587208,
+              "longitude": -76.6313186
+            },
+            {
+              "latitude": 39.159263,
+              "longitude": -76.6326291
+            },
+            {
+              "latitude": 39.159263,
+              "longitude": -76.6328145
+            },
+            {
+              "latitude": 39.1589685,
+              "longitude": -76.6379037
+            }
+          ],
+          "features": [
+            {
+              "latitude": 39.15866965,
+              "longitude": -76.6328481
+            },
+            {
+              "latitude": 39.15861888271839,
+              "longitude": -76.6325866009682
+            },
+            {
+              "latitude": 39.15866416746747,
+              "longitude": -76.63271664869481
+            },
+            {
+              "latitude": 39.158573017426896,
+              "longitude": -76.63245814876974
+            },
+            {
+              "latitude": 39.15853145,
+              "longitude": -76.63232935
+            },
+            {
+              "latitude": 39.158489833050666,
+              "longitude": -76.63219670042105
+            },
+            {
+              "latitude": 39.158443649999995,
+              "longitude": -76.63206745
+            },
+            {
+              "latitude": 39.15840205,
+              "longitude": -76.6319369
+            },
+            {
+              "latitude": 39.158350549999994,
+              "longitude": -76.63181455
+            },
+            {
+              "latitude": 39.15849643509855,
+              "longitude": -76.63723745510275
+            },
+            {
+              "latitude": 39.15832241882192,
+              "longitude": -76.63164544374364
+            },
+            {
+              "latitude": 39.15857333701569,
+              "longitude": -76.63754678819508
+            },
+            {
+              "latitude": 39.15902919905211,
+              "longitude": -76.63262811503714
+            },
+            {
+              "latitude": 39.1588888,
+              "longitude": -76.63220895
+            },
+            {
+              "latitude": 39.158942200000006,
+              "longitude": -76.6323323
+            },
+            {
+              "latitude": 39.1588547,
+              "longitude": -76.63207505
+            },
+            {
+              "latitude": 39.158810010009226,
+              "longitude": -76.63194516720208
+            },
+            {
+              "latitude": 39.15876235,
+              "longitude": -76.6318106
+            },
+            {
+              "latitude": 39.158712660012085,
+              "longitude": -76.6316896789135
+            },
+            {
+              "latitude": 39.15864895,
+              "longitude": -76.63141125
+            }
+          ],
+          "networkSegments": [
+            {
+              "from": {
+                "latitude": 39.1589507,
+                "longitude": -76.6328502
+              },
+              "to": {
+                "latitude": 39.1587053,
+                "longitude": -76.63299726666666
+              }
+            },
+            {
+              "from": {
+                "latitude": 39.15869354,
+                "longitude": -76.63211244
+              },
+              "to": {
+                "latitude": 39.158822119999996,
+                "longitude": -76.63248132
+              }
+            },
+            {
+              "from": {
+                "latitude": 39.158822119999996,
+                "longitude": -76.63248132
+              },
+              "to": {
+                "latitude": 39.1589507,
+                "longitude": -76.6328502
+              }
+            },
+            {
+              "from": {
+                "latitude": 39.15856496,
+                "longitude": -76.63174355999999
+              },
+              "to": {
+                "latitude": 39.15869354,
+                "longitude": -76.63211244
+              }
+            },
+            {
+              "from": {
+                "latitude": 39.158436380000005,
+                "longitude": -76.63137468
+              },
+              "to": {
+                "latitude": 39.15856496,
+                "longitude": -76.63174355999999
+              }
+            },
+            {
+              "from": {
+                "latitude": 39.15861996666666,
+                "longitude": -76.63702333333333
+              },
+              "to": {
+                "latitude": 39.158758283333334,
+                "longitude": -76.63741716666667
+              }
+            },
+            {
+              "from": {
+                "latitude": 39.15848165,
+                "longitude": -76.6366295
+              },
+              "to": {
+                "latitude": 39.15861996666666,
+                "longitude": -76.63702333333333
+              }
+            },
+            {
+              "from": {
+                "latitude": 39.158343333333335,
+                "longitude": -76.63623566666666
+              },
+              "to": {
+                "latitude": 39.15848165,
+                "longitude": -76.6366295
+              }
+            },
+            {
+              "from": {
+                "latitude": 39.15820501666666,
+                "longitude": -76.63584183333333
+              },
+              "to": {
+                "latitude": 39.158343333333335,
+                "longitude": -76.63623566666666
+              }
+            },
+            {
+              "from": {
+                "latitude": 39.1580667,
+                "longitude": -76.635448
+              },
+              "to": {
+                "latitude": 39.15820501666666,
+                "longitude": -76.63584183333333
+              }
+            },
+            {
+              "from": {
+                "latitude": 39.158317,
+                "longitude": -76.63531026666666
+              },
+              "to": {
+                "latitude": 39.1580667,
+                "longitude": -76.635448
+              }
+            },
+            {
+              "from": {
+                "latitude": 39.1585673,
+                "longitude": -76.63517253333333
+              },
+              "to": {
+                "latitude": 39.158317,
+                "longitude": -76.63531026666666
+              }
+            },
+            {
+              "from": {
+                "latitude": 39.1588176,
+                "longitude": -76.6350348
+              },
+              "to": {
+                "latitude": 39.1585673,
+                "longitude": -76.63517253333333
+              }
+            },
+            {
+              "from": {
+                "latitude": 39.15869698,
+                "longitude": -76.63468612
+              },
+              "to": {
+                "latitude": 39.1588176,
+                "longitude": -76.6350348
+              }
+            },
+            {
+              "from": {
+                "latitude": 39.15857636,
+                "longitude": -76.63433744
+              },
+              "to": {
+                "latitude": 39.15869698,
+                "longitude": -76.63468612
+              }
+            },
+            {
+              "from": {
+                "latitude": 39.15845574,
+                "longitude": -76.63398876000001
+              },
+              "to": {
+                "latitude": 39.15857636,
+                "longitude": -76.63433744
+              }
+            },
+            {
+              "from": {
+                "latitude": 39.15833512,
+                "longitude": -76.63364008
+              },
+              "to": {
+                "latitude": 39.15845574,
+                "longitude": -76.63398876000001
+              }
+            },
+            {
+              "from": {
+                "latitude": 39.1582145,
+                "longitude": -76.6332914
+              },
+              "to": {
+                "latitude": 39.15833512,
+                "longitude": -76.63364008
+              }
+            },
+            {
+              "from": {
+                "latitude": 39.1584599,
+                "longitude": -76.63314433333333
+              },
+              "to": {
+                "latitude": 39.1582145,
+                "longitude": -76.6332914
+              }
+            },
+            {
+              "from": {
+                "latitude": 39.1587053,
+                "longitude": -76.63299726666666
+              },
+              "to": {
+                "latitude": 39.1584599,
+                "longitude": -76.63314433333333
+              }
+            },
+            {
+              "from": {
+                "latitude": 39.158758283333334,
+                "longitude": -76.63741716666667
+              },
+              "to": {
+                "latitude": 39.1588966,
+                "longitude": -76.637811
+              }
+            },
+            {
+              "from": {
+                "latitude": 39.15919113333333,
+                "longitude": -76.6327218
+              },
+              "to": {
+                "latitude": 39.1589507,
+                "longitude": -76.6328502
+              }
+            }
+          ],
+          "targets": 20,
+          "streetMeters": 739,
+          "knownSubsetMinutes": 46,
+          "ranking": {
+            "version": "PropertyMarketingAreaFitV2",
+            "fit": 84,
+            "reasons": [
+              "20 mapped residential target features inside this candidate; approximately 347 mapped features per km².",
+              "739 m of supporting local-street linework; this is not an approved execution route.",
+              "19 mapped features are tagged as house, detached, semidetached, bungalow or terrace; used as a housing-type planning proxy for contracting MHIC work.",
+              "concrete: 77 of 86 matching parcel records have a recorded type; 77 have a usable year built. Ground-oriented property type is a disclosed suitability proxy; outdoor space is unknown."
+            ],
+            "limitations": [
+              "Relative planning fit only; mapped features are not verified households, delivery points, buying intent or guaranteed leads.",
+              "Building type and age do not establish ownership, outdoor space, component condition or a need for the offered service.",
+              "Supporting streets are mapped evidence; access permission and a final execution route remain unverified.",
+              "CRM outcomes and customer conversion are not inferred from geography or completed-marketing records.",
+              "Recorded structure age/type is a planning proxy, not component condition, component age, buying intent or guaranteed leads.",
+              "Official parcel-point locations are not footprint matches, household counts or verified delivery stops. No nearest-property matching is used.",
+              "Completed-marketing history is unavailable or incomplete; no absence of prior marketing or history-based advantage is assumed."
+            ],
+            "serviceFocus": [
+              "contracting MHIC work"
+            ],
+            "signals": {
+              "targetIntent": "residential",
+              "mappedTargetCount": 20,
+              "verifiedDeliveryPoints": false,
+              "mappedTargetsPerSquareKm": 347.4,
+              "mappedNetworkMeters": 739,
+              "mappedNetworkMetersPerTarget": 37,
+              "buildingTypes": {
+                "house": 19,
+                "yes": 1
+              },
+              "source": "openstreetmap_bounded_snapshot_v1",
+              "sourceDataTimestamp": "2026-09-26T18:45:17.000Z",
+              "fetchedAt": "2026-09-26T18:46:46.541Z",
+              "propertyIntelligence": {
+                "status": "used",
+                "source": "MD iMAP Parcel Points",
+                "sourceVersion": "MD_ParcelPointsV1",
+                "dataUpdatedAt": "2026-05",
+                "geometryDigest": "678d91b3ed679828dcfa2c4f5c80b534a43a4696e40ff28efeb6c51d0319273d",
+                "inputGranularity": "parcel_level",
+                "fit": 90
+              },
+              "housingTypeFit": {
+                "matchingMappedFeatures": 19,
+                "featuresWithBuildingType": 20
+              },
+              "scoreComponents": {
+                "serviceFit": 93,
+                "densityFit": 78,
+                "compactnessFit": 73,
+                "serviceBasis": "observed ground-oriented housing tags and maintained Property Intelligence service fit",
+                "weights": {
+                  "serviceFit": 0.5,
+                  "densityFit": 0.3,
+                  "compactnessFit": 0.2
+                },
+                "completedHistoryPenalty": 0
+              },
+              "marketingHistory": {
+                "status": "unknown",
+                "recentCompletedOverlap": null,
+                "overlapPercent": null,
+                "penalty": 0
+              }
+            },
+            "displaySignals": [
+              {
+                "label": "Mapped target features",
+                "value": 20,
+                "source": "OpenStreetMap"
+              },
+              {
+                "label": "Mapped features per km²",
+                "value": 347,
+                "source": "Mapped count / candidate area"
+              },
+              {
+                "label": "Supporting street network",
+                "value": "739 m",
+                "source": "OpenStreetMap; access unverified"
+              },
+              {
+                "label": "Mapped ground-oriented housing types",
+                "value": 19,
+                "source": "Observed OpenStreetMap building tags; outdoor space unknown"
+              },
+              {
+                "label": "Property Intelligence service-fit proxy",
+                "value": 90,
+                "source": "MD iMAP Parcel Points"
+              }
+            ],
+            "serviceIntents": {
+              "version": "PropertyServiceIntentV1",
+              "requested": [
+                "concrete"
+              ],
+              "targetIntent": "residential",
+              "services": [
+                "contracting MHIC work"
+              ],
+              "error": null,
+              "propertyConstraint": null
+            },
+            "propertyScoreComponents": [
+              {
+                "intent": "concrete",
+                "fit": 89.53488372093024,
+                "recordCount": 86,
+                "knownTypeCount": 77,
+                "knownYearCount": 77,
+                "groundOrientedCount": 77,
+                "typeFit": 89.53488372093024,
+                "ageFit": null,
+                "rule": "recorded_property_type_proxy",
+                "scope": "official parcel points inside candidate",
+                "assumption": true
+              }
+            ],
+            "propertyRecordCoverage": {
+              "insideRecords": 91,
+              "knownYearRecords": 77,
+              "knownTypeRecords": 77,
+              "ambiguousRecords": 0,
+              "outsideRecords": 0,
+              "method": "official_account_dedup_and_point_in_polygon; no nearest-building or parcel-boundary match",
+              "complete": true,
+              "constructionEra": "1980–1999",
+              "sourceVersion": "MD_ParcelPointsV1",
+              "dataUpdatedAt": "2026-05",
+              "retrievedAt": "2026-09-30T16:21:59.377128+00:00"
+            },
+            "personalizationStatus": "supported_proxy"
+          }
+        }
+      ],
+      "selectedCandidateIds": [
+        "45f3423dfa8b8a5fe55712a5"
+      ],
+      "selectedZoneCount": 1,
+      "mappedTargets": 20,
+      "knownSubsetMinutes": 46,
+      "team": {
+        "version": "OwnTeamCapacityV1",
+        "sessionHours": 4,
+        "requestedHours": 4,
+        "marketerCount": 2,
+        "coveragePattern": "stay_together",
+        "requestedMinutes": 240,
+        "targetPersonHours": 4,
+        "requiredZoneCount": null,
+        "plannedLaborHours": 8,
+        "uniqueCoverageTargetMinutes": 240,
+        "durationMeaning": "per_person_session",
+        "headcountIsAssignment": false,
+        "supportedMinutes": 46,
+        "supportedPersonHours": 0.7666666666666667,
+        "supportedCoverageMinutes": 46,
+        "allocationKind": "shared_coverage",
+        "coverageSectionCount": 1,
+        "allocations": [
+          {
+            "lane": 1,
+            "minutes": 46,
+            "sectionIds": [
+              "45f3423dfa8b8a5fe55712a5"
+            ]
+          }
+        ],
+        "connectedComplementarySections": false,
+        "estimatedFieldElapsedMinutes": null,
+        "estimatedElapsedMinutes": null,
+        "sharedTravelMinutes": null,
+        "shortfallMinutes": null,
+        "limitations": [
+          "Whole-section allocation is advisory; travel between sections and local access are not verified.",
+          "Field-only elapsed time reflects the busiest planned lane. Total elapsed session time is unknown.",
+          "Staying together does not multiply unique coverage; no group efficiency is assumed."
+        ],
+        "supportedFieldSubsetMinutes": 46,
+        "completeAreaWorkload": false
+      },
+      "propertyMatching": [
+        {
+          "status": "available",
+          "insidePropertyRecords": 71,
+          "matchedFootprints": 0,
+          "newlyClassifiedFootprints": 0,
+          "ambiguousFootprints": 1,
+          "unmatchedPropertyRecords": 69,
+          "rule": "one-to-one point-in-footprint containment; no nearest matching or individual age transfer"
+        },
+        {
+          "status": "available",
+          "insidePropertyRecords": 954,
+          "matchedFootprints": 24,
+          "newlyClassifiedFootprints": 8,
+          "ambiguousFootprints": 15,
+          "unmatchedPropertyRecords": 865,
+          "rule": "one-to-one point-in-footprint containment; no nearest matching or individual age transfer"
+        }
+      ],
+      "incomplete": true,
+      "planStatus": "review_required"
+    },
+    {
+      "goal": "deck repairs or builds, roofing leads, cement work",
+      "normalized": {
+        "version": "PropertyServiceIntentV1",
+        "requested": [
+          "roofing",
+          "deck_repair",
+          "deck_build",
+          "concrete"
+        ],
+        "targetIntent": "residential",
+        "services": [
+          "build decks",
+          "contracting MHIC work"
+        ],
+        "error": null,
+        "propertyConstraint": null
+      },
+      "wholeFixtureRanking": {
+        "fit": 89,
+        "reasons": [
+          "roofing: 814 of 888 matching parcel records have a recorded type; 814 have a usable year built. Recorded structures at least 20 years old inform a disclosed outreach suitability proxy; component condition and installation dates are unknown.",
+          "deck repair: 814 of 888 matching parcel records have a recorded type; 814 have a usable year built. Recorded structures at least 20 years old inform a disclosed outreach suitability proxy; component condition and installation dates are unknown.",
+          "deck build: 814 of 888 matching parcel records have a recorded type; 814 have a usable year built. Ground-oriented property type is a disclosed suitability proxy; outdoor space is unknown.",
+          "concrete: 814 of 888 matching parcel records have a recorded type; 814 have a usable year built. Ground-oriented property type is a disclosed suitability proxy; outdoor space is unknown."
+        ],
+        "limitations": [
+          "Recorded structure age/type is a planning proxy, not component condition, component age, buying intent or guaranteed leads.",
+          "Official parcel-point locations are not footprint matches, household counts or verified delivery stops. No nearest-property matching is used."
+        ],
+        "serviceIntents": {
+          "version": "PropertyServiceIntentV1",
+          "requested": [
+            "roofing",
+            "deck_repair",
+            "deck_build",
+            "concrete"
+          ],
+          "targetIntent": "residential",
+          "services": [
+            "build decks",
+            "contracting MHIC work"
+          ],
+          "error": null,
+          "propertyConstraint": null
+        },
+        "scoreComponents": [
+          {
+            "intent": "roofing",
+            "fit": 84.84041469407323,
+            "recordCount": 888,
+            "knownTypeCount": 814,
+            "knownYearCount": 814,
+            "groundOrientedCount": 814,
+            "typeFit": 86.63414634146342,
+            "ageFit": 83.04668304668304,
+            "rule": "recorded_structure_20plus_proxy_and_type",
+            "scope": "official parcel points inside candidate",
+            "assumption": true
+          },
+          {
+            "intent": "deck_repair",
+            "fit": 87.35667485667486,
+            "recordCount": 888,
+            "knownTypeCount": 814,
+            "knownYearCount": 814,
+            "groundOrientedCount": 814,
+            "typeFit": 91.66666666666666,
+            "ageFit": 83.04668304668304,
+            "rule": "recorded_structure_20plus_proxy_and_type",
+            "scope": "official parcel points inside candidate",
+            "assumption": true
+          },
+          {
+            "intent": "deck_build",
+            "fit": 91.66666666666666,
+            "recordCount": 888,
+            "knownTypeCount": 814,
+            "knownYearCount": 814,
+            "groundOrientedCount": 814,
+            "typeFit": 91.66666666666666,
+            "ageFit": null,
+            "rule": "recorded_property_type_proxy",
+            "scope": "official parcel points inside candidate",
+            "assumption": true
+          },
+          {
+            "intent": "concrete",
+            "fit": 91.66666666666666,
+            "recordCount": 888,
+            "knownTypeCount": 814,
+            "knownYearCount": 814,
+            "groundOrientedCount": 814,
+            "typeFit": 91.66666666666666,
+            "ageFit": null,
+            "rule": "recorded_property_type_proxy",
+            "scope": "official parcel points inside candidate",
+            "assumption": true
+          }
+        ],
+        "recordCoverage": {
+          "insideRecords": 1025,
+          "knownYearRecords": 876,
+          "knownTypeRecords": 915,
+          "ambiguousRecords": 0,
+          "outsideRecords": 0,
+          "method": "official_account_dedup_and_point_in_polygon; no nearest-building or parcel-boundary match",
+          "complete": true
+        },
+        "version": "PropertyServiceFitV2",
+        "personalizationStatus": "supported_proxy"
+      },
+      "sourceAreaDigest": "884c4a264124048415c29e3c40d5786ba11bacf8c7233970bab2ec844f25db60",
+      "windowCount": 2,
+      "candidates": [
+        {
+          "id": "45f3423dfa8b8a5fe55712a5",
+          "geometry": [
+            {
+              "latitude": 39.1588247,
+              "longitude": -76.6379037
+            },
+            {
+              "latitude": 39.1585015,
+              "longitude": -76.6376395
+            },
+            {
+              "latitude": 39.1584246,
+              "longitude": -76.6373301
+            },
+            {
+              "latitude": 39.1579948,
+              "longitude": -76.6355407
+            },
+            {
+              "latitude": 39.1579948,
+              "longitude": -76.6353553
+            },
+            {
+              "latitude": 39.1582506,
+              "longitude": -76.6315528
+            },
+            {
+              "latitude": 39.1583645,
+              "longitude": -76.631282
+            },
+            {
+              "latitude": 39.1585082,
+              "longitude": -76.631282
+            },
+            {
+              "latitude": 39.1587208,
+              "longitude": -76.6313186
+            },
+            {
+              "latitude": 39.159263,
+              "longitude": -76.6326291
+            },
+            {
+              "latitude": 39.159263,
+              "longitude": -76.6328145
+            },
+            {
+              "latitude": 39.1589685,
+              "longitude": -76.6379037
+            }
+          ],
+          "features": [
+            {
+              "latitude": 39.15866965,
+              "longitude": -76.6328481
+            },
+            {
+              "latitude": 39.15861888271839,
+              "longitude": -76.6325866009682
+            },
+            {
+              "latitude": 39.15866416746747,
+              "longitude": -76.63271664869481
+            },
+            {
+              "latitude": 39.158573017426896,
+              "longitude": -76.63245814876974
+            },
+            {
+              "latitude": 39.15853145,
+              "longitude": -76.63232935
+            },
+            {
+              "latitude": 39.158489833050666,
+              "longitude": -76.63219670042105
+            },
+            {
+              "latitude": 39.158443649999995,
+              "longitude": -76.63206745
+            },
+            {
+              "latitude": 39.15840205,
+              "longitude": -76.6319369
+            },
+            {
+              "latitude": 39.158350549999994,
+              "longitude": -76.63181455
+            },
+            {
+              "latitude": 39.15849643509855,
+              "longitude": -76.63723745510275
+            },
+            {
+              "latitude": 39.15832241882192,
+              "longitude": -76.63164544374364
+            },
+            {
+              "latitude": 39.15857333701569,
+              "longitude": -76.63754678819508
+            },
+            {
+              "latitude": 39.15902919905211,
+              "longitude": -76.63262811503714
+            },
+            {
+              "latitude": 39.1588888,
+              "longitude": -76.63220895
+            },
+            {
+              "latitude": 39.158942200000006,
+              "longitude": -76.6323323
+            },
+            {
+              "latitude": 39.1588547,
+              "longitude": -76.63207505
+            },
+            {
+              "latitude": 39.158810010009226,
+              "longitude": -76.63194516720208
+            },
+            {
+              "latitude": 39.15876235,
+              "longitude": -76.6318106
+            },
+            {
+              "latitude": 39.158712660012085,
+              "longitude": -76.6316896789135
+            },
+            {
+              "latitude": 39.15864895,
+              "longitude": -76.63141125
+            }
+          ],
+          "networkSegments": [
+            {
+              "from": {
+                "latitude": 39.1589507,
+                "longitude": -76.6328502
+              },
+              "to": {
+                "latitude": 39.1587053,
+                "longitude": -76.63299726666666
+              }
+            },
+            {
+              "from": {
+                "latitude": 39.15869354,
+                "longitude": -76.63211244
+              },
+              "to": {
+                "latitude": 39.158822119999996,
+                "longitude": -76.63248132
+              }
+            },
+            {
+              "from": {
+                "latitude": 39.158822119999996,
+                "longitude": -76.63248132
+              },
+              "to": {
+                "latitude": 39.1589507,
+                "longitude": -76.6328502
+              }
+            },
+            {
+              "from": {
+                "latitude": 39.15856496,
+                "longitude": -76.63174355999999
+              },
+              "to": {
+                "latitude": 39.15869354,
+                "longitude": -76.63211244
+              }
+            },
+            {
+              "from": {
+                "latitude": 39.158436380000005,
+                "longitude": -76.63137468
+              },
+              "to": {
+                "latitude": 39.15856496,
+                "longitude": -76.63174355999999
+              }
+            },
+            {
+              "from": {
+                "latitude": 39.15861996666666,
+                "longitude": -76.63702333333333
+              },
+              "to": {
+                "latitude": 39.158758283333334,
+                "longitude": -76.63741716666667
+              }
+            },
+            {
+              "from": {
+                "latitude": 39.15848165,
+                "longitude": -76.6366295
+              },
+              "to": {
+                "latitude": 39.15861996666666,
+                "longitude": -76.63702333333333
+              }
+            },
+            {
+              "from": {
+                "latitude": 39.158343333333335,
+                "longitude": -76.63623566666666
+              },
+              "to": {
+                "latitude": 39.15848165,
+                "longitude": -76.6366295
+              }
+            },
+            {
+              "from": {
+                "latitude": 39.15820501666666,
+                "longitude": -76.63584183333333
+              },
+              "to": {
+                "latitude": 39.158343333333335,
+                "longitude": -76.63623566666666
+              }
+            },
+            {
+              "from": {
+                "latitude": 39.1580667,
+                "longitude": -76.635448
+              },
+              "to": {
+                "latitude": 39.15820501666666,
+                "longitude": -76.63584183333333
+              }
+            },
+            {
+              "from": {
+                "latitude": 39.158317,
+                "longitude": -76.63531026666666
+              },
+              "to": {
+                "latitude": 39.1580667,
+                "longitude": -76.635448
+              }
+            },
+            {
+              "from": {
+                "latitude": 39.1585673,
+                "longitude": -76.63517253333333
+              },
+              "to": {
+                "latitude": 39.158317,
+                "longitude": -76.63531026666666
+              }
+            },
+            {
+              "from": {
+                "latitude": 39.1588176,
+                "longitude": -76.6350348
+              },
+              "to": {
+                "latitude": 39.1585673,
+                "longitude": -76.63517253333333
+              }
+            },
+            {
+              "from": {
+                "latitude": 39.15869698,
+                "longitude": -76.63468612
+              },
+              "to": {
+                "latitude": 39.1588176,
+                "longitude": -76.6350348
+              }
+            },
+            {
+              "from": {
+                "latitude": 39.15857636,
+                "longitude": -76.63433744
+              },
+              "to": {
+                "latitude": 39.15869698,
+                "longitude": -76.63468612
+              }
+            },
+            {
+              "from": {
+                "latitude": 39.15845574,
+                "longitude": -76.63398876000001
+              },
+              "to": {
+                "latitude": 39.15857636,
+                "longitude": -76.63433744
+              }
+            },
+            {
+              "from": {
+                "latitude": 39.15833512,
+                "longitude": -76.63364008
+              },
+              "to": {
+                "latitude": 39.15845574,
+                "longitude": -76.63398876000001
+              }
+            },
+            {
+              "from": {
+                "latitude": 39.1582145,
+                "longitude": -76.6332914
+              },
+              "to": {
+                "latitude": 39.15833512,
+                "longitude": -76.63364008
+              }
+            },
+            {
+              "from": {
+                "latitude": 39.1584599,
+                "longitude": -76.63314433333333
+              },
+              "to": {
+                "latitude": 39.1582145,
+                "longitude": -76.6332914
+              }
+            },
+            {
+              "from": {
+                "latitude": 39.1587053,
+                "longitude": -76.63299726666666
+              },
+              "to": {
+                "latitude": 39.1584599,
+                "longitude": -76.63314433333333
+              }
+            },
+            {
+              "from": {
+                "latitude": 39.158758283333334,
+                "longitude": -76.63741716666667
+              },
+              "to": {
+                "latitude": 39.1588966,
+                "longitude": -76.637811
+              }
+            },
+            {
+              "from": {
+                "latitude": 39.15919113333333,
+                "longitude": -76.6327218
+              },
+              "to": {
+                "latitude": 39.1589507,
+                "longitude": -76.6328502
+              }
+            }
+          ],
+          "targets": 20,
+          "streetMeters": 739,
+          "knownSubsetMinutes": 46,
+          "ranking": {
+            "version": "PropertyMarketingAreaFitV2",
+            "fit": 85,
+            "reasons": [
+              "20 mapped residential target features inside this candidate; approximately 347 mapped features per km².",
+              "739 m of supporting local-street linework; this is not an approved execution route.",
+              "19 mapped features are tagged as house, detached, semidetached, bungalow or terrace; used as a housing-type planning proxy for build decks, contracting MHIC work.",
+              "roofing: 77 of 86 matching parcel records have a recorded type; 77 have a usable year built. Recorded structures at least 20 years old inform a disclosed outreach suitability proxy; component condition and installation dates are unknown.",
+              "deck repair: 77 of 86 matching parcel records have a recorded type; 77 have a usable year built. Recorded structures at least 20 years old inform a disclosed outreach suitability proxy; component condition and installation dates are unknown.",
+              "deck build: 77 of 86 matching parcel records have a recorded type; 77 have a usable year built. Ground-oriented property type is a disclosed suitability proxy; outdoor space is unknown.",
+              "concrete: 77 of 86 matching parcel records have a recorded type; 77 have a usable year built. Ground-oriented property type is a disclosed suitability proxy; outdoor space is unknown."
+            ],
+            "limitations": [
+              "Relative planning fit only; mapped features are not verified households, delivery points, buying intent or guaranteed leads.",
+              "Building type and age do not establish ownership, outdoor space, component condition or a need for the offered service.",
+              "Supporting streets are mapped evidence; access permission and a final execution route remain unverified.",
+              "CRM outcomes and customer conversion are not inferred from geography or completed-marketing records.",
+              "Recorded structure age/type is a planning proxy, not component condition, component age, buying intent or guaranteed leads.",
+              "Official parcel-point locations are not footprint matches, household counts or verified delivery stops. No nearest-property matching is used.",
+              "Completed-marketing history is unavailable or incomplete; no absence of prior marketing or history-based advantage is assumed."
+            ],
+            "serviceFocus": [
+              "build decks",
+              "contracting MHIC work"
+            ],
+            "signals": {
+              "targetIntent": "residential",
+              "mappedTargetCount": 20,
+              "verifiedDeliveryPoints": false,
+              "mappedTargetsPerSquareKm": 347.4,
+              "mappedNetworkMeters": 739,
+              "mappedNetworkMetersPerTarget": 37,
+              "buildingTypes": {
+                "house": 19,
+                "yes": 1
+              },
+              "source": "openstreetmap_bounded_snapshot_v1",
+              "sourceDataTimestamp": "2026-09-26T18:45:17.000Z",
+              "fetchedAt": "2026-09-26T18:46:46.541Z",
+              "propertyIntelligence": {
+                "status": "used",
+                "source": "MD iMAP Parcel Points",
+                "sourceVersion": "MD_ParcelPointsV1",
+                "dataUpdatedAt": "2026-05",
+                "geometryDigest": "678d91b3ed679828dcfa2c4f5c80b534a43a4696e40ff28efeb6c51d0319273d",
+                "inputGranularity": "parcel_level",
+                "fit": 93
+              },
+              "housingTypeFit": {
+                "matchingMappedFeatures": 19,
+                "featuresWithBuildingType": 20
+              },
+              "scoreComponents": {
+                "serviceFit": 94,
+                "densityFit": 78,
+                "compactnessFit": 73,
+                "serviceBasis": "observed ground-oriented housing tags and maintained Property Intelligence service fit",
+                "weights": {
+                  "serviceFit": 0.5,
+                  "densityFit": 0.3,
+                  "compactnessFit": 0.2
+                },
+                "completedHistoryPenalty": 0
+              },
+              "marketingHistory": {
+                "status": "unknown",
+                "recentCompletedOverlap": null,
+                "overlapPercent": null,
+                "penalty": 0
+              }
+            },
+            "displaySignals": [
+              {
+                "label": "Mapped target features",
+                "value": 20,
+                "source": "OpenStreetMap"
+              },
+              {
+                "label": "Mapped features per km²",
+                "value": 347,
+                "source": "Mapped count / candidate area"
+              },
+              {
+                "label": "Supporting street network",
+                "value": "739 m",
+                "source": "OpenStreetMap; access unverified"
+              },
+              {
+                "label": "Mapped ground-oriented housing types",
+                "value": 19,
+                "source": "Observed OpenStreetMap building tags; outdoor space unknown"
+              },
+              {
+                "label": "Property Intelligence service-fit proxy",
+                "value": 93,
+                "source": "MD iMAP Parcel Points"
+              }
+            ],
+            "serviceIntents": {
+              "version": "PropertyServiceIntentV1",
+              "requested": [
+                "roofing",
+                "deck_repair",
+                "deck_build",
+                "concrete"
+              ],
+              "targetIntent": "residential",
+              "services": [
+                "build decks",
+                "contracting MHIC work"
+              ],
+              "error": null,
+              "propertyConstraint": null
+            },
+            "propertyScoreComponents": [
+              {
+                "intent": "roofing",
+                "fit": 97.25274725274724,
+                "recordCount": 86,
+                "knownTypeCount": 77,
+                "knownYearCount": 77,
+                "groundOrientedCount": 77,
+                "typeFit": 94.5054945054945,
+                "ageFit": 100,
+                "rule": "recorded_structure_20plus_proxy_and_type",
+                "scope": "official parcel points inside candidate",
+                "assumption": true
+              },
+              {
+                "intent": "deck_repair",
+                "fit": 94.76744186046511,
+                "recordCount": 86,
+                "knownTypeCount": 77,
+                "knownYearCount": 77,
+                "groundOrientedCount": 77,
+                "typeFit": 89.53488372093024,
+                "ageFit": 100,
+                "rule": "recorded_structure_20plus_proxy_and_type",
+                "scope": "official parcel points inside candidate",
+                "assumption": true
+              },
+              {
+                "intent": "deck_build",
+                "fit": 89.53488372093024,
+                "recordCount": 86,
+                "knownTypeCount": 77,
+                "knownYearCount": 77,
+                "groundOrientedCount": 77,
+                "typeFit": 89.53488372093024,
+                "ageFit": null,
+                "rule": "recorded_property_type_proxy",
+                "scope": "official parcel points inside candidate",
+                "assumption": true
+              },
+              {
+                "intent": "concrete",
+                "fit": 89.53488372093024,
+                "recordCount": 86,
+                "knownTypeCount": 77,
+                "knownYearCount": 77,
+                "groundOrientedCount": 77,
+                "typeFit": 89.53488372093024,
+                "ageFit": null,
+                "rule": "recorded_property_type_proxy",
+                "scope": "official parcel points inside candidate",
+                "assumption": true
+              }
+            ],
+            "propertyRecordCoverage": {
+              "insideRecords": 91,
+              "knownYearRecords": 77,
+              "knownTypeRecords": 77,
+              "ambiguousRecords": 0,
+              "outsideRecords": 0,
+              "method": "official_account_dedup_and_point_in_polygon; no nearest-building or parcel-boundary match",
+              "complete": true,
+              "constructionEra": "1980–1999",
+              "sourceVersion": "MD_ParcelPointsV1",
+              "dataUpdatedAt": "2026-05",
+              "retrievedAt": "2026-09-30T16:21:59.377128+00:00"
+            },
+            "personalizationStatus": "supported_proxy"
+          }
+        }
+      ],
+      "selectedCandidateIds": [
+        "45f3423dfa8b8a5fe55712a5"
+      ],
+      "selectedZoneCount": 1,
+      "mappedTargets": 20,
+      "knownSubsetMinutes": 46,
+      "team": {
+        "version": "OwnTeamCapacityV1",
+        "sessionHours": 4,
+        "requestedHours": 4,
+        "marketerCount": 2,
+        "coveragePattern": "stay_together",
+        "requestedMinutes": 240,
+        "targetPersonHours": 4,
+        "requiredZoneCount": null,
+        "plannedLaborHours": 8,
+        "uniqueCoverageTargetMinutes": 240,
+        "durationMeaning": "per_person_session",
+        "headcountIsAssignment": false,
+        "supportedMinutes": 46,
+        "supportedPersonHours": 0.7666666666666667,
+        "supportedCoverageMinutes": 46,
+        "allocationKind": "shared_coverage",
+        "coverageSectionCount": 1,
+        "allocations": [
+          {
+            "lane": 1,
+            "minutes": 46,
+            "sectionIds": [
+              "45f3423dfa8b8a5fe55712a5"
+            ]
+          }
+        ],
+        "connectedComplementarySections": false,
+        "estimatedFieldElapsedMinutes": null,
+        "estimatedElapsedMinutes": null,
+        "sharedTravelMinutes": null,
+        "shortfallMinutes": null,
+        "limitations": [
+          "Whole-section allocation is advisory; travel between sections and local access are not verified.",
+          "Field-only elapsed time reflects the busiest planned lane. Total elapsed session time is unknown.",
+          "Staying together does not multiply unique coverage; no group efficiency is assumed."
+        ],
+        "supportedFieldSubsetMinutes": 46,
+        "completeAreaWorkload": false
+      },
+      "propertyMatching": [
+        {
+          "status": "available",
+          "insidePropertyRecords": 71,
+          "matchedFootprints": 0,
+          "newlyClassifiedFootprints": 0,
+          "ambiguousFootprints": 1,
+          "unmatchedPropertyRecords": 69,
+          "rule": "one-to-one point-in-footprint containment; no nearest matching or individual age transfer"
+        },
+        {
+          "status": "available",
+          "insidePropertyRecords": 954,
+          "matchedFootprints": 24,
+          "newlyClassifiedFootprints": 8,
+          "ambiguousFootprints": 15,
+          "unmatchedPropertyRecords": 865,
+          "rule": "one-to-one point-in-footprint containment; no nearest matching or individual age transfer"
+        }
+      ],
+      "incomplete": true,
+      "planStatus": "review_required"
+    }
+  ]
+}
