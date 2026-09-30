@@ -4626,6 +4626,14 @@ async function smartZoneCampaign(request, {requireCached = false} = {}) {
   if (String(campaign.status || "draft") !== "draft") {
     throw new HttpsError("failed-precondition", "Smart Zone planning is available before funding.");
   }
+  const executionMode=require('./campaign_execution_authority').executionMode(campaign);
+  if(!executionMode)throw new HttpsError('failed-precondition','Review this campaign’s execution mode before requesting a recommendation.');
+  let teamCapacity=null;
+  if(executionMode==='own_team') {
+    if(campaign.campaignWorkload?.version!==require('./own_team_capacity').VERSION)
+      throw new HttpsError('failed-precondition','Review team session duration, marketer count and coverage pattern before recommending an area.');
+    teamCapacity=require('./own_team_capacity').requirement(campaign.campaignWorkload);
+  }
   let desiredHours;
   try { desiredHours = smartZoneEntryContract.workloadHours(request.data?.desiredHours); }
   catch (error) { throw new HttpsError('invalid-argument', error.message); }
@@ -4662,7 +4670,7 @@ async function smartZoneCampaign(request, {requireCached = false} = {}) {
   }
   const selectedArea = cachedRecommendation?.selectedArea || await smartZoneSelectedArea(request, campaign);
   const anchor = smartZoneAnchor({serviceArea: selectedArea.geometry}) || selectedArea.center;
-  return {context, campaignId, reference, campaign, anchor, selectedArea, desiredHours, alternativeIndex,
+  return {context, campaignId, reference, campaign, anchor, selectedArea, desiredHours, alternativeIndex, executionMode,teamCapacity,
     intelligenceContext: intelligence.context, contextVersion: intelligence.contextVersion,
     eligibleGeography: intelligence.eligibleGeography, cacheAuthority, cachedRecommendation,
     selectionIds: request.data?.selectionIds ??
@@ -4678,7 +4686,7 @@ async function smartZoneCampaign(request, {requireCached = false} = {}) {
 
 function smartZonePlanArguments(input, desiredHours, geographicSnapshot) {
   return {
-    anchor: input.anchor,
+    anchor: input.anchor, executionMode: input.executionMode,teamCapacity: input.teamCapacity,
     selectedBoundary: input.selectedBoundary,
     geographicSnapshot,
     desiredHours: desiredHours ?? 5,
@@ -4788,7 +4796,7 @@ exports.applySmartZonePlan = onCall(
     let searchEvidence;
     try {
       ({plan, searchEvidence} = await generateSmartZonePlan(input, request.data?.desiredHours));
-      smartZonePlanning.assertApplicablePlan(plan);
+      if(input.executionMode==='own_team'){if(!plan.zones.length)throw Object.assign(Error('manual_zone_review_required'),{code:'failed-precondition'});}else smartZonePlanning.assertApplicablePlan(plan);
     } catch (error) {
       logger.warn("Smart Zone preparation failed", {campaignId: input.campaignId,
         reason: String(error?.message || 'unknown').slice(0, 160)});
@@ -4844,7 +4852,7 @@ exports.applySmartZonePlan = onCall(
         contextVersion: currentIntelligence.contextVersion, eligibleGeography: currentIntelligence.eligibleGeography};
       const currentPlan = require('./smart_zone_intelligence').generate(
         smartZonePlanArguments(currentInput, request.data?.desiredHours, null), searchEvidence);
-      smartZonePlanning.assertApplicablePlan(currentPlan);
+      if(input.executionMode==='own_team'){if(!currentPlan.zones.length)throw Object.assign(Error('manual_zone_review_required'),{code:'failed-precondition'});}else smartZonePlanning.assertApplicablePlan(currentPlan);
       if (currentPlan.planId !== plan.planId) {
         throw new HttpsError("failed-precondition", "The recommendation changed. Review it again.");
       }
@@ -4888,11 +4896,11 @@ exports.applySmartZonePlan = onCall(
         if (request.data?.useRecommendedPay === true) {
           transaction.set(input.reference, {
             basePay: plan.compensation.recommendedBasePayCents / 100,
-            compensationRecommendationPolicyVersion: plan.compensation.policyVersion,
-            compensationEstimatedWorkMinutes: plan.compensation.estimatedWorkMinutes,
-            compensationRecommendedBasePayCents: plan.compensation.recommendedBasePayCents,
+            compensationRecommendationPolicyVersion: plan.compensation?.policyVersion||null,
+            compensationEstimatedWorkMinutes: plan.compensation?.estimatedWorkMinutes||null,
+            compensationRecommendedBasePayCents: plan.compensation?.recommendedBasePayCents||null,
             compensationMinimumEffectiveRateCentsPerHour:
-              plan.compensation.minimumEffectiveCompensationCentsPerHour,
+              plan.compensation?.minimumEffectiveCompensationCentsPerHour||null,
             compensationRecommendationAccepted: true,
             compensationRecommendationAcceptedAt: FieldValue.serverTimestamp(),
             updatedAt: FieldValue.serverTimestamp(),
@@ -4901,7 +4909,7 @@ exports.applySmartZonePlan = onCall(
         return {success: true, campaignId: input.campaignId, planId: plan.planId,
           zoneCount: existing.docs.length, replay: true,
           recommendedPayApplied: request.data?.useRecommendedPay === true,
-          recommendedBasePayCents: plan.compensation.recommendedBasePayCents};
+          recommendedBasePayCents: plan.compensation?.recommendedBasePayCents||null};
       }
       if (existing.docs.some((doc) => {
         const zone = doc.data() || {};
@@ -4979,6 +4987,7 @@ exports.applySmartZonePlan = onCall(
       estimatedHomes: plan.totalEstimatedProperties,
       smartZonePlanId: plan.planId,
       campaignWorkload: plan.campaignWorkload,
+      ...(input.executionMode==='own_team'?{teamCapacityPlan:plan.teamCapacity}:{}),
       workloadVersion: (currentCampaign.workloadVersion || 0) + 1,
       smartZoneSelectionIds: plan.selectionIds,
       smartZoneObjective: input.intelligenceContext.goal,
@@ -4986,11 +4995,11 @@ exports.applySmartZonePlan = onCall(
       workloadUpdatedAt: FieldValue.serverTimestamp(),
       smartZonePolicyVersion: plan.policyVersion,
       recommendedScalerCount: plan.recommendedScalerCount,
-      compensationRecommendationPolicyVersion: plan.compensation.policyVersion,
-      compensationEstimatedWorkMinutes: plan.compensation.estimatedWorkMinutes,
-      compensationRecommendedBasePayCents: plan.compensation.recommendedBasePayCents,
+      compensationRecommendationPolicyVersion: plan.compensation?.policyVersion||null,
+      compensationEstimatedWorkMinutes: plan.compensation?.estimatedWorkMinutes||null,
+      compensationRecommendedBasePayCents: plan.compensation?.recommendedBasePayCents||null,
       compensationMinimumEffectiveRateCentsPerHour:
-        plan.compensation.minimumEffectiveCompensationCentsPerHour,
+        plan.compensation?.minimumEffectiveCompensationCentsPerHour||null,
       ...(request.data?.useRecommendedPay === true ? {
         basePay: plan.compensation.recommendedBasePayCents / 100,
         compensationRecommendationAccepted: true,
@@ -5001,7 +5010,7 @@ exports.applySmartZonePlan = onCall(
       return {success: true, campaignId: input.campaignId, planId: plan.planId,
         zoneCount: plan.zones.length, replay: false,
         recommendedPayApplied: request.data?.useRecommendedPay === true,
-        recommendedBasePayCents: plan.compensation.recommendedBasePayCents};
+        recommendedBasePayCents: plan.compensation?.recommendedBasePayCents||null};
     });
     return result;
   }),

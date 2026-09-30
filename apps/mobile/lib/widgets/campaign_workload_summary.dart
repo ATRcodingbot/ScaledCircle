@@ -22,10 +22,26 @@ class CampaignWorkloadSummary extends StatelessWidget {
                 ? '${state?['requestedWorkloadSource'] == 'saved_recommendation' ? 'Saved recommendation request' : 'Requested'}: ${state!['requestedHours']} hours'
                 : 'Requested workload not set',
           ),
-          Text('Required Zones: ${state?['requiredZoneCount'] ?? 'Not set'}'),
-          Text(
-            'Zones ready for review: ${state?['validZoneCount'] ?? 0} of ${state?['requiredZoneCount'] ?? '—'}',
-          ),
+          if (state?['executionMode'] == 'own_team') ...[
+            Text(
+              'Planned marketers: ${state?['marketerCount'] ?? 'Review needed'}',
+            ),
+            Text(
+              state?['coveragePattern'] == 'split_streets'
+                  ? 'Split coverage on different streets'
+                  : state?['coveragePattern'] == 'stay_together'
+                  ? 'Stay together; unique coverage is not multiplied'
+                  : 'Coverage pattern: Review needed',
+            ),
+            Text(
+              'Supported team coverage sections: ${state?['validZoneCount'] ?? 0}',
+            ),
+          ] else
+            Text('Required Zones: ${state?['requiredZoneCount'] ?? 'Not set'}'),
+          if (state?['executionMode'] != 'own_team')
+            Text(
+              'Zones ready for review: ${state?['validZoneCount'] ?? 0} of ${state?['requiredZoneCount'] ?? '—'}',
+            ),
           Text(
             state?['supportedMinutes'] is num
                 ? 'Supported planning workload: ~${fieldWorkload(state!['supportedMinutes'] as num)}'
@@ -45,7 +61,11 @@ class CampaignWorkloadSummary extends StatelessWidget {
           if (onEdit != null)
             TextButton(
               onPressed: onEdit,
-              child: const Text('Set requested workload'),
+              child: Text(
+                state?['executionMode'] == 'own_team'
+                    ? 'Review team capacity'
+                    : 'Set requested workload',
+              ),
             ),
         ],
       ),

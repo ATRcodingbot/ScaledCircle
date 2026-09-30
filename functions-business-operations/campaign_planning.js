@@ -64,7 +64,7 @@ function createPlanner({db,FieldValue,authority,now=Date.now}){
  async function execute(request){
   const op=request.data.operation,input=request.data.input||{};await access(request,null);
   if(['campaignWorkloadContext','saveCampaignWorkload'].includes(op)){
-   m.strict(input,op==='saveCampaignWorkload'?['campaignId','requestedHours','expectedWorkloadVersion']:['campaignId']);
+   m.strict(input,op==='saveCampaignWorkload'?['campaignId','requestedHours','teamCapacity','expectedWorkloadVersion']:['campaignId']);
    return db.runTransaction(async tx=>{
     const a=await access(request,tx,op==='saveCampaignWorkload'),{c,zones}=await read(tx,a,input.campaignId);
     if(op==='campaignWorkloadContext'){
@@ -78,7 +78,8 @@ function createPlanner({db,FieldValue,authority,now=Date.now}){
     if(c.status!=='draft')m.fail('failed-precondition','Only an unfunded draft can change requested workload.');
     await clean(tx,c,zones);
     if(input.expectedWorkloadVersion!==(c.workloadVersion||0))m.fail('aborted','The requested workload changed. Refresh before saving.');
-    const value=workload.requirement(input.requestedHours),version=(c.workloadVersion||0)+1;
+    const value=executionMode(c)==='own_team'?require('./shared/own_team_capacity').requirement(input.teamCapacity):workload.requirement(input.requestedHours),version=(c.workloadVersion||0)+1;
+    if(executionMode(c)!=='own_team'&&input.teamCapacity!=null)m.fail('invalid-argument','Team capacity is only available for My Own Team campaigns.');
     tx.update(db.doc('campaigns/'+c.id),{campaignWorkload:value,workloadVersion:version,
       workloadUpdatedBy:a.actorUid,workloadUpdatedAt:FieldValue.serverTimestamp(),
       materialsAreaDigest:FieldValue.delete(),updatedAt:FieldValue.serverTimestamp()});

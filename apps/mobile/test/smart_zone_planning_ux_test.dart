@@ -24,7 +24,7 @@ void main() {
       expect(source, contains('Optional completion incentive'));
       expect(source, contains('Optional quality incentive'));
       expect(source, contains('Potential recommended payout'));
-      expect(source, contains('Below ScaledCircle recommended compensation'));
+      expect(source, contains('Below Scaled Circle recommended compensation'));
       expect(source, contains('Use Recommended Pay'));
       expect(source, contains("'useRecommendedPay': useRecommendedPay"));
       expect(source, contains('Campaign compensation remains fixed-price'));

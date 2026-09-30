@@ -5,7 +5,7 @@ const contract=require('./smart_zone_entry_contract'),fixture=require('./fixture
 const area=fixture.selectedBoundary;
 const active=planId=>({planId,status:'active',expiresAt:new Date(Date.now()+86400000)});
 function setup({entitlement=active('scale'),executionMode='own_team',context={uid:'owner',actorUid:'owner',role:'business',permissions:['campaigns','intelligence']},campaign={},profile={},preferences={},exists=true,resolution}={}){
-  const rows={campaigns:{businessId:'owner',status:'draft',executionMode,campaignType:'flyer_distribution',serviceArea:area,...campaign},
+  const rows={campaigns:{businessId:'owner',status:'draft',executionMode,campaignWorkload:executionMode==='own_team'?require('./own_team_capacity').requirement({sessionHours:5,marketerCount:1,coveragePattern:'split_streets'}):null,campaignType:'flyer_distribution',serviceArea:area,...campaign},
     businessSubscriptions:entitlement,businessGrowthProfiles:{businessUid:'owner',businessName:'Test',servicesOffered:['Roofing'],...profile},
     discoveryPreferences:{userUid:'owner',role:'business',schemaVersion:'ServiceAreaPreferencesV1',areas:[{id:'local',geometry:area}],defaultResponseGoal:'Roofing prospects',...preferences}};
   const readNames=[];
@@ -65,4 +65,10 @@ test('server-resolved missing ZIP boundary stays unresolved, without inventing a
   const s=setup({resolution:{results:[{id:'zip',latitude:39.15,longitude:-76.63,geographyType:'zcta',geometry:[],fullAddress:'21061, Maryland'}]}});
   const input=await s.smartZoneCampaign(s.request({analysisBoundary:undefined,areaSelection:{query:'21061',resultId:'zip'}}));
   assert.deepEqual(input.selectedBoundary,[]);assert.match(input.sourceAreaDigest,/^[a-f0-9]{64}$/);assert.equal(s.calls.resolver,1);
+});
+
+test('legacy own-team inputs require explicit review without provider acquisition',async()=>{
+ const s=setup({campaign:{campaignWorkload:require('./campaign_workload_authority').requirement(5)}});
+ await assert.rejects(s.smartZoneCampaign(s.request()),{code:'failed-precondition'});
+ assert.equal(s.calls.provider,0);assert.equal(s.calls.resolver,0);
 });

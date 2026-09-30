@@ -8,13 +8,14 @@ const app=initializeApp({projectId:'demo-smart-zone-intelligence'},'smart-zone-i
 after(async()=>{await db.terminate();await deleteApp(app);});
 let seq=0;
 test('multipart re-entry and replacing one saved Zone retain the other identity and never requery',async()=>{
- const s=await setup(),data={...s.data,desiredHours:8};
+ const s=await setup({executionMode:'marketplace'}),data={...s.data,desiredHours:8};
  const initial=await s.api.getSmartZonePlan({data});
  const runRef=db.doc(`propertyRecommendationWorkspaces/${s.businessId}/mappingRuns/${initial.recommendationRunId}`);
  const run=(await runRef.get()).data(),first=run.searchEvidence.candidates[0];
  // Explicit synthetic candidate variants exercise identity/transaction behavior only.
  const candidates=[0,1,2].map(i=>({...first,id:'synthetic_'+i,
    geometry:first.geometry.map(p=>({...p,longitude:p.longitude+i*.0003})),
+   networkSegments:first.networkSegments.map(e=>({from:{...e.from,longitude:e.from.longitude+i*.0003},to:{...e.to,longitude:e.to.longitude+i*.0003}})),
    features:first.features.map(f=>({...f,id:f.id+'_'+i,longitude:f.longitude+i*.0003}))}));
  await runRef.update({'searchEvidence.candidates':candidates});
  const plan=await s.api.getSmartZonePlan({data:{...data,recommendationRunId:initial.recommendationRunId}});
@@ -44,9 +45,9 @@ test('multipart re-entry and replacing one saved Zone retain the other identity 
  assert.equal((await db.doc('campaigns/'+s.campaignId).get()).data().campaignWorkload.requestedHours,10);
  assert.equal((await db.collection('assignmentCompensations').where('campaignId','==',s.campaignId).get()).size,0);
 });
-async function setup({snapshot=true,actorUid=null}={}){
+async function setup({snapshot=true,actorUid=null,executionMode='own_team'}={}){
   const businessId='intelligence_'+Date.now()+'_'+(++seq),campaignId=businessId+'_campaign';
-  const campaign={businessId,status:'draft',executionMode:'own_team',campaignType:'flyer_distribution',serviceArea:[],basePay:0,bonus:0};
+  const campaign={businessId,status:'draft',executionMode,campaignWorkload:executionMode==='own_team'?require('./own_team_capacity').requirement({sessionHours:5,marketerCount:1,coveragePattern:'split_streets'}):null,campaignType:'flyer_distribution',serviceArea:[],basePay:0,bonus:0};
   const profile={businessUid:businessId,businessName:'Fixture Business',servicesOffered:['Deck construction']};
   const prefs={userUid:businessId,role:'business',schemaVersion:'ServiceAreaPreferencesV1',
     areas:[{id:'local',geometry:fixture.selectedBoundary}],defaultResponseGoal:'Deck and remodeling prospects'};
@@ -173,7 +174,7 @@ test('Starter and Growth fail before any PI, recommendation cache or live provid
 });
 
 test('older client cannot silently replace two legacy areas with a new one-Zone plan',async()=>{
- const s=await setup();await db.doc('campaigns/'+s.campaignId).update({executionMode:'marketplace'});
+ const s=await setup();await db.doc('campaigns/'+s.campaignId).update({executionMode:'marketplace',campaignWorkload:FieldValue.delete()});
  const plan=await s.api.getSmartZonePlan({data:s.data});
  for(const id of ['first','second'])await db.doc('campaignZones/'+s.campaignId+'_'+id).set({campaignId:s.campaignId,businessId:s.businessId,status:'unassigned',serviceArea:fixture.selectedBoundary});
  const before=(await db.doc('campaigns/'+s.campaignId).get()).data();

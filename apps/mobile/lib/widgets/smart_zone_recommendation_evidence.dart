@@ -44,7 +44,9 @@ class SmartZoneRecommendationEvidence extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Zone ${selectedZoneIndex + 1}',
+            plan['executionMode'] == 'own_team'
+                ? 'Team section ${selectedZoneIndex + 1}'
+                : 'Zone ${selectedZoneIndex + 1}',
             style: Theme.of(context).textTheme.titleLarge,
           ),
           ZoneIntelligenceSummary(
@@ -59,9 +61,11 @@ class SmartZoneRecommendationEvidence extends StatelessWidget {
           const SizedBox(height: 12),
           if (recommendation['goal'] != null)
             Text('Campaign goal: ${recommendation['goal']}'),
-          if (plan['campaignWorkload'] is Map)
+          if (plan['executionMode'] == 'own_team')
+            Text('Team coverage sections: ${zones.length} · Unsaved preview')
+          else if (plan['campaignWorkload'] is Map)
             Text(
-              'Required Zones: ${plan['campaignWorkload']['requiredZoneCount']} · Recommended: ${zones.length}',
+              'Required Zones: ${plan['campaignWorkload']['requiredZoneCount']} · Preview: ${zones.length} (not saved)',
             ),
           if (recommendation['supportedMinutes'] is num)
             Text(

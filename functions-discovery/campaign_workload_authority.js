@@ -37,6 +37,7 @@ function validEvidence(zone) {
     (zone.serverZoneGeometryDigest == null || zone.serverZoneGeometryDigest === digest);
 }
 function summary(campaign, zones) {
+  if(campaign.executionMode==='own_team')return require('./own_team_capacity').summary(campaign,zones);
   let required;
   try {
     required = requirement(campaign.campaignWorkload?.requestedHours);
@@ -63,7 +64,7 @@ function summary(campaign, zones) {
     supportedMinutes: valid.length ? valid.reduce((n,z) => n + z.zoneIntelligence.workload.minutes, 0) : null,
     invalidZoneIds: invalid,
     reason: ready ? null : invalid.length ? 'Review current evidence and assignment eligibility for every Zone.'
-      : missing > 0 ? `Add ${missing} more Zone${missing === 1 ? '' : 's'} for this campaign.`
+      : zones.length === 0 ? 'Choose or draw your campaign area.' : missing > 0 ? `Add ${missing} more Zone${missing === 1 ? '' : 's'} for this campaign.`
       : 'Remove extra Zones or change the requested campaign workload before review.'};
 }
 function assertComplete(campaign, zones, ErrorType) {
@@ -77,6 +78,7 @@ function assertComplete(campaign, zones, ErrorType) {
 // Historical readback is informational only. It never creates workload authority
 // or changes the saved hours, polygons, assignments or approval state.
 function legacySummary(campaign, zones, run) {
+  if(campaign.executionMode==='own_team')return summary(campaign,zones);
   if (campaign.campaignWorkload || run?.businessId !== campaign.businessId ||
       run?.campaignId !== campaign.id || run?.status !== 'complete') return summary(campaign, zones);
   let required;

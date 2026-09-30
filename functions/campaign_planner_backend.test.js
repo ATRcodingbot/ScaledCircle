@@ -31,7 +31,7 @@ test('Starter/manual workload is server-authoritative, audited and atomically ve
  const outcomes=await Promise.allSettled([save(10),save(8)]);
  assert.equal(outcomes.filter(v=>v.status==='fulfilled').length,1);
  const state=await call(b,'campaignWorkloadContext',{campaignId:c});
- assert.equal(state.requiredZoneCount,2);assert.equal(state.ready,false);assert.match(state.reason,/Add 2 more/);
+ assert.equal(state.requiredZoneCount,2);assert.equal(state.ready,false);assert.match(state.reason,/Choose or draw/);
  assert.equal((await db.collection(`campaigns/${c}/planningAudit`).get()).size,1);
  await assert.rejects(materials(b,c,{basePay:50,bonus:50}),{code:'failed-precondition'});
  await db.doc('campaignPayments/'+c).set({campaignId:c});
@@ -66,3 +66,21 @@ test('legacy analysis without current geometry stays unavailable, and exact-loca
 test('legacy demand-derived Smart Zone counts are not reused as property or materials evidence',()=>{const z={id:'smart',serviceArea:area,analysisStatus:'complete',serverZoneGeometryDigest:require('./operational_layer').zoneGeometryDigest(area),estimatedHomes:25,estimatedWorkMinutes:45,homeCountMethod:'smart_zone_conservative_density_v1',smartZonePolicyVersion:'fixture'};const out=intelligence([z]);assert.equal(out.zones[0].workloadMinutes,null);assert.equal(out.zones[0].residentialProperties,null);assert.equal(out.zones[0].status,'unavailable');assert.match(out.zones[0].limitations[0],/requested work hours/);assert.equal(out.suggestedQuantity,null);assert.equal(intelligence([{...z,serverZoneGeometryDigest:'stale'}]).zones[0].workloadMinutes,null);});
 
 test('classified mapped features retain provenance and never become delivery points or material quantity',()=>{const z={id:'observed',serviceArea:area,analysisStatus:'complete',serverZoneGeometryDigest:require('./operational_layer').zoneGeometryDigest(area),estimatedHomes:999,estimatedWorkMinutes:45,homeCountMethod:'osm_classified_mapped_features_v2',smartZonePolicyVersion:'SmartZonePlanningV5',smartZoneTargetEvidence:{geometryDigest:require('./operational_layer').zoneGeometryDigest(area),measure:'mapped_target_features',eligibleMappedFeatureCount:12,source:'OpenStreetMap',dataTimestamp:'2026-09-26T18:00:00Z',verifiedDeliveryPoints:false,targetIntent:'residential',limitations:['Dataset may omit buildings.']}};const out=intelligence([z]);assert.equal(out.zones[0].residentialProperties,12);assert.equal(out.zones[0].metric,'Mapped residential target features');assert.equal(out.zones[0].source,'OpenStreetMap');assert.equal(out.zones[0].dataDate,'2026-09-26T18:00:00Z');assert.equal(out.eligibleDistributionPoints,null);assert.equal(out.suggestedQuantity,null);assert.match(out.zones[0].limitations.join(' '),/not distinct households/);assert.equal(intelligence([{...z,serverZoneGeometryDigest:'stale'}]).zones[0].residentialProperties,null);assert.equal(intelligence([{...z,smartZoneTargetEvidence:null}]).zones[0].residentialProperties,null);const business={...z,smartZoneTargetEvidence:{...z.smartZoneTargetEvidence,targetIntent:'business'}};assert.equal(intelligence([business]).zones[0].metric,'Mapped business target features');const retrievedOnly={...z,smartZoneTargetEvidence:{...z.smartZoneTargetEvidence,dataTimestamp:null,fetchedAt:'2026-09-26T19:00:00Z'}};assert.equal(intelligence([retrievedOnly]).zones[0].dataDate,null);assert.equal(intelligence([retrievedOnly]).zones[0].retrievedAt,'2026-09-26T19:00:00Z');assert.equal(intelligence([{...z,smartZoneTargetEvidence:{...z.smartZoneTargetEvidence,geometryDigest:'old-area'}}]).zones[0].residentialProperties,null);});
+
+test('own-team capacity is explicit, versioned, audited and isolated; it creates no assignment or people',async()=>{
+ const b=await owner(),c=await create(b),other=await owner();
+ const before=(await db.doc('campaigns/'+c).get()).data();
+ assert.equal((await call(b,'campaignWorkloadContext',{campaignId:c})).ready,false);
+ assert.deepEqual((await db.doc('campaigns/'+c).get()).data(),before);
+ const input={campaignId:c,requestedHours:4,teamCapacity:{sessionHours:4,marketerCount:3,coveragePattern:'split_streets'},expectedWorkloadVersion:0};
+ await assert.rejects(call(b,'saveCampaignWorkload',input,other),{code:'permission-denied'});
+ await assert.rejects(call(b,'saveCampaignWorkload',{...input,teamCapacity:{...input.teamCapacity,marketerCount:1.5}}),{code:'invalid-argument'});
+ const r=await call(b,'saveCampaignWorkload',input);assert.equal(r.targetPersonHours,12);assert.equal(r.requiredZoneCount,null);
+ await assert.rejects(call(b,'saveCampaignWorkload',input),{code:'aborted'});
+ const after=(await db.doc('campaigns/'+c).get()).data();assert.equal(after.campaignWorkload.version,'OwnTeamCapacityV1');
+ assert.equal((await db.collection(`campaigns/${c}/planningAudit`).get()).size,1);
+ for(const collection of ['assignmentCompensations','campaignPayments','campaignZones'])assert.equal((await db.collection(collection).where('campaignId','==',c).get()).size,0);
+ assert.equal((await db.collection(`businessOperations/${b}/people`).get()).size,0);
+ const marketplace=await create(b,{executionMode:'marketplace'});
+ await assert.rejects(call(b,'saveCampaignWorkload',{...input,campaignId:marketplace}),{code:'invalid-argument'});
+});
