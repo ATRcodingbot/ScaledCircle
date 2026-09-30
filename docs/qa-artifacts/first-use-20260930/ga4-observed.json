@@ -1,0 +1,15 @@
+{
+  "source": "GA4 authenticated Pages and screens report, read-only browser inspection",
+  "property": "548368356",
+  "reportStart": "2026-09-27",
+  "reportEnd": "2026-09-29",
+  "readDate": "2026-09-30",
+  "views": 61,
+  "activeUsers": 5,
+  "eventCount": 110,
+  "keyEvents": 0,
+  "pages": {"/":18,"/app":16,"/businesses":11,"/i":6,"/pricing":5,"/login":2,"/how-it-works":1,"/privacy":1,"/scalers":1},
+  "registrationRowPresent": false,
+  "customerConversionRate": null,
+  "limitations": ["Partial first deployment day", "Controlled traffic included and not fully separable", "Unnamed registration route does not produce distinct page view", "No account or purchase outcome events", "No identity join with Business records"]
+}

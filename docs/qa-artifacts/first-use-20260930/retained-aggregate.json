@@ -1,0 +1,105 @@
+{
+  "readAtUtc": "2026-09-30T10:12:54.888085+00:00",
+  "limitPerQuery": 200,
+  "privacy": "Aggregate output only; no record IDs, emails, addresses, content or tokens retained.",
+  "cohorts": {
+    "unclassified_not_assumed_customer": {
+      "accounts": 1,
+      "createdSinceAnalyticsDeployment": 0,
+      "publicFinalizationSource": 1,
+      "completedAtRecorded": 1,
+      "currentlyProfileComplete": 1,
+      "subscriptionSources": {
+        "stripe": 1
+      },
+      "coreRecordTotals": {
+        "requests": 0,
+        "contactImports": 0,
+        "customers": 0,
+        "items": 0
+      },
+      "successfulRequestOperations": {},
+      "campaignModes": {}
+    },
+    "founder_operated": {
+      "accounts": 1,
+      "createdSinceAnalyticsDeployment": 0,
+      "publicFinalizationSource": 1,
+      "completedAtRecorded": 0,
+      "currentlyProfileComplete": 1,
+      "subscriptionSources": {
+        "internal_qa": 1
+      },
+      "coreRecordTotals": {
+        "requests": 3,
+        "contactImports": 0,
+        "customers": 9,
+        "items": 0
+      },
+      "successfulRequestOperations": {
+        "changeCampaignListState": 1,
+        "saveSchedulingAvailability": 2
+      },
+      "campaignModes": {
+        "not_recorded": 5
+      }
+    },
+    "confirmed_controlled_or_reviewer": {
+      "accounts": 2,
+      "createdSinceAnalyticsDeployment": 0,
+      "publicFinalizationSource": 2,
+      "completedAtRecorded": 0,
+      "currentlyProfileComplete": 0,
+      "subscriptionSources": {
+        "internal_qa": 1,
+        "internal_beta": 1
+      },
+      "coreRecordTotals": {
+        "requests": 2,
+        "contactImports": 0,
+        "customers": 0,
+        "items": 0
+      },
+      "successfulRequestOperations": {
+        "changeCampaignListState": 2
+      },
+      "campaignModes": {
+        "own_team": 3
+      }
+    }
+  },
+  "subscriptions": {
+    "total": 5,
+    "sources": {
+      "stripe": 1,
+      "internal_qa": 2,
+      "internal_beta": 1,
+      "not_recorded": 1
+    },
+    "statuses": {
+      "active": 5
+    }
+  },
+  "subscriptionReceipts": {
+    "total": 1,
+    "modes": {
+      "live": 1
+    },
+    "internalCertification": 0,
+    "positiveLiveNonCertification": 1
+  },
+  "walletPendingCheckoutMarkers": 1,
+  "readDocumentCounts": {
+    "users": 4,
+    "businessSubscriptions": 5,
+    "businessOnboarding": 1,
+    "businessGrowthProfiles": 3,
+    "subscriptionPaymentReceipts": 1,
+    "wallets": 9,
+    "campaigns": 15,
+    "requests": 5,
+    "contactImports": 0,
+    "customers": 9,
+    "items": 0
+  }
+}
