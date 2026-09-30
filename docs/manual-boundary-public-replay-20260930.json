@@ -1,0 +1,886 @@
+{
+  "proof": "Local replay of actual production cache and corrected offline extraction of the same retained public PBF. No production acceptance, provider call or cloud write.",
+  "source": "Geofabrik Maryland / OpenStreetMap",
+  "rows": [
+    {
+      "label": "nearby-public-A",
+      "proof": "Nearby public-data fixture, not Founder original boundary",
+      "geometry": [
+        {
+          "longitude": -76.642,
+          "latitude": 39.177
+        },
+        {
+          "longitude": -76.63,
+          "latitude": 39.177
+        },
+        {
+          "longitude": -76.63,
+          "latitude": 39.184
+        },
+        {
+          "longitude": -76.642,
+          "latitude": 39.184
+        }
+      ],
+      "bounds": [
+        -76.642,
+        39.177,
+        -76.63,
+        39.184
+      ],
+      "results": [
+        {
+          "label": "production-cache",
+          "rawElementCount": 228,
+          "result": {
+            "version": "ZoneIntelligenceV1",
+            "geometryDigest": "17b004586f6e643bb836d851bacb8fb979117c478902daba24672eb16acf298e",
+            "status": "partial",
+            "mode": "manual",
+            "targetIntent": "residential",
+            "campaignType": "flyer_distribution",
+            "mappedTargetCount": null,
+            "propertyMix": null,
+            "supportingStreetMeters": 1064,
+            "workload": null,
+            "regionalContext": null,
+            "reasons": [],
+            "source": {
+              "name": "OpenStreetMap",
+              "dataTimestamp": "2026-09-25T20:24:36Z",
+              "fetchedAt": "2026-09-26T21:55:03.501020+00:00",
+              "provider": "geofabrik_maryland",
+              "snapshotAt": "2026-09-25T20:24:36Z",
+              "retrievedAt": "2026-09-26T21:55:03.501020+00:00",
+              "importedAt": "2026-09-26T23:17:16.762Z",
+              "sourceHash": "fca54b6b3d2cf6632e79a6a93413d77c0019743ff1bbef52e93188a28d79fc20",
+              "bounds": [
+                -76.6945750000126,
+                39.108224999811924,
+                -76.58875599983642,
+                39.21576000007699
+              ],
+              "geometryVersion": "WGS84_OSM_complete_geometry_v2",
+              "datasetVersion": "SmartZonePublicCacheV1",
+              "parserVersion": "SmartZoneOsmGeometryV2",
+              "freshness": "fresh",
+              "transport": "regional_cache",
+              "evidenceHash": "d4f5693bde77247055098f490d17b7ab0f3d94a1f0eceb99697c92bb59781d99",
+              "queryBounds": [
+                -76.642,
+                39.177,
+                -76.63,
+                39.184
+              ],
+              "evidenceBounds": [
+                -76.64779465159556,
+                39.17250844412504,
+                -76.62420534840443,
+                39.188491555874954
+              ],
+              "geometryDigest": "17b004586f6e643bb836d851bacb8fb979117c478902daba24672eb16acf298e",
+              "coverageState": "complete",
+              "requestedTileCount": 2,
+              "availableTileCount": 2,
+              "missingTileKeys": [],
+              "buildingInventoryComplete": false
+            },
+            "limitations": [
+              "This cached source used a selected-object import. A complete building inventory has not been established.",
+              "0 of 0 classified mapped features have supporting local-street evidence.",
+              "The street network may contain separate components; no connectors or walking itinerary are inferred.",
+              "Uncertain exclusion features are conservatively avoided.",
+              "Mapped features are not verified households, entrances, delivery points or a material quantity.",
+              "Property condition, ownership and customer intent are not established.",
+              "Local access and actual field duration need review."
+            ],
+            "executionRouteVerified": false,
+            "analysisRevision": "ManualBoundaryEvidenceV2",
+            "acquisition": null,
+            "coverage": {
+              "state": "complete",
+              "inventoryComplete": false,
+              "observationsOnly": true,
+              "requestedTileCount": 2,
+              "availableTileCount": 2
+            },
+            "unclassifiedMappedFeatureCount": 0,
+            "walkingEvidence": {
+              "minutes": 26.603752542211158,
+              "networkTraversalFactor": 2,
+              "walkingMetersPerMinute": 80,
+              "walkingOnly": true,
+              "partialCoverage": false,
+              "executionRouteVerified": false
+            },
+            "workloadComponents": null,
+            "diagnostics": {
+              "acquisitionState": "supported_snapshot",
+              "inputTargetFeatureCount": 27,
+              "filterCounts": {
+                "inputFeatures": 27,
+                "invalidPoint": 0,
+                "outsideBoundary": 20,
+                "outsideCompleteCoverage": 0,
+                "excludedLand": 7,
+                "otherIntent": 0,
+                "duplicateClassified": 0,
+                "duplicateUnclassified": 0,
+                "inputRoadWays": 142,
+                "permittedRoadWays": 38
+              },
+              "inputRoadWayCount": 142,
+              "inputExclusionCount": 44,
+              "inputUnresolvedExclusionCount": 9,
+              "classifiedInBoundaryCount": 0,
+              "unclassifiedInBoundaryCount": 0,
+              "streetSupportedTargetCount": 0,
+              "permittedStreetSegmentCount": 49,
+              "targetServingStreetSegmentCount": 0,
+              "geometryDiagnostics": {
+                "mappedFootprints": 44,
+                "innerHoles": 1,
+                "localizedUncertainties": 6,
+                "unboundedUncertainties": 0,
+                "mappedPointAssociations": 3,
+                "features": [
+                  {
+                    "sourceId": "node/358249635",
+                    "kind": "school",
+                    "reasons": [
+                      "point_only_no_footprint"
+                    ],
+                    "disposition": "covered_by_mapped_footprint",
+                    "guardMeters": null,
+                    "coveredBy": [
+                      "way/1517305322"
+                    ]
+                  },
+                  {
+                    "sourceId": "node/358249637",
+                    "kind": "institution",
+                    "reasons": [
+                      "point_only_no_footprint"
+                    ],
+                    "disposition": "local_point_uncertainty_guard",
+                    "guardMeters": 500,
+                    "coveredBy": []
+                  },
+                  {
+                    "sourceId": "node/358254538",
+                    "kind": "school",
+                    "reasons": [
+                      "point_only_no_footprint"
+                    ],
+                    "disposition": "covered_by_mapped_footprint",
+                    "guardMeters": null,
+                    "coveredBy": [
+                      "way/1517305322"
+                    ]
+                  },
+                  {
+                    "sourceId": "node/358250354",
+                    "kind": "institution",
+                    "reasons": [
+                      "point_only_no_footprint"
+                    ],
+                    "disposition": "local_point_uncertainty_guard",
+                    "guardMeters": 500,
+                    "coveredBy": []
+                  },
+                  {
+                    "sourceId": "node/358250361",
+                    "kind": "park",
+                    "reasons": [
+                      "point_only_no_footprint"
+                    ],
+                    "disposition": "covered_by_mapped_footprint",
+                    "guardMeters": null,
+                    "coveredBy": [
+                      "way/263914498"
+                    ]
+                  },
+                  {
+                    "sourceId": "node/850370926",
+                    "kind": "restricted",
+                    "reasons": [
+                      "point_only_no_footprint"
+                    ],
+                    "disposition": "local_point_uncertainty_guard",
+                    "guardMeters": 500,
+                    "coveredBy": []
+                  },
+                  {
+                    "sourceId": "node/850371558",
+                    "kind": "restricted",
+                    "reasons": [
+                      "point_only_no_footprint"
+                    ],
+                    "disposition": "local_point_uncertainty_guard",
+                    "guardMeters": 500,
+                    "coveredBy": []
+                  },
+                  {
+                    "sourceId": "node/3812783994",
+                    "kind": "restricted",
+                    "reasons": [
+                      "point_only_no_footprint"
+                    ],
+                    "disposition": "local_point_uncertainty_guard",
+                    "guardMeters": 500,
+                    "coveredBy": []
+                  },
+                  {
+                    "sourceId": "node/3812783997",
+                    "kind": "restricted",
+                    "reasons": [
+                      "point_only_no_footprint"
+                    ],
+                    "disposition": "local_point_uncertainty_guard",
+                    "guardMeters": 500,
+                    "coveredBy": []
+                  }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "label": "corrected-local-import",
+          "rawElementCount": 715,
+          "result": {
+            "version": "ZoneIntelligenceV1",
+            "geometryDigest": "17b004586f6e643bb836d851bacb8fb979117c478902daba24672eb16acf298e",
+            "status": "partial",
+            "mode": "manual",
+            "targetIntent": "residential",
+            "campaignType": "flyer_distribution",
+            "mappedTargetCount": null,
+            "propertyMix": null,
+            "supportingStreetMeters": 1064,
+            "workload": null,
+            "regionalContext": null,
+            "reasons": [],
+            "source": {
+              "name": "OpenStreetMap",
+              "dataTimestamp": "2026-09-25T20:24:36Z",
+              "fetchedAt": "2026-09-26T21:55:03.501020+00:00",
+              "provider": "geofabrik_maryland",
+              "snapshotAt": "2026-09-25T20:24:36Z",
+              "retrievedAt": "2026-09-26T21:55:03.501020+00:00",
+              "importedAt": "2026-09-30T13:35:06.465Z",
+              "sourceHash": "fca54b6b3d2cf6632e79a6a93413d77c0019743ff1bbef52e93188a28d79fc20",
+              "bounds": [
+                -76.6945750000126,
+                39.108224999811924,
+                -76.58875599983642,
+                39.21576000007699
+              ],
+              "geometryVersion": "WGS84_OSM_complete_geometry_v2",
+              "datasetVersion": "SmartZonePublicCacheV1",
+              "parserVersion": "SmartZoneOsmGeometryV2",
+              "freshness": "fresh",
+              "transport": "regional_cache",
+              "evidenceHash": "1f96d8a155d23d30184a035fee5bd82b608e63f4c580371a1d5cd9511d98cf09",
+              "queryBounds": [
+                -76.642,
+                39.177,
+                -76.63,
+                39.184
+              ],
+              "evidenceBounds": [
+                -76.64779465159556,
+                39.17250844412504,
+                -76.62420534840443,
+                39.188491555874954
+              ],
+              "geometryDigest": "17b004586f6e643bb836d851bacb8fb979117c478902daba24672eb16acf298e",
+              "coverageState": "complete",
+              "requestedTileCount": 2,
+              "availableTileCount": 2,
+              "missingTileKeys": [],
+              "buildingInventoryComplete": true
+            },
+            "limitations": [
+              "Some mapped buildings or addresses have no supported residential/business classification.",
+              "0 of 0 classified mapped features have supporting local-street evidence.",
+              "The street network may contain separate components; no connectors or walking itinerary are inferred.",
+              "Uncertain exclusion features are conservatively avoided.",
+              "Mapped features are not verified households, entrances, delivery points or a material quantity.",
+              "Property condition, ownership and customer intent are not established.",
+              "Local access and actual field duration need review."
+            ],
+            "executionRouteVerified": false,
+            "analysisRevision": "ManualBoundaryEvidenceV2",
+            "acquisition": null,
+            "coverage": {
+              "state": "complete",
+              "inventoryComplete": true,
+              "observationsOnly": true,
+              "requestedTileCount": 2,
+              "availableTileCount": 2
+            },
+            "unclassifiedMappedFeatureCount": 46,
+            "walkingEvidence": {
+              "minutes": 26.603752542211158,
+              "networkTraversalFactor": 2,
+              "walkingMetersPerMinute": 80,
+              "walkingOnly": true,
+              "partialCoverage": false,
+              "executionRouteVerified": false
+            },
+            "workloadComponents": null,
+            "diagnostics": {
+              "acquisitionState": "supported_snapshot",
+              "inputTargetFeatureCount": 513,
+              "filterCounts": {
+                "inputFeatures": 513,
+                "invalidPoint": 0,
+                "outsideBoundary": 32,
+                "outsideCompleteCoverage": 0,
+                "excludedLand": 435,
+                "otherIntent": 0,
+                "duplicateClassified": 0,
+                "duplicateUnclassified": 0,
+                "inputRoadWays": 142,
+                "permittedRoadWays": 38
+              },
+              "inputRoadWayCount": 142,
+              "inputExclusionCount": 44,
+              "inputUnresolvedExclusionCount": 9,
+              "classifiedInBoundaryCount": 0,
+              "unclassifiedInBoundaryCount": 46,
+              "streetSupportedTargetCount": 0,
+              "permittedStreetSegmentCount": 49,
+              "targetServingStreetSegmentCount": 0,
+              "geometryDiagnostics": {
+                "mappedFootprints": 44,
+                "innerHoles": 1,
+                "localizedUncertainties": 6,
+                "unboundedUncertainties": 0,
+                "mappedPointAssociations": 3,
+                "features": [
+                  {
+                    "sourceId": "node/358249635",
+                    "kind": "school",
+                    "reasons": [
+                      "point_only_no_footprint"
+                    ],
+                    "disposition": "covered_by_mapped_footprint",
+                    "guardMeters": null,
+                    "coveredBy": [
+                      "way/1517305322"
+                    ]
+                  },
+                  {
+                    "sourceId": "node/358249637",
+                    "kind": "institution",
+                    "reasons": [
+                      "point_only_no_footprint"
+                    ],
+                    "disposition": "local_point_uncertainty_guard",
+                    "guardMeters": 500,
+                    "coveredBy": []
+                  },
+                  {
+                    "sourceId": "node/358254538",
+                    "kind": "school",
+                    "reasons": [
+                      "point_only_no_footprint"
+                    ],
+                    "disposition": "covered_by_mapped_footprint",
+                    "guardMeters": null,
+                    "coveredBy": [
+                      "way/1517305322"
+                    ]
+                  },
+                  {
+                    "sourceId": "node/358250354",
+                    "kind": "institution",
+                    "reasons": [
+                      "point_only_no_footprint"
+                    ],
+                    "disposition": "local_point_uncertainty_guard",
+                    "guardMeters": 500,
+                    "coveredBy": []
+                  },
+                  {
+                    "sourceId": "node/358250361",
+                    "kind": "park",
+                    "reasons": [
+                      "point_only_no_footprint"
+                    ],
+                    "disposition": "covered_by_mapped_footprint",
+                    "guardMeters": null,
+                    "coveredBy": [
+                      "way/263914498"
+                    ]
+                  },
+                  {
+                    "sourceId": "node/850370926",
+                    "kind": "restricted",
+                    "reasons": [
+                      "point_only_no_footprint"
+                    ],
+                    "disposition": "local_point_uncertainty_guard",
+                    "guardMeters": 500,
+                    "coveredBy": []
+                  },
+                  {
+                    "sourceId": "node/850371558",
+                    "kind": "restricted",
+                    "reasons": [
+                      "point_only_no_footprint"
+                    ],
+                    "disposition": "local_point_uncertainty_guard",
+                    "guardMeters": 500,
+                    "coveredBy": []
+                  },
+                  {
+                    "sourceId": "node/3812783994",
+                    "kind": "restricted",
+                    "reasons": [
+                      "point_only_no_footprint"
+                    ],
+                    "disposition": "local_point_uncertainty_guard",
+                    "guardMeters": 500,
+                    "coveredBy": []
+                  },
+                  {
+                    "sourceId": "node/3812783997",
+                    "kind": "restricted",
+                    "reasons": [
+                      "point_only_no_footprint"
+                    ],
+                    "disposition": "local_point_uncertainty_guard",
+                    "guardMeters": 500,
+                    "coveredBy": []
+                  }
+                ]
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "label": "nearby-public-B",
+      "proof": "Nearby public-data fixture, not Founder original boundary",
+      "geometry": [
+        {
+          "longitude": -76.654,
+          "latitude": 39.181
+        },
+        {
+          "longitude": -76.64,
+          "latitude": 39.181
+        },
+        {
+          "longitude": -76.64,
+          "latitude": 39.186
+        },
+        {
+          "longitude": -76.654,
+          "latitude": 39.186
+        }
+      ],
+      "bounds": [
+        -76.654,
+        39.181,
+        -76.64,
+        39.186
+      ],
+      "results": [
+        {
+          "label": "production-cache",
+          "rawElementCount": 206,
+          "result": {
+            "version": "ZoneIntelligenceV1",
+            "geometryDigest": "189725133519fa71866e11855c8e635a62fa9534bbc9ac1b3f4273106e29ce54",
+            "status": "partial",
+            "mode": "manual",
+            "targetIntent": "residential",
+            "campaignType": "flyer_distribution",
+            "mappedTargetCount": null,
+            "propertyMix": null,
+            "supportingStreetMeters": 1425,
+            "workload": null,
+            "regionalContext": null,
+            "reasons": [],
+            "source": {
+              "name": "OpenStreetMap",
+              "dataTimestamp": "2026-09-25T20:24:36Z",
+              "fetchedAt": "2026-09-26T21:55:03.501020+00:00",
+              "provider": "geofabrik_maryland",
+              "snapshotAt": "2026-09-25T20:24:36Z",
+              "retrievedAt": "2026-09-26T21:55:03.501020+00:00",
+              "importedAt": "2026-09-26T23:17:16.762Z",
+              "sourceHash": "fca54b6b3d2cf6632e79a6a93413d77c0019743ff1bbef52e93188a28d79fc20",
+              "bounds": [
+                -76.6945750000126,
+                39.108224999811924,
+                -76.58875599983642,
+                39.21576000007699
+              ],
+              "geometryVersion": "WGS84_OSM_complete_geometry_v2",
+              "datasetVersion": "SmartZonePublicCacheV1",
+              "parserVersion": "SmartZoneOsmGeometryV2",
+              "freshness": "fresh",
+              "transport": "regional_cache",
+              "evidenceHash": "d4f5693bde77247055098f490d17b7ab0f3d94a1f0eceb99697c92bb59781d99",
+              "queryBounds": [
+                -76.654,
+                39.181,
+                -76.64,
+                39.186
+              ],
+              "evidenceBounds": [
+                -76.65979481647835,
+                39.17650844412504,
+                -76.63420518352164,
+                39.19049155587496
+              ],
+              "geometryDigest": "189725133519fa71866e11855c8e635a62fa9534bbc9ac1b3f4273106e29ce54",
+              "coverageState": "complete",
+              "requestedTileCount": 2,
+              "availableTileCount": 2,
+              "missingTileKeys": [],
+              "buildingInventoryComplete": false
+            },
+            "limitations": [
+              "This cached source used a selected-object import. A complete building inventory has not been established.",
+              "0 of 0 classified mapped features have supporting local-street evidence.",
+              "The street network may contain separate components; no connectors or walking itinerary are inferred.",
+              "Uncertain exclusion features are conservatively avoided.",
+              "Mapped features are not verified households, entrances, delivery points or a material quantity.",
+              "Property condition, ownership and customer intent are not established.",
+              "Local access and actual field duration need review."
+            ],
+            "executionRouteVerified": false,
+            "analysisRevision": "ManualBoundaryEvidenceV2",
+            "acquisition": null,
+            "coverage": {
+              "state": "complete",
+              "inventoryComplete": false,
+              "observationsOnly": true,
+              "requestedTileCount": 2,
+              "availableTileCount": 2
+            },
+            "unclassifiedMappedFeatureCount": 0,
+            "walkingEvidence": {
+              "minutes": 35.620855074844016,
+              "networkTraversalFactor": 2,
+              "walkingMetersPerMinute": 80,
+              "walkingOnly": true,
+              "partialCoverage": false,
+              "executionRouteVerified": false
+            },
+            "workloadComponents": null,
+            "diagnostics": {
+              "acquisitionState": "supported_snapshot",
+              "inputTargetFeatureCount": 11,
+              "filterCounts": {
+                "inputFeatures": 11,
+                "invalidPoint": 0,
+                "outsideBoundary": 5,
+                "outsideCompleteCoverage": 0,
+                "excludedLand": 6,
+                "otherIntent": 0,
+                "duplicateClassified": 0,
+                "duplicateUnclassified": 0,
+                "inputRoadWays": 154,
+                "permittedRoadWays": 36
+              },
+              "inputRoadWayCount": 154,
+              "inputExclusionCount": 34,
+              "inputUnresolvedExclusionCount": 7,
+              "classifiedInBoundaryCount": 0,
+              "unclassifiedInBoundaryCount": 0,
+              "streetSupportedTargetCount": 0,
+              "permittedStreetSegmentCount": 70,
+              "targetServingStreetSegmentCount": 0,
+              "geometryDiagnostics": {
+                "mappedFootprints": 34,
+                "innerHoles": 176,
+                "localizedUncertainties": 5,
+                "unboundedUncertainties": 0,
+                "mappedPointAssociations": 2,
+                "features": [
+                  {
+                    "sourceId": "node/358249635",
+                    "kind": "school",
+                    "reasons": [
+                      "point_only_no_footprint"
+                    ],
+                    "disposition": "covered_by_mapped_footprint",
+                    "guardMeters": null,
+                    "coveredBy": [
+                      "way/1517305322"
+                    ]
+                  },
+                  {
+                    "sourceId": "node/358249637",
+                    "kind": "institution",
+                    "reasons": [
+                      "point_only_no_footprint"
+                    ],
+                    "disposition": "local_point_uncertainty_guard",
+                    "guardMeters": 500,
+                    "coveredBy": []
+                  },
+                  {
+                    "sourceId": "node/358254538",
+                    "kind": "school",
+                    "reasons": [
+                      "point_only_no_footprint"
+                    ],
+                    "disposition": "covered_by_mapped_footprint",
+                    "guardMeters": null,
+                    "coveredBy": [
+                      "way/1517305322"
+                    ]
+                  },
+                  {
+                    "sourceId": "node/5029239897",
+                    "kind": "restricted",
+                    "reasons": [
+                      "point_only_no_footprint"
+                    ],
+                    "disposition": "local_access_guard",
+                    "guardMeters": 30,
+                    "coveredBy": []
+                  },
+                  {
+                    "sourceId": "node/12313212763",
+                    "kind": "restricted",
+                    "reasons": [
+                      "point_only_no_footprint"
+                    ],
+                    "disposition": "local_access_guard",
+                    "guardMeters": 30,
+                    "coveredBy": []
+                  },
+                  {
+                    "sourceId": "node/3812783994",
+                    "kind": "restricted",
+                    "reasons": [
+                      "point_only_no_footprint"
+                    ],
+                    "disposition": "local_point_uncertainty_guard",
+                    "guardMeters": 500,
+                    "coveredBy": []
+                  },
+                  {
+                    "sourceId": "node/3812783997",
+                    "kind": "restricted",
+                    "reasons": [
+                      "point_only_no_footprint"
+                    ],
+                    "disposition": "local_point_uncertainty_guard",
+                    "guardMeters": 500,
+                    "coveredBy": []
+                  }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "label": "corrected-local-import",
+          "rawElementCount": 1016,
+          "result": {
+            "version": "ZoneIntelligenceV1",
+            "geometryDigest": "189725133519fa71866e11855c8e635a62fa9534bbc9ac1b3f4273106e29ce54",
+            "status": "partial",
+            "mode": "manual",
+            "targetIntent": "residential",
+            "campaignType": "flyer_distribution",
+            "mappedTargetCount": null,
+            "propertyMix": null,
+            "supportingStreetMeters": 1425,
+            "workload": null,
+            "regionalContext": null,
+            "reasons": [],
+            "source": {
+              "name": "OpenStreetMap",
+              "dataTimestamp": "2026-09-25T20:24:36Z",
+              "fetchedAt": "2026-09-26T21:55:03.501020+00:00",
+              "provider": "geofabrik_maryland",
+              "snapshotAt": "2026-09-25T20:24:36Z",
+              "retrievedAt": "2026-09-26T21:55:03.501020+00:00",
+              "importedAt": "2026-09-30T13:35:06.465Z",
+              "sourceHash": "fca54b6b3d2cf6632e79a6a93413d77c0019743ff1bbef52e93188a28d79fc20",
+              "bounds": [
+                -76.6945750000126,
+                39.108224999811924,
+                -76.58875599983642,
+                39.21576000007699
+              ],
+              "geometryVersion": "WGS84_OSM_complete_geometry_v2",
+              "datasetVersion": "SmartZonePublicCacheV1",
+              "parserVersion": "SmartZoneOsmGeometryV2",
+              "freshness": "fresh",
+              "transport": "regional_cache",
+              "evidenceHash": "1f96d8a155d23d30184a035fee5bd82b608e63f4c580371a1d5cd9511d98cf09",
+              "queryBounds": [
+                -76.654,
+                39.181,
+                -76.64,
+                39.186
+              ],
+              "evidenceBounds": [
+                -76.65979481647835,
+                39.17650844412504,
+                -76.63420518352164,
+                39.19049155587496
+              ],
+              "geometryDigest": "189725133519fa71866e11855c8e635a62fa9534bbc9ac1b3f4273106e29ce54",
+              "coverageState": "complete",
+              "requestedTileCount": 2,
+              "availableTileCount": 2,
+              "missingTileKeys": [],
+              "buildingInventoryComplete": true
+            },
+            "limitations": [
+              "Some mapped buildings or addresses have no supported residential/business classification.",
+              "0 of 0 classified mapped features have supporting local-street evidence.",
+              "The street network may contain separate components; no connectors or walking itinerary are inferred.",
+              "Uncertain exclusion features are conservatively avoided.",
+              "Mapped features are not verified households, entrances, delivery points or a material quantity.",
+              "Property condition, ownership and customer intent are not established.",
+              "Local access and actual field duration need review."
+            ],
+            "executionRouteVerified": false,
+            "analysisRevision": "ManualBoundaryEvidenceV2",
+            "acquisition": null,
+            "coverage": {
+              "state": "complete",
+              "inventoryComplete": true,
+              "observationsOnly": true,
+              "requestedTileCount": 2,
+              "availableTileCount": 2
+            },
+            "unclassifiedMappedFeatureCount": 195,
+            "walkingEvidence": {
+              "minutes": 35.620855074844016,
+              "networkTraversalFactor": 2,
+              "walkingMetersPerMinute": 80,
+              "walkingOnly": true,
+              "partialCoverage": false,
+              "executionRouteVerified": false
+            },
+            "workloadComponents": null,
+            "diagnostics": {
+              "acquisitionState": "supported_snapshot",
+              "inputTargetFeatureCount": 820,
+              "filterCounts": {
+                "inputFeatures": 820,
+                "invalidPoint": 0,
+                "outsideBoundary": 24,
+                "outsideCompleteCoverage": 0,
+                "excludedLand": 601,
+                "otherIntent": 0,
+                "duplicateClassified": 0,
+                "duplicateUnclassified": 0,
+                "inputRoadWays": 154,
+                "permittedRoadWays": 36
+              },
+              "inputRoadWayCount": 154,
+              "inputExclusionCount": 34,
+              "inputUnresolvedExclusionCount": 7,
+              "classifiedInBoundaryCount": 0,
+              "unclassifiedInBoundaryCount": 195,
+              "streetSupportedTargetCount": 0,
+              "permittedStreetSegmentCount": 70,
+              "targetServingStreetSegmentCount": 0,
+              "geometryDiagnostics": {
+                "mappedFootprints": 34,
+                "innerHoles": 176,
+                "localizedUncertainties": 5,
+                "unboundedUncertainties": 0,
+                "mappedPointAssociations": 2,
+                "features": [
+                  {
+                    "sourceId": "node/358249635",
+                    "kind": "school",
+                    "reasons": [
+                      "point_only_no_footprint"
+                    ],
+                    "disposition": "covered_by_mapped_footprint",
+                    "guardMeters": null,
+                    "coveredBy": [
+                      "way/1517305322"
+                    ]
+                  },
+                  {
+                    "sourceId": "node/358249637",
+                    "kind": "institution",
+                    "reasons": [
+                      "point_only_no_footprint"
+                    ],
+                    "disposition": "local_point_uncertainty_guard",
+                    "guardMeters": 500,
+                    "coveredBy": []
+                  },
+                  {
+                    "sourceId": "node/358254538",
+                    "kind": "school",
+                    "reasons": [
+                      "point_only_no_footprint"
+                    ],
+                    "disposition": "covered_by_mapped_footprint",
+                    "guardMeters": null,
+                    "coveredBy": [
+                      "way/1517305322"
+                    ]
+                  },
+                  {
+                    "sourceId": "node/5029239897",
+                    "kind": "restricted",
+                    "reasons": [
+                      "point_only_no_footprint"
+                    ],
+                    "disposition": "local_access_guard",
+                    "guardMeters": 30,
+                    "coveredBy": []
+                  },
+                  {
+                    "sourceId": "node/12313212763",
+                    "kind": "restricted",
+                    "reasons": [
+                      "point_only_no_footprint"
+                    ],
+                    "disposition": "local_access_guard",
+                    "guardMeters": 30,
+                    "coveredBy": []
+                  },
+                  {
+                    "sourceId": "node/3812783994",
+                    "kind": "restricted",
+                    "reasons": [
+                      "point_only_no_footprint"
+                    ],
+                    "disposition": "local_point_uncertainty_guard",
+                    "guardMeters": 500,
+                    "coveredBy": []
+                  },
+                  {
+                    "sourceId": "node/3812783997",
+                    "kind": "restricted",
+                    "reasons": [
+                      "point_only_no_footprint"
+                    ],
+                    "disposition": "local_point_uncertainty_guard",
+                    "guardMeters": 500,
+                    "coveredBy": []
+                  }
+                ]
+              }
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
