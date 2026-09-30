@@ -1,0 +1,227 @@
+{
+  "execution": "Offline retained-input replay, not production/physical acceptance",
+  "baseline": "3a6e9d6103e91bb2c23c69678745dd2ebf695dca",
+  "node": "v24.19.0",
+  "platform": "win32",
+  "results": [
+    [
+      {
+        "variant": "baseline",
+        "inputSha256": "ba6bdea1e3c763cd0ab0b16a49fc51b6b8f8f3f2f493b55878a28c67c2af2eb0",
+        "geometryDigest": "23dc4a73251597eb63eb96eb7894ca696ace2ff2e90c74208714cf3b5482bdcf",
+        "targets": 12,
+        "atomicSegments": 7,
+        "status": "supported_subset",
+        "samples": 30,
+        "runtimeMs": {
+          "min": 0.4849000000000103,
+          "median": 0.5435500000000033,
+          "max": 0.6878999999999991
+        },
+        "maxObservedPostCallHeapDeltaBytes": 780992,
+        "processPeakRssKiB": 47516,
+        "responseBytes": 13528,
+        "computation": null,
+        "networkMeters": 177.1195975641494,
+        "walkingMinutes": 4.4279899391037345,
+        "handlingMinutes": 16,
+        "rows": [
+          {
+            "marketers": 1,
+            "stayTogether": 21,
+            "splitCalculated": 21,
+            "splitWithFloor": 21,
+            "splitCriticalWalkingMinutes": null,
+            "splitCriticalHandlingMinutes": null,
+            "modeledPersonWorkMinutes": null
+          },
+          {
+            "marketers": 2,
+            "stayTogether": 21,
+            "splitCalculated": 12,
+            "splitWithFloor": 15,
+            "splitCriticalWalkingMinutes": null,
+            "splitCriticalHandlingMinutes": null,
+            "modeledPersonWorkMinutes": null
+          },
+          {
+            "marketers": 3,
+            "stayTogether": 21,
+            "splitCalculated": 9,
+            "splitWithFloor": 15,
+            "splitCriticalWalkingMinutes": null,
+            "splitCriticalHandlingMinutes": null,
+            "modeledPersonWorkMinutes": null
+          },
+          {
+            "marketers": 4,
+            "stayTogether": 21,
+            "splitCalculated": 7,
+            "splitWithFloor": 15,
+            "splitCriticalWalkingMinutes": null,
+            "splitCriticalHandlingMinutes": null,
+            "modeledPersonWorkMinutes": null
+          }
+        ],
+        "conservationChecks": null
+      },
+      {
+        "variant": "candidate",
+        "inputSha256": "ba6bdea1e3c763cd0ab0b16a49fc51b6b8f8f3f2f493b55878a28c67c2af2eb0",
+        "geometryDigest": "23dc4a73251597eb63eb96eb7894ca696ace2ff2e90c74208714cf3b5482bdcf",
+        "targets": 12,
+        "atomicSegments": 7,
+        "status": "supported_subset",
+        "samples": 30,
+        "runtimeMs": {
+          "min": 0.5404000000000053,
+          "median": 0.5907499999999999,
+          "max": 0.6958999999999946
+        },
+        "maxObservedPostCallHeapDeltaBytes": 657224,
+        "processPeakRssKiB": 47720,
+        "responseBytes": 18051,
+        "computation": {
+          "rawSegmentCount": 7,
+          "deduplicatedSegmentCount": 7,
+          "compactChainCount": null,
+          "connectedLocalSectionCount": 1,
+          "allocationTransitions": 46
+        },
+        "networkMeters": 177.1195975641494,
+        "walkingMinutes": 4.4279899391037345,
+        "handlingMinutes": 16,
+        "rows": [
+          {
+            "marketers": 1,
+            "stayTogether": 21,
+            "splitCalculated": 21,
+            "splitWithFloor": 21,
+            "splitCriticalWalkingMinutes": 4.4279899391037345,
+            "splitCriticalHandlingMinutes": 16,
+            "modeledPersonWorkMinutes": 20.427989939103735
+          },
+          {
+            "marketers": 2,
+            "stayTogether": 21,
+            "splitCalculated": 12,
+            "splitWithFloor": 15,
+            "splitCriticalWalkingMinutes": 2.263616838194547,
+            "splitCriticalHandlingMinutes": 9.333333333333334,
+            "modeledPersonWorkMinutes": 20.42798993910374
+          },
+          {
+            "marketers": 3,
+            "stayTogether": 21,
+            "splitCalculated": 9,
+            "splitWithFloor": 15,
+            "splitCriticalWalkingMinutes": 1.5438864390141744,
+            "splitCriticalHandlingMinutes": 6.666666666666667,
+            "modeledPersonWorkMinutes": 20.427989939103735
+          },
+          {
+            "marketers": 4,
+            "stayTogether": 21,
+            "splitCalculated": 7,
+            "splitWithFloor": 15,
+            "splitCriticalWalkingMinutes": 1.4446426433783341,
+            "splitCriticalHandlingMinutes": 5.333333333333333,
+            "modeledPersonWorkMinutes": 20.427989939103732
+          }
+        ],
+        "conservationChecks": "passed"
+      }
+    ],
+    [
+      {
+        "variant": "baseline",
+        "inputSha256": "156e7e9ce832559037badee663aa901cc33fd0afa7f0ffb0c9541b17e987958f",
+        "geometryDigest": "6273409e42bd491b1086789be01d293e98fe3b9949d2cad59b72b132876f6b4e",
+        "targets": 231,
+        "atomicSegments": 361,
+        "status": "unavailable",
+        "samples": 30,
+        "runtimeMs": {
+          "min": 1.0201999999999884,
+          "median": 1.1152999999999977,
+          "max": 1.3319999999999936
+        },
+        "maxObservedPostCallHeapDeltaBytes": 527400,
+        "processPeakRssKiB": 45440,
+        "responseBytes": 2258,
+        "computation": null,
+        "networkMeters": null,
+        "walkingMinutes": null,
+        "handlingMinutes": null,
+        "rows": [],
+        "conservationChecks": null
+      },
+      {
+        "variant": "candidate",
+        "inputSha256": "156e7e9ce832559037badee663aa901cc33fd0afa7f0ffb0c9541b17e987958f",
+        "geometryDigest": "6273409e42bd491b1086789be01d293e98fe3b9949d2cad59b72b132876f6b4e",
+        "targets": 231,
+        "atomicSegments": 361,
+        "status": "supported_subset",
+        "samples": 30,
+        "runtimeMs": {
+          "min": 11.657600000000002,
+          "median": 13.282350000000008,
+          "max": 15.790100000000024
+        },
+        "maxObservedPostCallHeapDeltaBytes": 13741584,
+        "processPeakRssKiB": 86228,
+        "responseBytes": 185500,
+        "computation": {
+          "rawSegmentCount": 361,
+          "deduplicatedSegmentCount": 361,
+          "compactChainCount": 247,
+          "connectedLocalSectionCount": 12,
+          "allocationTransitions": 91575
+        },
+        "networkMeters": 8409.453408596417,
+        "walkingMinutes": 210.2363352149104,
+        "handlingMinutes": 308,
+        "rows": [
+          {
+            "marketers": 1,
+            "stayTogether": 519,
+            "splitCalculated": 519,
+            "splitWithFloor": 519,
+            "splitCriticalWalkingMinutes": 210.23633521491038,
+            "splitCriticalHandlingMinutes": 308,
+            "modeledPersonWorkMinutes": 518.2363352149105
+          },
+          {
+            "marketers": 2,
+            "stayTogether": 519,
+            "splitCalculated": 265,
+            "splitWithFloor": 265,
+            "splitCriticalWalkingMinutes": 115.64682389997157,
+            "splitCriticalHandlingMinutes": 149.33333333333331,
+            "modeledPersonWorkMinutes": 518.2363352149105
+          },
+          {
+            "marketers": 3,
+            "stayTogether": 519,
+            "splitCalculated": 183,
+            "splitWithFloor": 183,
+            "splitCriticalWalkingMinutes": 57.36969961379606,
+            "splitCriticalHandlingMinutes": 125.33333333333331,
+            "modeledPersonWorkMinutes": 518.2363352149102
+          },
+          {
+            "marketers": 4,
+            "stayTogether": 519,
+            "splitCalculated": 140,
+            "splitWithFloor": 140,
+            "splitCriticalWalkingMinutes": 64.96555232238453,
+            "splitCriticalHandlingMinutes": 74.66666666666667,
+            "modeledPersonWorkMinutes": 518.2363352149102
+          }
+        ],
+        "conservationChecks": "passed"
+      }
+    ]
+  ]
+}

@@ -158,4 +158,117 @@ void main() {
       expect(t.takeException(), isNull);
     },
   );
+
+  for (final scale in [1.0, 2.0]) {
+    testWidgets(
+      'V3 separate local sections stay honest at 320px and ${scale}x',
+      (t) async {
+        await t.binding.setSurfaceSize(const Size(320, 900));
+        addTearDown(() => t.binding.setSurfaceSize(null));
+        final data = comparison()
+          ..['version'] = 'OwnTeamFixedAreaTimeV3'
+          ..['coveredTargetCount'] = 231
+          ..['walkingMinutes'] = 210.236
+          ..['handlingMinutes'] = 308
+          ..['unclassifiedCount'] = 806
+          ..['unmatchedPropertyCount'] = 708
+          ..['computation'] = {'connectedLocalSectionCount': 12};
+        for (final row in data['rows'] as List) {
+          row['stayTogether']['calculatedFieldMinutes'] = 519;
+          row['stayTogether']['fieldMinutes'] = 519;
+          row['splitUp']['calculatedFieldMinutes'] = [
+            519,
+            265,
+            183,
+            140,
+          ][row['marketerCount'] - 1];
+          row['splitUp']['fieldMinutes'] =
+              row['splitUp']['calculatedFieldMinutes'];
+          row['splitUp']['criticalWalkingMinutes'] = [
+            210.236,
+            115.647,
+            57.370,
+            64.966,
+          ][row['marketerCount'] - 1];
+          row['splitUp']['criticalHandlingMinutes'] = [
+            308,
+            149.333,
+            125.333,
+            74.667,
+          ][row['marketerCount'] - 1];
+          row['splitUp']['allocatedPersonWorkMinutes'] = 518.236;
+          row['splitUp']['allocations'][0]['localSection'] = 1;
+        }
+        await t.pumpWidget(
+          page(
+            OwnTeamTimeComparison(data: data, geometry: geometry),
+            scale: scale,
+          ),
+        );
+        expect(
+          find.textContaining('12 separate local street sections'),
+          findsOneWidget,
+        );
+        expect(
+          find.textContaining('overall team finish is not established'),
+          findsOneWidget,
+        );
+        expect(
+          find.text('Split up · local field subtotal: ~265 min'),
+          findsOneWidget,
+        );
+        expect(
+          find.textContaining(
+            'Split calculation: 210.2 min walking + 308.0 min handling',
+          ),
+          findsOneWidget,
+        );
+        expect(
+          find.text('Stay together · local field subtotal: ~519 min'),
+          findsNWidgets(4),
+        );
+        expect(
+          find.text('Field-only finish for the included targets'),
+          findsNothing,
+        );
+        await t.ensureVisible(
+          find.text('View included work and allocation').first,
+        );
+        await t.tap(find.text('View included work and allocation').first);
+        await t.pumpAndSettle();
+        expect(
+          find.textContaining('Total modeled person-work: 518.2 min'),
+          findsOneWidget,
+        );
+        expect(
+          find.textContaining(
+            'local times are added for sequential field work',
+          ),
+          findsOneWidget,
+        );
+        expect(find.textContaining('Local section 1'), findsOneWidget);
+        expect(t.takeException(), isNull);
+      },
+    );
+  }
+  testWidgets(
+    'V3 allocation budget retains baseline and explicit incomplete result',
+    (t) async {
+      final data = comparison()
+        ..['version'] = 'OwnTeamFixedAreaTimeV3'
+        ..['status'] = 'allocation_incomplete'
+        ..['reason'] = 'The bounded allocation-work budget was reached.'
+        ..['rows'] = [];
+      await t.pumpWidget(
+        page(OwnTeamTimeComparison(data: data, geometry: geometry)),
+      );
+      expect(
+        find.textContaining('bounded allocation-work budget'),
+        findsOneWidget,
+      );
+      expect(find.textContaining('12 street-supported'), findsOneWidget);
+      expect(find.textContaining('One-person baseline:'), findsOneWidget);
+      expect(find.text('Split up: ~0 min'), findsNothing);
+    },
+  );
 }

@@ -2,7 +2,7 @@
 const fs=require('node:fs'),path=require('node:path'),cp=require('node:child_process');
 const {inventory}=require('./prepare_scale_area_promotion.cjs');
 const root=path.resolve(__dirname,'..');
-const allowed=new Set(['own_team_time_comparison.js','zone_intelligence.js','zone_intelligence_runtime.js','smart_zone_intelligence.js']);
+const allowed=new Set(['own_team_time_comparison.js','own_team_street_sections.js']);
 const targets=['getSmartZonePlan','applySmartZonePlan','getCampaignZoneIntelligence','confirmCampaignZoneIntelligence'];
 function prepare(target,baseline,output){
  if(!targets.includes(target)||fs.existsSync(output))throw Error('Unexpected target or existing output');
@@ -12,7 +12,7 @@ function prepare(target,baseline,output){
   const local=path.join(root,'functions',name),live=path.join(baseline,name),replace=allowed.has(name);
   if(!fs.existsSync(live)&&!replace)throw Error('Missing maintained dependency '+name);
   if(replace&&fs.existsSync(live)){
-   const prior=cp.execFileSync('git',['show','76a8661:'+ 'functions/'+name],{cwd:root}).toString().replace(/\r\n/g,'\n');
+   const prior=cp.execFileSync('git',['show','3a6e9d6103e91bb2c23c69678745dd2ebf695dca:'+ 'functions/'+name],{cwd:root}).toString().replace(/\r\n/g,'\n');
    if(fs.readFileSync(live,'utf8').replace(/\r\n/g,'\n')!==prior)throw Error('Live module drift '+name);
   }
   const bytes=fs.readFileSync(replace?local:live);

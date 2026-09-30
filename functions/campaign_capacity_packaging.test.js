@@ -27,4 +27,5 @@ test('fixed-area comparison read projection matches discovery and has its depend
  const file='own_team_time_comparison';
  assert.equal(fs.readFileSync(require.resolve('./'+file),'utf8'),fs.readFileSync(require.resolve('../functions-discovery/'+file),'utf8'));
  assert.equal(typeof require('../functions-discovery/'+file).compare,'function');
+ assert.equal(fs.readFileSync(require.resolve('./own_team_street_sections'),'utf8'),fs.readFileSync(require.resolve('../functions-discovery/own_team_street_sections'),'utf8'));
 });
