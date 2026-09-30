@@ -50,6 +50,8 @@ class CampaignAreaScreen extends StatefulWidget {
   final Map<String, double>? initialBounds;
   final String? searchContextLabel;
   final TileProvider? tileProvider;
+  final bool focusMapOnOpen;
+  final Future<bool> Function()? beforeAccept;
   final ZoneEvidenceLoader? zoneEvidenceLoader;
   final String Function()? zoneEvidenceIdentity;
   final MapController? mapController;
@@ -75,6 +77,8 @@ class CampaignAreaScreen extends StatefulWidget {
     this.initialBounds,
     this.searchContextLabel,
     this.tileProvider,
+    this.focusMapOnOpen = false,
+    this.beforeAccept,
     this.zoneEvidenceLoader,
     this.zoneEvidenceIdentity,
     this.mapController,
@@ -103,6 +107,9 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
   bool _saving = false;
   bool _recommending = false;
   bool _loadingExistingArea = true;
+  bool _areaLoadFailed = false;
+  bool _tileLoadFailed = false;
+  int _tileAttempt = 0;
   bool _hasLoadedExistingArea = false;
   bool _mappingLocked = false;
   bool _propertyLayerEnabled = false;
@@ -165,6 +172,12 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
   }
 
   Future<void> _loadExistingArea() async {
+    if (mounted) {
+      setState(() {
+        _areaLoadFailed = false;
+        _loadingExistingArea = true;
+      });
+    }
     // New zones have no Firestore document yet. Reading one would require
     // ownership fields which do not exist; keep the proposal local until Save.
     if (widget.pendingZoneData != null) {
@@ -178,7 +191,9 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
       return;
     }
     try {
-      final snapshot = await widget.campaignReference.get();
+      final snapshot = await widget.campaignReference.get().timeout(
+        const Duration(seconds: 20),
+      );
 
       if (!snapshot.exists) {
         if (!mounted) {
@@ -255,6 +270,7 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
 
       setState(() {
         _loadingExistingArea = false;
+        _areaLoadFailed = true;
       });
 
       ScaffoldMessenger.of(context).showSnackBar(
@@ -1204,11 +1220,11 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
                         .map(
                           (entry) => ListTile(
                             leading: CircleAvatar(
-                              child: Text(entry.$2.signal?.toString() ?? '—'),
+                              child: Text(entry.$2.signal?.toString() ?? 'â€”'),
                             ),
                             title: Text(entry.$1),
                             subtitle: Text(
-                              '${entry.$2.source} (${entry.$2.inputGranularity}) • ${entry.$2.predominantEra} • Pre-1980 ${entry.$2.pre1980.toStringAsFixed(0)}% • Pre-2000 ${entry.$2.pre2000.toStringAsFixed(0)}% • ${entry.$2.ageMetricsAreEstimated ? 'estimated ' : ''}30+ ${entry.$2.age30Plus.toStringAsFixed(0)}% • ${entry.$2.confidence} confidence • ${entry.$2.coverage.toStringAsFixed(0)}% coverage',
+                              '${entry.$2.source} (${entry.$2.inputGranularity}) â€¢ ${entry.$2.predominantEra} â€¢ Pre-1980 ${entry.$2.pre1980.toStringAsFixed(0)}% â€¢ Pre-2000 ${entry.$2.pre2000.toStringAsFixed(0)}% â€¢ ${entry.$2.ageMetricsAreEstimated ? 'estimated ' : ''}30+ ${entry.$2.age30Plus.toStringAsFixed(0)}% â€¢ ${entry.$2.confidence} confidence â€¢ ${entry.$2.coverage.toStringAsFixed(0)}% coverage',
                             ),
                           ),
                         )
@@ -1333,6 +1349,8 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
   }
 
   Future<void> _saveArea() async {
+    if (widget.beforeAccept != null && !await widget.beforeAccept!()) return;
+    if (!mounted || _areaLoadFailed) return;
     final latestSnapshot = widget.pendingZoneData == null
         ? await widget.campaignReference.get()
         : null;
@@ -1500,6 +1518,18 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            if (_tileLoadFailed) ...[
+              const Text(
+                'Map background unavailable. Your boundary has not changed.',
+              ),
+              OutlinedButton(
+                onPressed: () => setState(() {
+                  _tileLoadFailed = false;
+                  _tileAttempt++;
+                }),
+                child: const Text('Retry map background'),
+              ),
+            ],
             if (_freehandError != null && !_drawingFreehand) ...[
               Semantics(liveRegion: true, child: Text(_freehandError!)),
               const SizedBox(height: 8),
@@ -1643,9 +1673,49 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
   @override
   Widget build(BuildContext context) {
     if (_loadingExistingArea) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+      return Scaffold(
+        appBar: AuthenticatedAppBar(title: const Text('Choose area')),
+        body: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const CircularProgressIndicator(),
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Back to campaign'),
+              ),
+            ],
+          ),
+        ),
+      );
     }
 
+    if (_areaLoadFailed) {
+      return Scaffold(
+        appBar: AuthenticatedAppBar(title: const Text('Choose area')),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  'We couldn’t load this saved area. Retry or return to your campaign; nothing has changed.',
+                ),
+                FilledButton(
+                  onPressed: _loadExistingArea,
+                  child: const Text('Retry map'),
+                ),
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Back to campaign'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
     final signalColor = _propertySignalColor();
     final preview =
         _selectedShape == CampaignAreaShape.circle &&
@@ -1946,6 +2016,21 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
                         mapController: _mapController,
 
                         options: MapOptions(
+                          onMapReady: widget.focusMapOnOpen
+                              ? () {
+                                  WidgetsBinding.instance.addPostFrameCallback((
+                                    _,
+                                  ) {
+                                    final frame = _mapFrameKey.currentContext;
+                                    if (mounted && frame != null) {
+                                      Scrollable.ensureVisible(
+                                        frame,
+                                        alignment: 0,
+                                      );
+                                    }
+                                  });
+                                }
+                              : null,
                           initialCenter: _generatedArea.isEmpty
                               ? (_searchBoundary.isEmpty
                                     ? widget.initialCenter ?? _defaultCenter
@@ -1973,6 +2058,14 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
 
                         children: [
                           TileLayer(
+                            key: ValueKey(_tileAttempt),
+                            errorTileCallback: (_, error, stack) {
+                              WidgetsBinding.instance.addPostFrameCallback((_) {
+                                if (mounted && !_tileLoadFailed)
+                                  setState(() => _tileLoadFailed = true);
+                              });
+                              WidgetsBinding.instance.ensureVisualUpdate();
+                            },
                             urlTemplate:
                                 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
                             userAgentPackageName: 'com.scaledcircle.app',
@@ -2145,7 +2238,7 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
 
                       if (_advancedDrawing)
                         Text(
-                          '${_shapeLabel(_selectedShape)} • '
+                          '${_shapeLabel(_selectedShape)} â€¢ '
                           '${_generatedArea.length} verification '
                           'point${_generatedArea.length == 1 ? '' : 's'}',
                         ),

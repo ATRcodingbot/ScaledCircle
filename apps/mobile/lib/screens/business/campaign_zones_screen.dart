@@ -197,20 +197,8 @@ class _SmartZoneEntryState extends State<CampaignZoneAreaEntry> {
   }
 
   Future<void> _draw(AddressSuggestion? area, {VoidCallback? onReady}) async {
-    final hours = double.tryParse(_hoursController.text.trim());
-    if (hours == null || !hours.isFinite || hours < .5 || hours > 192) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Minimum campaign workload is 30 minutes. Maximum is 192 hours.',
-          ),
-        ),
-      );
-      return;
-    }
-    if (widget.onSaveWorkload != null && !await widget.onSaveWorkload!(hours)) {
-      return;
-    }
+    // Manual entry is navigation, not a workload write or recommendation.
+    // Explicit acceptance rechecks saved-plan capacity separately.
     if (mounted) {
       if (onReady != null) {
         onReady();
@@ -1259,25 +1247,6 @@ class _CampaignZonesScreenState extends State<CampaignZonesScreen> {
     String? recommendationObjective,
   }) async {
     final campaignData = campaign.data() as Map<String, dynamic>;
-    if (!_ownTeam) {
-      await _refreshWorkload();
-      if (!context.mounted) return;
-      if (_workloadState?['requiredZoneCount'] == null) await _editWorkload();
-      if (!context.mounted || _workloadState?['requiredZoneCount'] == null) {
-        return;
-      }
-      if ((_workloadState?['zoneCount'] as num? ?? 0) >=
-          (_workloadState!['requiredZoneCount'] as num)) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'Review the existing Zones or change requested workload before adding another.',
-            ),
-          ),
-        );
-        return;
-      }
-    }
 
     final businessId = campaignData['businessId']?.toString();
 
@@ -1332,6 +1301,31 @@ class _CampaignZonesScreenState extends State<CampaignZonesScreen> {
           builder: (_) => CampaignAreaScreen(
             campaignReference: zoneReference!,
             pendingZoneData: pendingZoneData,
+            focusMapOnOpen: true,
+            beforeAccept: () async {
+              if (!_ownTeam) {
+                await _refreshWorkload();
+                if (!mounted) return false;
+                if (_workloadState?['requiredZoneCount'] == null) {
+                  await _editWorkload();
+                }
+                if (!context.mounted || _workloadState?['requiredZoneCount'] == null) {
+                  return false;
+                }
+                if ((_workloadState?['zoneCount'] as num? ?? 0) >=
+                    (_workloadState!['requiredZoneCount'] as num)) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text(
+                        'Review your saved Zones or explicitly change workload before saving another area.',
+                      ),
+                    ),
+                  );
+                  return false;
+                }
+              }
+              return true;
+            },
             searchBoundary:
                 searchArea?.geometry
                     .map((p) => Map<String, dynamic>.from(p))
