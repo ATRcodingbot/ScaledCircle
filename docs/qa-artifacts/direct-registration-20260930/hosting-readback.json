@@ -1,0 +1,77 @@
+{
+  "checkedAt": "2026-09-30T10:41:53.923722+00:00",
+  "sourceSha": "bd849a8c33440ebe513582c4f6eef7c11f0befde",
+  "hostingVersion": "sites/scaled-circle/versions/4c0f96fddb2306d7",
+  "releaseName": "sites/scaled-circle/releases/1790764863332000",
+  "releaseTime": "2026-09-30T10:41:03.332Z",
+  "status": "FINALIZED",
+  "previousHostingVersion": "sites/scaled-circle/versions/23b9f8dc42266fec",
+  "hostingConfigurationMatchesPreviousRelease": true,
+  "onlyLocalConfigurationChange": "public package path",
+  "changedPackageFiles": [
+    "businesses/index.html",
+    "flutter_bootstrap.js",
+    "main.dart.js",
+    "pricing/index.html"
+  ],
+  "packageFileSetUnchanged": true,
+  "httpChecks": {
+    "main.dart.js": {
+      "requestPath": "/main.dart.js",
+      "status": 200,
+      "sha256": "5f631118a95e296ddb755b8d01c91a1ae0ae2605987402221f172b00caff5f50",
+      "matchesPreparedPackage": true,
+      "unchangedFromPreviousRelease": false
+    },
+    "flutter_bootstrap.js": {
+      "requestPath": "/flutter_bootstrap.js",
+      "status": 200,
+      "sha256": "0f97f103019a98aa8b5d5e4136d956b0f899b4f8da812314b74dd8d73c03685c",
+      "matchesPreparedPackage": true,
+      "unchangedFromPreviousRelease": false
+    },
+    "businesses/index.html": {
+      "requestPath": "/businesses/",
+      "status": 200,
+      "sha256": "0e56ec5b0006c069a8163bb8376026d82ff300dc3b4c8bb9eb205953b5dc3a17",
+      "matchesPreparedPackage": true,
+      "unchangedFromPreviousRelease": false
+    },
+    "pricing/index.html": {
+      "requestPath": "/pricing/",
+      "status": 200,
+      "sha256": "6173eff504831eb97c71f9c5165bc4ce47c65aa22bb24ff7ed3aaed8d70f512b",
+      "matchesPreparedPackage": true,
+      "unchangedFromPreviousRelease": false
+    },
+    "analytics.js": {
+      "requestPath": "/analytics.js",
+      "status": 200,
+      "sha256": "43bd68cbb51fa38d9aede66922eead5e5b7c7304556b2c2977ebf87e749a8af9",
+      "matchesPreparedPackage": true,
+      "unchangedFromPreviousRelease": true
+    },
+    "index.html": {
+      "requestPath": "/index.html",
+      "status": 200,
+      "sha256": "06ba7a26f450610d373d30ad8ad5124aeeb10fc5dffc8a0567c9cdf71345b928",
+      "matchesPreparedPackage": true,
+      "unchangedFromPreviousRelease": true
+    },
+    "assets/assets/brand/wordmark-20260928/scaledcircle-lockup-dark-surface.png": {
+      "requestPath": "/assets/assets/brand/wordmark-20260928/scaledcircle-lockup-dark-surface.png",
+      "status": 200,
+      "sha256": "4719e60f997a6b0b8f14f47cdd537446b0082125884f3f3156d7e7e905060c32",
+      "matchesPreparedPackage": true,
+      "unchangedFromPreviousRelease": true
+    },
+    "assets/assets/brand/wordmark-20260928/scaledcircle-lockup-light-surface.png": {
+      "requestPath": "/assets/assets/brand/wordmark-20260928/scaledcircle-lockup-light-surface.png",
+      "status": 200,
+      "sha256": "674b95708a173a371c28d5d9a29c151b49ebb324939b1b8d83e50e5808d48fb3",
+      "matchesPreparedPackage": true,
+      "unchangedFromPreviousRelease": true
+    }
+  },
+  "scope": "Hosting-only HTTP/API readback; no browser interaction or production data writes"
+}

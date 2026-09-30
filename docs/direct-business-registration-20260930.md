@@ -36,3 +36,18 @@ No analytics implementation, SDK, event, consent choice, Enhanced Measurement or
 Copy the exact verified retained Hosting package and overlay the compiled production `main.dart.js` and `flutter_bootstrap.js`. Change only two For Businesses and four Pricing signup anchors in the retained HTML. Preserve all other package bytes, historical/versioned assets, metadata, analytics and current run rewrites. Do not regenerate unrelated static pages. Reuse the retained Hosting-only configuration with only its package path changed.
 
 Production build: `flutter build web --release --dart-define=APP_ENV=production --no-pub`. Dependency lock must match the baseline. Hosting deployment/readback and controlled GA4 receipt are recorded below after execution.
+
+## Completed deployment and live acceptance
+
+- Deployed application source: `bd849a8c33440ebe513582c4f6eef7c11f0befde`.
+- Hosting version: `4c0f96fddb2306d7`; release `1790764863332000`, finalized `2026-09-30T10:41:03.332Z`.
+- Only Hosting was deployed. Live configuration matches the previous release. Exactly four package files changed; eight sampled served HTTP bodies match local hashes, including unchanged analytics/index/approved wordmarks. See `qa-artifacts/direct-registration-20260930/hosting-readback.json`.
+- Existing signed-in Business: the production signup CTA resolved to `/business` rather than rendering duplicate account creation. Business/Scaler startup authority is covered by fixtures; no fresh Scaler login was performed in production.
+- After Founder signed out, actual **scaledcircle.com** For Businesses Get Started, homepage Get Started for Business and Pricing Start Growth each reached the visible Business form on `/#/create-account?role=business`. The Business role and Business-name field were visible. Login switching, Create Account return, named Back and a document reload were verified. No form was filled/submitted, and legal consent stayed unchecked.
+- Narrow 360px layout was visually inspected in the local production bundle; 360px/2× text and keyboard behavior passed widget tests. Production desktop form/reload was visually inspected. This is not physical-device acceptance.
+- GA4 property `548368356` Realtime pages actually showed **`/create-account`: 1 active user, 6 views** at the final readback. These were controlled QA entries, switching and reload, including the first signed-in redirect. They are not six signups or customers, or proof of conversion. The canonical path has no role, referral or private identifier. The intended measurement ID remains `G-9VY50190LG`; analytics bytes/configuration were unchanged. No analytics popup was shown.
+- No production account, checkout, payment, profile save, reward or outreach was created. No Functions deployment, native CI or frozen-native merge occurred. Local test emulators were stopped. Both previously skipped campaign browser harnesses remain unverified and outside this correction.
+
+Proofs: `qa-artifacts/direct-registration-20260930/production-registration.jpg`, `local-narrow.jpg`, and `ga4-realtime-pages.jpg`.
+
+[GA4 Realtime pages](https://analytics.google.com/analytics/web/#/a335270603p548368356/realtime/pages).
