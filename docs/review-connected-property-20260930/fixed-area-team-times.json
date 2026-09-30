@@ -1,0 +1,145 @@
+{
+  "version": "OwnTeamFixedAreaTimeV1",
+  "geometryDigest": "23dc4a73251597eb63eb96eb7894ca696ace2ff2e90c74208714cf3b5482bdcf",
+  "boundaryFixed": true,
+  "fullAreaWorkloadEstablished": false,
+  "executionRouteVerified": false,
+  "totalSessionMinutes": null,
+  "assumptions": {
+    "targetsPerHour": 45,
+    "walkingMetersPerMinute": 80,
+    "networkTraversalFactor": 2,
+    "minimumFieldMinutes": 15
+  },
+  "coveredTargetCount": 12,
+  "networkMeters": 177.1195975641494,
+  "walkingMinutes": 4.4279899391037345,
+  "handlingMinutes": 16,
+  "limitations": [
+    "Field-only advisory comparison; travel, setup, access and execution itinerary are unverified.",
+    "Known street-supported target subset only; complete area/team duration is not established."
+  ],
+  "scope": "Retained smaller recommended territory only; 19 official property points / 12 mapped targets. Not the full 1,243-record drawn boundary.",
+  "rows": [
+    {
+      "marketerCount": 1,
+      "coveredTargetCount": 12,
+      "stayTogetherFieldMinutes": 21,
+      "splitUpFieldMinutes": 21,
+      "rawLongestSplitLaneMinutes": 20.427989939103735,
+      "allocationBasis": "complementary_contiguous_observed_segments",
+      "lanes": [
+        {
+          "targetCount": 12,
+          "networkMeters": 177.1195975641494,
+          "walkingMinutes": 4.4279899391037345,
+          "handlingMinutes": 16,
+          "rawFieldMinutes": 20.427989939103735,
+          "fieldMinutes": 21
+        }
+      ]
+    },
+    {
+      "marketerCount": 2,
+      "coveredTargetCount": 12,
+      "stayTogetherFieldMinutes": 21,
+      "splitUpFieldMinutes": 15,
+      "rawLongestSplitLaneMinutes": 11.59695017152788,
+      "allocationBasis": "complementary_contiguous_observed_segments",
+      "lanes": [
+        {
+          "targetCount": 5,
+          "networkMeters": 86.5749240363675,
+          "walkingMinutes": 2.1643731009091876,
+          "handlingMinutes": 6.666666666666667,
+          "rawFieldMinutes": 8.831039767575854,
+          "fieldMinutes": 15
+        },
+        {
+          "targetCount": 7,
+          "networkMeters": 90.54467352778187,
+          "walkingMinutes": 2.2636168381945465,
+          "handlingMinutes": 9.333333333333334,
+          "rawFieldMinutes": 11.59695017152788,
+          "fieldMinutes": 15
+        }
+      ]
+    },
+    {
+      "marketerCount": 3,
+      "coveredTargetCount": 12,
+      "stayTogetherFieldMinutes": 21,
+      "splitUpFieldMinutes": 15,
+      "rawLongestSplitLaneMinutes": 8.210553105680841,
+      "allocationBasis": "complementary_contiguous_observed_segments",
+      "lanes": [
+        {
+          "targetCount": 4,
+          "networkMeters": 57.78570573513336,
+          "walkingMinutes": 1.4446426433783341,
+          "handlingMinutes": 5.333333333333333,
+          "rawFieldMinutes": 6.777975976711668,
+          "fieldMinutes": 15
+        },
+        {
+          "targetCount": 3,
+          "networkMeters": 57.578434268449044,
+          "walkingMinutes": 1.4394608567112261,
+          "handlingMinutes": 4,
+          "rawFieldMinutes": 5.439460856711226,
+          "fieldMinutes": 15
+        },
+        {
+          "targetCount": 5,
+          "networkMeters": 61.75545756056699,
+          "walkingMinutes": 1.5438864390141747,
+          "handlingMinutes": 6.666666666666667,
+          "rawFieldMinutes": 8.210553105680841,
+          "fieldMinutes": 15
+        }
+      ]
+    },
+    {
+      "marketerCount": 4,
+      "coveredTargetCount": 12,
+      "stayTogetherFieldMinutes": 21,
+      "splitUpFieldMinutes": 15,
+      "rawLongestSplitLaneMinutes": 6.777975976711668,
+      "allocationBasis": "complementary_contiguous_observed_segments",
+      "lanes": [
+        {
+          "targetCount": 4,
+          "networkMeters": 57.78570573513336,
+          "walkingMinutes": 1.4446426433783341,
+          "handlingMinutes": 5.333333333333333,
+          "rawFieldMinutes": 6.777975976711668,
+          "fieldMinutes": 15
+        },
+        {
+          "targetCount": 1,
+          "networkMeters": 28.789218301234147,
+          "walkingMinutes": 0.7197304575308536,
+          "handlingMinutes": 1.3333333333333333,
+          "rawFieldMinutes": 2.053063790864187,
+          "fieldMinutes": 15
+        },
+        {
+          "targetCount": 4,
+          "networkMeters": 45.09095473052039,
+          "walkingMinutes": 1.1272738682630097,
+          "handlingMinutes": 5.333333333333333,
+          "rawFieldMinutes": 6.460607201596343,
+          "fieldMinutes": 15
+        },
+        {
+          "targetCount": 3,
+          "networkMeters": 45.45371879726149,
+          "walkingMinutes": 1.1363429699315373,
+          "handlingMinutes": 4,
+          "rawFieldMinutes": 5.136342969931537,
+          "fieldMinutes": 15
+        }
+      ]
+    }
+  ]
+}

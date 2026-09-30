@@ -67,7 +67,7 @@ function project({geometry, features, segments, workload, source, intent, workTy
       'Local access and actual field duration need review.']),
     executionRouteVerified:false};
 }
-function recommended(candidate, workType, intent) {
+function recommended(candidate, workType, intent, teamComparison=false) {
   const result=project({geometry:candidate.geometry,features:candidate.features,segments:candidate.networkSegments,
     workload:candidate.incompleteTargetInventory?null:candidate.workload,source:candidate.source,intent,workType,ranking:candidate.ranking,
     limitations:candidate.source?.uncertaintyGuards>0?
@@ -78,9 +78,11 @@ function recommended(candidate, workType, intent) {
   result.selectedAreaPropertyFacts=candidate.ranking?.propertyRecordCoverage?{...candidate.ranking.propertyRecordCoverage,
     source:candidate.ranking.signals?.propertyIntelligence?.source||null,scope:'official parcel points inside candidate'}:null;
   result.serviceSuitability=candidate.ranking?.propertyScoreComponents||[];
+  if(teamComparison)result.teamTimeComparison=require('./own_team_time_comparison').compare({geometry:candidate.geometry,
+    features:candidate.features,segments:candidate.networkSegments,inventoryComplete:candidate.incompleteTargetInventory!==true});
   return result;
 }
-function analyze({geometry, snapshot, workType, propertyContext, acquisition=null}) {
+function analyze({geometry, snapshot, workType, propertyContext, acquisition=null,teamComparison=false}) {
   const intent=serviceability.intent(workType);
   const unavailable=message=>({...project({geometry,features:null,segments:null,source:null,intent,workType,
     propertyContext,status:'unavailable',limitations:[message]}),analysisRevision:'ManualBoundaryEvidenceV2',
@@ -116,6 +118,8 @@ function analyze({geometry, snapshot, workType, propertyContext, acquisition=nul
       'The street network may contain separate components; no connectors or walking itinerary are inferred.',
       ...(shaped.geometryDiagnostics?.localizedUncertainties>0?['Uncertain exclusion features are conservatively avoided.']:[])]});
   return {...result,analysisRevision:'ManualBoundaryEvidenceV2',acquisition,
+    ...(teamComparison?{teamTimeComparison:require('./own_team_time_comparison').compare({geometry,
+      features:a.supportedFeatures,segments,inventoryComplete:workload!=null})}:{}),
     coverage:{state:partialCoverage?'partial':'complete',inventoryComplete,observationsOnly:partialCoverage||incompleteClassification,
       requestedTileCount:snapshot.cacheEvidence?.requestedTileCount??null,availableTileCount:snapshot.cacheEvidence?.availableTileCount??null},
     unclassifiedMappedFeatureCount:unclassified.length,

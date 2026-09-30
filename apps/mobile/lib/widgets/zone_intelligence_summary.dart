@@ -4,6 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import '../models/campaign_area_geometry.dart';
 import '../services/business_workspace_service.dart';
+import 'own_team_time_comparison.dart';
 
 bool zoneEvidenceMatches(Map? data, dynamic geometry) =>
     data?['version'] == 'ZoneIntelligenceV1' &&
@@ -172,6 +173,11 @@ class ZoneIntelligenceSummary extends StatelessWidget {
                 : 'Split streets: complementary coverage must be planned within this area; an even split is not established. Travel and total team elapsed time remain unknown.',
           ),
         ],
+        if (data['teamTimeComparison'] is Map)
+          OwnTeamTimeComparison(
+            data: data['teamTimeComparison'] as Map,
+            geometry: geometry,
+          ),
         const SizedBox(height: 16),
         Text(
           meters == null

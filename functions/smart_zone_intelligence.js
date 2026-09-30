@@ -305,7 +305,7 @@ function generate(args,evidence){
     verifiedDeliveryPoints:false,targetIntent:evidence.targetIntent,
     limitations:['Mapped features are not verified households, entrances, delivery points or customer demand.',
       'Workload uses a disclosed planning pace and mapped local street length. Actual access and duration require review.']};};
-  const zones=selected.map((c,i)=>({zoneIntelligence:require('./zone_intelligence').recommended(c,args.workType,evidence.targetIntent),zoneNumber:i+1,name:ownTeam?`Team section ${i+1}`:`Zone ${i+1}`,geometry:c.geometry,
+  const zones=selected.map((c,i)=>({zoneIntelligence:require('./zone_intelligence').recommended(c,args.workType,evidence.targetIntent,ownTeam),zoneNumber:i+1,name:ownTeam?`Team section ${i+1}`:`Zone ${i+1}`,geometry:c.geometry,
     geometryValidation:planning.validateGeometry(c.geometry),
     ...(ownTeam?{coverageSection:true,plannedAssignment:false}:{}),workload:{...c.workload,confidence:'low',
       reason:'Advisory mapped-feature pace and supporting local street length; no execution route has been approved.'},

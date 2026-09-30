@@ -2,7 +2,7 @@
 // Offline review overlays only. No build, upload, deployment or cloud call.
 const fs=require('node:fs'),path=require('node:path'),cp=require('node:child_process');
 const {nodes,normalizeAst,inventory}=require('./prepare_scale_area_promotion.cjs');
-const root=path.resolve(__dirname,'..'),baseSha='f027b75',modules=new Set(['own_team_capacity.js','property_intelligence.js',
+const root=path.resolve(__dirname,'..'),baseSha='f027b75',modules=new Set(['own_team_capacity.js','own_team_time_comparison.js','property_intelligence.js',
  'property_service_area_analysis.js','property_service_area_runtime.js','property_source_http.js','smart_zone_entry_contract.js',
  'smart_zone_intelligence.js','smart_zone_intelligence_runtime.js','zone_intelligence.js','zone_intelligence_runtime.js',
  'property_map_binding.js','smart_zone_connected_territory.js']);

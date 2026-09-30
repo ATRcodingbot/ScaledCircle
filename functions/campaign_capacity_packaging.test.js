@@ -22,3 +22,9 @@ test('manual evidence declarations and transitive geographic modules match the m
  for(const name of ['zone_intelligence','zone_intelligence_runtime','smart_zone_public_cache','smart_zone_public_cache_runtime','smart_zone_geography','smart_zone_serviceability'])
   assert.equal(fs.readFileSync(require.resolve('./'+name),'utf8'),fs.readFileSync(require.resolve('../functions-discovery/'+name),'utf8'));
 });
+
+test('fixed-area comparison read projection matches discovery and has its dependency closure',()=>{
+ const file='own_team_time_comparison';
+ assert.equal(fs.readFileSync(require.resolve('./'+file),'utf8'),fs.readFileSync(require.resolve('../functions-discovery/'+file),'utf8'));
+ assert.equal(typeof require('../functions-discovery/'+file).compare,'function');
+});
