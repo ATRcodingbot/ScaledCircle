@@ -1,0 +1,295 @@
+{
+  "execution": "Offline replay of verified production source/cache; not a live callable/browser response",
+  "small": {
+    "propertyRecords": 19,
+    "comparison": {
+      "geometryDigest": "23dc4a73251597eb63eb96eb7894ca696ace2ff2e90c74208714cf3b5482bdcf",
+      "status": "supported_subset",
+      "coveredTargetCount": 12,
+      "unclassified": 7,
+      "unmatchedPropertyRecords": null,
+      "sourceBinding": {
+        "geometryDigest": "23dc4a73251597eb63eb96eb7894ca696ace2ff2e90c74208714cf3b5482bdcf",
+        "targetSetDigest": "c9e6c84ca0a0f0504822d3b3f89e65a77dcbdb8d29435bc0443386c4fe7d1633",
+        "evidenceDigest": "b3b5fd0df97ebf49a365c13a096ed2a6a895c30b1721c8524a9c724d9d2d4ea6",
+        "sourceEvidenceVersion": "SmartZonePublicCacheV1",
+        "workloadModelVersion": "SmartZonePlanningV5",
+        "comparisonVersion": "OwnTeamFixedAreaTimeV2"
+      },
+      "currentTeam": {
+        "marketerCount": 2,
+        "coveragePattern": "stay_together"
+      },
+      "reason": null,
+      "fullAreaWorkloadEstablished": false,
+      "walkingMinutes": 4.4279899391037345,
+      "handlingMinutes": 16,
+      "rows": [
+        {
+          "marketers": 1,
+          "stayTogetherCalculated": 21,
+          "splitCalculated": 21,
+          "splitWithMinimum": 21,
+          "allocations": [
+            {
+              "targets": 12,
+              "walking": 4.4279899391037345,
+              "handling": 16,
+              "calculated": 21,
+              "withMinimum": 21
+            }
+          ],
+          "subdivisionEstablished": true
+        },
+        {
+          "marketers": 2,
+          "stayTogetherCalculated": 21,
+          "splitCalculated": 12,
+          "splitWithMinimum": 15,
+          "allocations": [
+            {
+              "targets": 5,
+              "walking": 2.1643731009091876,
+              "handling": 6.666666666666667,
+              "calculated": 9,
+              "withMinimum": 15
+            },
+            {
+              "targets": 7,
+              "walking": 2.2636168381945465,
+              "handling": 9.333333333333334,
+              "calculated": 12,
+              "withMinimum": 15
+            }
+          ],
+          "subdivisionEstablished": true
+        },
+        {
+          "marketers": 3,
+          "stayTogetherCalculated": 21,
+          "splitCalculated": 9,
+          "splitWithMinimum": 15,
+          "allocations": [
+            {
+              "targets": 4,
+              "walking": 1.4446426433783341,
+              "handling": 5.333333333333333,
+              "calculated": 7,
+              "withMinimum": 15
+            },
+            {
+              "targets": 3,
+              "walking": 1.4394608567112261,
+              "handling": 4,
+              "calculated": 6,
+              "withMinimum": 15
+            },
+            {
+              "targets": 5,
+              "walking": 1.5438864390141747,
+              "handling": 6.666666666666667,
+              "calculated": 9,
+              "withMinimum": 15
+            }
+          ],
+          "subdivisionEstablished": true
+        },
+        {
+          "marketers": 4,
+          "stayTogetherCalculated": 21,
+          "splitCalculated": 7,
+          "splitWithMinimum": 15,
+          "allocations": [
+            {
+              "targets": 4,
+              "walking": 1.4446426433783341,
+              "handling": 5.333333333333333,
+              "calculated": 7,
+              "withMinimum": 15
+            },
+            {
+              "targets": 1,
+              "walking": 0.7197304575308536,
+              "handling": 1.3333333333333333,
+              "calculated": 3,
+              "withMinimum": 15
+            },
+            {
+              "targets": 4,
+              "walking": 1.1272738682630097,
+              "handling": 5.333333333333333,
+              "calculated": 7,
+              "withMinimum": 15
+            },
+            {
+              "targets": 3,
+              "walking": 1.1363429699315373,
+              "handling": 4,
+              "calculated": 6,
+              "withMinimum": 15
+            }
+          ],
+          "subdivisionEstablished": true
+        }
+      ]
+    }
+  },
+  "large": {
+    "propertyRecords": 1243,
+    "geometryDigest": "6273409e42bd491b1086789be01d293e98fe3b9949d2cad59b72b132876f6b4e",
+    "mappedTargetCount": 237,
+    "unclassified": 806,
+    "matching": {
+      "status": "available",
+      "insidePropertyRecords": 1243,
+      "matchedFootprints": 523,
+      "newlyClassifiedFootprints": 493,
+      "ambiguousFootprints": 4,
+      "unmatchedPropertyRecords": 708,
+      "rule": "one-to-one point-in-footprint containment; no nearest matching or individual age transfer"
+    },
+    "diagnostics": {
+      "acquisitionState": "supported_snapshot",
+      "inputTargetFeatureCount": 2244,
+      "filterCounts": {
+        "inputFeatures": 2244,
+        "invalidPoint": 0,
+        "outsideBoundary": 150,
+        "outsideCompleteCoverage": 0,
+        "excludedLand": 1047,
+        "otherIntent": 1,
+        "duplicateClassified": 0,
+        "duplicateUnclassified": 3,
+        "inputRoadWays": 372,
+        "permittedRoadWays": 91
+      },
+      "inputRoadWayCount": 372,
+      "inputExclusionCount": 48,
+      "inputUnresolvedExclusionCount": 8,
+      "classifiedInBoundaryCount": 237,
+      "unclassifiedInBoundaryCount": 806,
+      "streetSupportedTargetCount": 231,
+      "permittedStreetSegmentCount": 366,
+      "targetServingStreetSegmentCount": 361,
+      "geometryDiagnostics": {
+        "mappedFootprints": 48,
+        "innerHoles": 176,
+        "localizedUncertainties": 6,
+        "unboundedUncertainties": 0,
+        "mappedPointAssociations": 2,
+        "features": [
+          {
+            "sourceId": "node/358249635",
+            "kind": "school",
+            "reasons": [
+              "point_only_no_footprint"
+            ],
+            "disposition": "covered_by_mapped_footprint",
+            "guardMeters": null,
+            "coveredBy": [
+              "way/1517305322"
+            ]
+          },
+          {
+            "sourceId": "node/358249637",
+            "kind": "institution",
+            "reasons": [
+              "point_only_no_footprint"
+            ],
+            "disposition": "local_point_uncertainty_guard",
+            "guardMeters": 500,
+            "coveredBy": []
+          },
+          {
+            "sourceId": "node/358254538",
+            "kind": "school",
+            "reasons": [
+              "point_only_no_footprint"
+            ],
+            "disposition": "covered_by_mapped_footprint",
+            "guardMeters": null,
+            "coveredBy": [
+              "way/1517305322"
+            ]
+          },
+          {
+            "sourceId": "node/5029239897",
+            "kind": "restricted",
+            "reasons": [
+              "point_only_no_footprint"
+            ],
+            "disposition": "local_access_guard",
+            "guardMeters": 30,
+            "coveredBy": []
+          },
+          {
+            "sourceId": "node/12313212763",
+            "kind": "restricted",
+            "reasons": [
+              "point_only_no_footprint"
+            ],
+            "disposition": "local_access_guard",
+            "guardMeters": 30,
+            "coveredBy": []
+          },
+          {
+            "sourceId": "node/358250354",
+            "kind": "institution",
+            "reasons": [
+              "point_only_no_footprint"
+            ],
+            "disposition": "local_point_uncertainty_guard",
+            "guardMeters": 500,
+            "coveredBy": []
+          },
+          {
+            "sourceId": "node/3812783994",
+            "kind": "restricted",
+            "reasons": [
+              "point_only_no_footprint"
+            ],
+            "disposition": "local_point_uncertainty_guard",
+            "guardMeters": 500,
+            "coveredBy": []
+          },
+          {
+            "sourceId": "node/3812783997",
+            "kind": "restricted",
+            "reasons": [
+              "point_only_no_footprint"
+            ],
+            "disposition": "local_point_uncertainty_guard",
+            "guardMeters": 500,
+            "coveredBy": []
+          }
+        ]
+      }
+    },
+    "partialTargetEstimate": {
+      "minutes": 519,
+      "supportedTargetCount": 231,
+      "completeAreaWorkload": false
+    },
+    "comparison": {
+      "geometryDigest": "6273409e42bd491b1086789be01d293e98fe3b9949d2cad59b72b132876f6b4e",
+      "status": "unavailable",
+      "unclassified": 806,
+      "unmatchedPropertyRecords": 708,
+      "sourceBinding": {
+        "geometryDigest": "6273409e42bd491b1086789be01d293e98fe3b9949d2cad59b72b132876f6b4e",
+        "targetSetDigest": "9a529452c7460eb1934094bec43349af47c2eab910c5091dcb53d2b0b323c657",
+        "evidenceDigest": "72227a15277c771954d2adb48a257a685bf0a4a47fa3b4d36adffb3fad26d949",
+        "sourceEvidenceVersion": "SmartZonePublicCacheV1",
+        "workloadModelVersion": "SmartZonePlanningV5",
+        "comparisonVersion": "OwnTeamFixedAreaTimeV2"
+      },
+      "currentTeam": {
+        "marketerCount": 2,
+        "coveragePattern": "stay_together"
+      },
+      "reason": "This evidence exceeds the bounded comparison limit of 5,000 targets or 256 street segments. A supported local allocation is not established.",
+      "fullAreaWorkloadEstablished": false,
+      "rows": []
+    }
+  }
+}

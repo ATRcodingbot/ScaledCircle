@@ -34,7 +34,7 @@ async function preview({db,context,data,fetchSnapshot,endpoint,now=Date.now,onDi
       const candidate=run.searchEvidence?.candidates?.find(c=>operations.zoneGeometryDigest(c.geometry)===digest);
       const age=now()-Date.parse(candidate?.source?.dataTimestamp);
       if(candidate&&Number.isFinite(age)&&age>=0&&age<=30*86400000){
-        const result=projection.recommended(candidate,workType,run.searchEvidence.targetIntent,campaign.executionMode==='own_team');
+        const result=projection.recommended(candidate,workType,run.searchEvidence.targetIntent,campaign.executionMode==='own_team'?(data.teamCapacity??campaign.campaignWorkload??true):false);
         result.source={...result.source,freshness:require('./smart_zone_public_cache').freshness(candidate.source.dataTimestamp,now())};
         if(age>14*86400000)result.limitations.push('Mapping evidence is stale; refresh and review local access.');
         return result;
@@ -71,12 +71,13 @@ async function preview({db,context,data,fetchSnapshot,endpoint,now=Date.now,onDi
   }});}catch(_){acquisition={status:'unavailable',reasonCode:'acquisition_failed'};}
   const binding=require('./property_map_binding').bind(snapshot,propertyAnalysis,geometry);
   snapshot=binding.snapshot;
-  const result=projection.analyze({geometry,snapshot,workType,propertyContext,acquisition,teamComparison:campaign.executionMode==='own_team'});
+  const result=projection.analyze({geometry,snapshot,workType,propertyContext,acquisition,teamComparison:campaign.executionMode==='own_team'?(data.teamCapacity??campaign.campaignWorkload??true):false});
   result.selectedAreaPropertyFacts=propertyAnalysis?.recordCoverage?{...propertyAnalysis.recordCoverage,
     source:propertyAnalysis.source,sourceVersion:propertyAnalysis.sourceVersion,scope:'official parcel points inside this boundary',
     dataUpdatedAt:propertyAnalysis.dataUpdatedAt||null,retrievedAt:propertyAnalysis.retrievedAt||propertyAnalysis.generatedAt||null,
     constructionEra:propertyAnalysis.predominantConstructionEra||null}:null;
   result.propertyMatching=binding.matching;
+  if(result.teamTimeComparison)result.teamTimeComparison.unmatchedPropertyCount=binding.matching.unmatchedPropertyRecords??null;
   const trace={requestId,campaignId,workspaceId:context.uid,geometryDigest:digest,
     geometryEncoding:'lat-lng-points-v1',geometry,
     vertexCount:geometry.length,bounds:require('./smart_zone_public_cache').boundsOf(geometry),intent:result.targetIntent,

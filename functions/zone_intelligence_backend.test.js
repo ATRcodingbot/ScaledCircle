@@ -157,3 +157,18 @@ test('property acquisition precedes sparse OSM and preserves selected-area facts
  const foreign=await preview({...s.input,loadPropertyAnalysis:async()=>({...pi.analyzeParcelObservations([record],{geometry:fixture.selectedBoundary}),geometryDigest:'different-boundary'})});
  assert.equal(foreign.selectedAreaPropertyFacts,null);assert.equal(foreign.propertyMatching.status,'unavailable');
 });
+
+test('own-team preview binds crew/pattern to its own exact evidence without persisting a campaign',async()=>{
+ const s=await setup(),team={sessionHours:4,marketerCount:2,coveragePattern:'stay_together'};
+ await db.doc('campaigns/'+s.campaignId).update({executionMode:'own_team',campaignWorkload:team});
+ const before=(await db.doc('campaigns/'+s.campaignId).get()).data();
+ const a=await preview(s.input),b=await preview({...s.input,data:{...s.input.data,teamCapacity:{...team,marketerCount:4,coveragePattern:'split_streets'}}});
+ assert.equal(a.teamTimeComparison.currentTeam.marketerCount,2);
+ assert.equal(b.teamTimeComparison.currentTeam.marketerCount,4);
+ assert.equal(b.teamTimeComparison.currentTeam.coveragePattern,'split_streets');
+ assert.equal(a.teamTimeComparison.geometryDigest,a.geometryDigest);
+ assert.equal(a.teamTimeComparison.binding.targetSetDigest,b.teamTimeComparison.binding.targetSetDigest);
+ assert.equal(a.teamTimeComparison.unclassifiedCount,a.unclassifiedMappedFeatureCount);
+ assert.deepEqual((await db.doc('campaigns/'+s.campaignId).get()).data(),before);
+ assert.deepEqual((await db.doc('campaignZones/'+s.zoneId).get()).data(),s.zone);
+});

@@ -79,7 +79,10 @@ function recommended(candidate, workType, intent, teamComparison=false) {
     source:candidate.ranking.signals?.propertyIntelligence?.source||null,scope:'official parcel points inside candidate'}:null;
   result.serviceSuitability=candidate.ranking?.propertyScoreComponents||[];
   if(teamComparison)result.teamTimeComparison=require('./own_team_time_comparison').compare({geometry:candidate.geometry,
-    features:candidate.features,segments:candidate.networkSegments,inventoryComplete:candidate.incompleteTargetInventory!==true});
+    features:candidate.features,segments:candidate.networkSegments,inventoryComplete:candidate.incompleteTargetInventory===false,
+    source:candidate.source,unclassifiedCount:candidate.unclassifiedMappedFeatureCount??null,
+    unmatchedPropertyCount:candidate.ranking?.propertyRecordCoverage?.unmatchedPropertyCount??null,
+    currentTeam:typeof teamComparison==='object'?teamComparison:null});
   return result;
 }
 function analyze({geometry, snapshot, workType, propertyContext, acquisition=null,teamComparison=false}) {
@@ -119,7 +122,8 @@ function analyze({geometry, snapshot, workType, propertyContext, acquisition=nul
       ...(shaped.geometryDiagnostics?.localizedUncertainties>0?['Uncertain exclusion features are conservatively avoided.']:[])]});
   return {...result,analysisRevision:'ManualBoundaryEvidenceV2',acquisition,
     ...(teamComparison?{teamTimeComparison:require('./own_team_time_comparison').compare({geometry,
-      features:a.supportedFeatures,segments,inventoryComplete:workload!=null})}:{}),
+      features:a.supportedFeatures,segments,inventoryComplete:workload!=null,source:result.source,
+      unclassifiedCount:unclassified.length,currentTeam:typeof teamComparison==='object'?teamComparison:null})}:{}),
     coverage:{state:partialCoverage?'partial':'complete',inventoryComplete,observationsOnly:partialCoverage||incompleteClassification,
       requestedTileCount:snapshot.cacheEvidence?.requestedTileCount??null,availableTileCount:snapshot.cacheEvidence?.availableTileCount??null},
     unclassifiedMappedFeatureCount:unclassified.length,

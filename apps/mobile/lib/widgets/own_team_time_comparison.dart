@@ -11,13 +11,14 @@ class OwnTeamTimeComparison extends StatelessWidget {
   final Map data;
   final dynamic geometry;
   String minutes(dynamic n) => n is num ? n.toStringAsFixed(1) : 'Unavailable';
-  String finish(Map? value) => value?['fieldMinutes'] is num
-      ? '~${(value!['fieldMinutes'] as num).round()} min'
+  String finish(Map? value, {bool withMinimum = false}) =>
+      value?[withMinimum ? 'fieldMinutes' : 'calculatedFieldMinutes'] is num
+      ? '~${(value![withMinimum ? 'fieldMinutes' : 'calculatedFieldMinutes'] as num).ceil()} min'
       : 'Not established';
 
   @override
   Widget build(BuildContext context) {
-    if (data['version'] != 'OwnTeamFixedAreaTimeV1' ||
+    if (data['version'] != 'OwnTeamFixedAreaTimeV2' ||
         data['geometryDigest'] != CampaignAreaGeometry.savedDigest(geometry)) {
       return const Text(
         'Area changed. Recompute team times for this boundary.',
@@ -29,7 +30,7 @@ class OwnTeamTimeComparison extends StatelessWidget {
       children: [
         const SizedBox(height: 16),
         Text(
-          'Compare team sizes · same area',
+          'Estimated time for supported targets',
           style: Theme.of(context).textTheme.titleMedium,
         ),
         if (data['status'] == 'unavailable')
@@ -41,16 +42,19 @@ class OwnTeamTimeComparison extends StatelessWidget {
             '${data['coveredTargetCount']} street-supported mapped targets included in every comparison',
           ),
           Text(
-            'Total included components: ${minutes(data['walkingMinutes'])} min walking + ${minutes(data['handlingMinutes'])} min handling',
+            'One-person baseline: ${minutes(data['walkingMinutes'])} min walking + ${minutes(data['handlingMinutes'])} min handling',
           ),
         ],
+        Text(
+          'Other observations: ${data['unclassifiedCount'] ?? 'Unknown'} unclassified mapped features · ${data['unmatchedPropertyCount'] ?? 'Unknown'} unmatched property records. Property records are not separate delivery stops.',
+        ),
         Text(
           data['fullAreaWorkloadEstablished'] == true
               ? 'Field-only estimate for the supported mapped inventory; total session time is unverified.'
               : 'Known-target subset only. Full area completion time: Not established.',
         ),
         const Text(
-          '45 targets/hour · twice the supporting street length at 80 m/min · 15-minute minimum planning estimate',
+          'Calculated times round up to whole minutes. The 15-minute planning minimum is shown separately; the 30-minute minimum campaign request is a separate input rule.',
         ),
         for (final row in rows)
           Card(
@@ -65,6 +69,15 @@ class OwnTeamTimeComparison extends StatelessWidget {
                   ),
                   Text('Stay together: ${finish(row['stayTogether'] as Map?)}'),
                   Text('Split up: ${finish(row['splitUp'] as Map?)}'),
+                  if ((data['currentTeam'] as Map?)?['marketerCount'] ==
+                      row['marketerCount'])
+                    Text(
+                      'Current setting: ${(data['currentTeam'] as Map?)?['coveragePattern'] == 'stay_together' ? 'Stay together' : 'Split up'}',
+                      style: Theme.of(context).textTheme.titleSmall,
+                    ),
+                  Text(
+                    'With 15-minute planning minimum — Stay together: ${finish(row['stayTogether'] as Map?, withMinimum: true)} · Split up: ${finish(row['splitUp'] as Map?, withMinimum: true)}',
+                  ),
                   const Text('Field-only finish for the included targets'),
                   if ((row['splitUp'] as Map?)?['subdivisionEstablished'] !=
                       true)
@@ -84,12 +97,18 @@ class OwnTeamTimeComparison extends StatelessWidget {
                           child: Padding(
                             padding: const EdgeInsets.symmetric(vertical: 4),
                             child: Text(
-                              '${lane['targetCount']} targets · ${minutes(lane['walkingMinutes'])} min walking + ${minutes(lane['handlingMinutes'])} min handling · ${finish(lane)} with planning minimum',
+                              '${lane['targetCount']} targets · ${minutes(lane['walkingMinutes'])} min walking + ${minutes(lane['handlingMinutes'])} min handling · calculated ${finish(lane)} · ${finish(lane, withMinimum: true)} with planning minimum',
                             ),
                           ),
                         ),
                       const Text(
                         'Split-up finish is the longest individual allocation. Contiguous observed street segments are complementary; access and an execution itinerary are not verified.',
+                      ),
+                      Text(
+                        'Included split components: ${minutes((row['splitUp'] as Map?)?['walkingMinutes'])} min walking + ${minutes((row['splitUp'] as Map?)?['handlingMinutes'])} min handling across all allocations. These are not added again to the longest allocation.',
+                      ),
+                      const Text(
+                        '45 targets/hour · twice supporting network length at 80 m/min',
                       ),
                       Text(
                         'Idealized even division: ${minutes((row['splitUp'] as Map?)?['idealizedEvenDivisionMinutes'])} min. This is not a practical allocation and excludes the planning minimum.',

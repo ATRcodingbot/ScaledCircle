@@ -21,7 +21,7 @@ test('fixed-area 1–4 comparison conserves every target and observed segment wi
 test('stay together never divides duration; split uses contiguous cuts and maintained floor',()=>{
  const v=comparison.compare(input());assert.equal(new Set(v.rows.map(r=>r.stayTogether.fieldMinutes)).size,1);
  assert.deepEqual(v.rows.map(r=>r.splitUp.fieldMinutes),[21,15,15,15]);
- assert.equal(v.rows[1].splitUp.idealizedEvenDivisionMinutes,10.5);
+ assert.equal(v.rows[1].splitUp.idealizedEvenDivisionMinutes,v.rows[0].splitUp.allocations[0].rawFieldMinutes/2);
  assert.match(v.rows[1].splitUp.idealizedLabel,/not a practical allocation/);
 });
 test('uneven long section stays intact; longest lane is not simple division',()=>{
@@ -61,3 +61,30 @@ test('recommendation projection includes comparison only for own-team and same c
  assert.equal(r.teamTimeComparison.geometryDigest,r.geometryDigest);assert.equal(r.workload,null);assert.equal(r.teamTimeComparison.coveredTargetCount,12);
 });
 test('bounded oversized evidence fails closed',()=>assert.equal(comparison.compare({...input(),segments:Array(257).fill(segments[0])}).status,'unavailable'));
+
+test('calculated time rounds up before the unchanged planning floor; patterns bind crew, area, targets, source and workload',()=>{
+ const args={...input(),source:{datasetVersion:'fixture-v1',dataTimestamp:'2026-09-25'},unclassifiedCount:7,currentTeam:{marketerCount:2,coveragePattern:'stay_together'}};
+ const v=comparison.compare(args);
+ assert.deepEqual(v.rows.map(r=>r.splitUp.calculatedFieldMinutes),[21,12,9,7]);
+ assert.deepEqual(v.rows.map(r=>r.splitUp.fieldMinutes),[21,15,15,15]);
+ assert.deepEqual(v.rows.map(r=>r.stayTogether.calculatedFieldMinutes),[21,21,21,21]);
+ assert.equal(v.unclassifiedCount,7);assert.equal(v.currentTeam.marketerCount,2);
+ for(const r of v.rows)for(const [name,pattern] of [['stayTogether','stay_together'],['splitUp','split_streets']]){
+  const b=r[name].binding;assert.equal(b.geometryDigest,v.geometryDigest);assert.equal(b.targetSetDigest,v.binding.targetSetDigest);
+  assert.equal(b.evidenceDigest,v.binding.evidenceDigest);assert.equal(b.marketerCount,r.marketerCount);assert.equal(b.coveragePattern,pattern);
+  assert.equal(b.workloadModelVersion,require('./smart_zone_planning').POLICY_VERSION);
+  assert.equal(r[name].calculatedFieldMinutes,Math.max(...r[name].allocations.map(a=>Math.ceil(a.walkingMinutes+a.handlingMinutes))));
+ }
+ const crew=comparison.compare({...args,currentTeam:{marketerCount:4,coveragePattern:'split_streets'}});
+ assert.equal(crew.geometryDigest,v.geometryDigest);assert.equal(crew.binding.targetSetDigest,v.binding.targetSetDigest);
+ assert.equal(crew.binding.evidenceDigest,v.binding.evidenceDigest);
+ assert.notEqual(comparison.compare({...args,source:{datasetVersion:'fixture-v2'}}).binding.evidenceDigest,v.binding.evidenceDigest);
+ assert.notEqual(comparison.compare({...args,features:features.slice(1)}).binding.targetSetDigest,v.binding.targetSetDigest);
+});
+test('manual and recommended comparisons never exchange selected-area evidence',()=>{
+ const c={...input(),networkSegments:segments,workload:{estimatedMinutes:21},incompleteTargetInventory:true,unclassifiedMappedFeatureCount:7};
+ const small=projection.recommended(c,'flyer_distribution','residential',{marketerCount:2,coveragePattern:'stay_together'});
+ const large=projection.analyze({geometry:geometry.map(p=>({...p,longitude:p.longitude===-75.99?-75.989:p.longitude})),snapshot:null,workType:'flyer_distribution',teamComparison:true});
+ assert.equal(small.teamTimeComparison.unclassifiedCount,7);assert.equal(small.teamTimeComparison.currentTeam.coveragePattern,'stay_together');
+ assert.equal(large.teamTimeComparison,undefined);assert.notEqual(large.geometryDigest,small.geometryDigest);
+});

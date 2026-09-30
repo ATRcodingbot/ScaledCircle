@@ -4,7 +4,7 @@ const {zoneGeometryDigest}=require('./operational_layer');
 const planning=require('./smart_zone_planning');
 const connected=require('./smart_zone_connected_territory');
 const areas=require('./property_service_area_geometry');
-const VERSION='OwnTeamFixedAreaTimeV1';
+const VERSION='OwnTeamFixedAreaTimeV2';
 const hash=require('node:crypto').createHash;
 const key=p=>`${p.latitude.toFixed(7)},${p.longitude.toFixed(7)}`;
 const length=(a,b)=>Math.hypot((a.latitude-b.latitude)*111320,
@@ -36,6 +36,7 @@ function lane(units){
   const walkingMinutes=networkMeters*2/80,handlingMinutes=targetIds.length*60/45;
   return {targetIds,targetCount:targetIds.length,segmentIds:units.map(u=>u.id),networkMeters,
     walkingMinutes,handlingMinutes,rawFieldMinutes:walkingMinutes+handlingMinutes,
+    calculatedFieldMinutes:Math.ceil(walkingMinutes+handlingMinutes),
     fieldMinutes:Math.max(15,Math.ceil(walkingMinutes+handlingMinutes))};
 }
 // Optimal contiguous cuts of an observed path, not division by headcount.
@@ -51,14 +52,24 @@ function partition(units,count){
   for(let c=k;c>0;c--){const start=cuts[c][end];result.unshift(lane(units.slice(start,end)));end=start;}
   return result;
 }
-function compare({geometry,features=[],segments=[],inventoryComplete=false}){
+function compare({geometry,features=[],segments=[],inventoryComplete=false,source=null,
+  unclassifiedCount=null,unmatchedPropertyCount=null,currentTeam=null}){
+  const targetSetDigest=hash('sha256').update(JSON.stringify(features.map(f=>String(f.addressKey||f.id||f.sourceId)).sort())).digest('hex');
+  const evidenceDigest=hash('sha256').update(JSON.stringify({source,features,segments})).digest('hex');
+  const binding={geometryDigest:zoneGeometryDigest(geometry),targetSetDigest,evidenceDigest,
+    sourceEvidenceVersion:source?.datasetVersion||source?.parserVersion||null,
+    workloadModelVersion:planning.POLICY_VERSION,comparisonVersion:VERSION};
   const base={version:VERSION,geometryDigest:zoneGeometryDigest(geometry),boundaryFixed:true,
+    binding,source,unclassifiedCount,unmatchedPropertyCount,
+    currentTeam:currentTeam&&Number.isSafeInteger(currentTeam.marketerCount)&&['stay_together','split_streets'].includes(currentTeam.coveragePattern)
+      ?{marketerCount:currentTeam.marketerCount,coveragePattern:currentTeam.coveragePattern}:null,
     fullAreaWorkloadEstablished:inventoryComplete===true,executionRouteVerified:false,totalSessionMinutes:null,
     assumptions:{targetsPerHour:45,walkingMetersPerMinute:80,networkTraversalFactor:2,minimumFieldMinutes:15},
     limitations:['Field-only advisory comparison; travel, setup, access and execution itinerary are unverified.',
       ...(inventoryComplete?[]:['Known street-supported target subset only; complete area/team duration is not established.'])]};
   const unavailable=reason=>({...base,status:'unavailable',reason,fullAreaWorkloadEstablished:false,rows:[]});
-  if(!planning.validateGeometry(geometry).valid||features.length>5000||segments.length>256)return unavailable('Current bounded geometry and street evidence are required.');
+  if(!planning.validateGeometry(geometry).valid)return unavailable('Current bounded geometry is required.');
+  if(features.length>5000||segments.length>256)return unavailable('This evidence exceeds the bounded comparison limit of 5,000 targets or 256 street segments. A supported local allocation is not established.');
   const region=areas.normalizeAreas({areas:[{geometry}]}).union,ids=new Set();
   for(const f of features){const id=f.addressKey||f.id||f.sourceId;
     if(!id||ids.has(id)||![f.latitude,f.longitude].every(Number.isFinite)||!planning.pointInsidePolygon(f,geometry))return unavailable('Unique targets inside this fixed boundary are required.');ids.add(id);}
@@ -73,10 +84,11 @@ function compare({geometry,features=[],segments=[],inventoryComplete=false}){
   const rows=[1,2,3,4].map(marketerCount=>{
     const allocations=units?partition(units,marketerCount):[shared];
     return {marketerCount,coveredTargetCount:features.length,walkingMinutes,handlingMinutes,
-      stayTogether:{fieldMinutes:shared.fieldMinutes,allocations:[shared]},
-      splitUp:{fieldMinutes:Math.max(...allocations.map(a=>a.fieldMinutes)),allocations,
+      stayTogether:{binding:{...binding,marketerCount,coveragePattern:'stay_together'},calculatedFieldMinutes:shared.calculatedFieldMinutes,fieldMinutes:shared.fieldMinutes,allocations:[shared]},
+      splitUp:{binding:{...binding,marketerCount,coveragePattern:'split_streets'},calculatedFieldMinutes:Math.max(...allocations.map(a=>a.calculatedFieldMinutes)),fieldMinutes:Math.max(...allocations.map(a=>a.fieldMinutes)),allocations,
+        walkingMinutes:allocations.reduce((s,a)=>s+a.walkingMinutes,0),handlingMinutes:allocations.reduce((s,a)=>s+a.handlingMinutes,0),
         occupiedMarketers:allocations.length,allocationBasis:units?'complementary_contiguous_observed_segments':'whole_area_no_supported_subdivision',
-        subdivisionEstablished:!!units,idealizedEvenDivisionMinutes:shared.fieldMinutes/marketerCount,
+        subdivisionEstablished:!!units,idealizedEvenDivisionMinutes:shared.rawFieldMinutes/marketerCount,
         idealizedLabel:'Idealized even division only; not a practical allocation and excludes the 15-minute planning floor.'}};
   });
   return {...base,status:'supported_subset',coveredTargetCount:features.length,networkMeters,walkingMinutes,handlingMinutes,rows};
