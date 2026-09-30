@@ -48,6 +48,6 @@ Production build: `flutter build web --release --dart-define=APP_ENV=production 
 - GA4 property `548368356` Realtime pages actually showed **`/create-account`: 1 active user, 6 views** at the final readback. These were controlled QA entries, switching and reload, including the first signed-in redirect. They are not six signups or customers, or proof of conversion. The canonical path has no role, referral or private identifier. The intended measurement ID remains `G-9VY50190LG`; analytics bytes/configuration were unchanged. No analytics popup was shown.
 - No production account, checkout, payment, profile save, reward or outreach was created. No Functions deployment, native CI or frozen-native merge occurred. Local test emulators were stopped. Both previously skipped campaign browser harnesses remain unverified and outside this correction.
 
-Proofs: `qa-artifacts/direct-registration-20260930/production-registration.jpg`, `local-narrow.jpg`, and `ga4-realtime-pages.jpg`.
+Retained image proofs: `qa-artifacts/direct-registration-20260930/local-narrow.jpg` (local production build) and `ga4-realtime-pages.jpg` (actual GA4 receipt). Production form visibility and route behavior were observed in the browser and accessibility readback. The exported production canvas image was incomplete and was discarded rather than presented as visual proof.
 
 [GA4 Realtime pages](https://analytics.google.com/analytics/web/#/a335270603p548368356/realtime/pages).
