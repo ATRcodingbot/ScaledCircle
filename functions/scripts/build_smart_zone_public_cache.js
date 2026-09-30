@@ -25,6 +25,7 @@ function build({payload,sourceCoverage,now=Date.now()}){
     coverage:clipping.intersection(sourceCoverage,rect),// Completeness describes acquisition of source records, not certainty of
     // every footprint. Retained missing members are localized by the parser.
     complete:typeof payload.referenceIncomplete==='boolean'&&!(payload.invalidSourceWays>0),
+    buildingInventoryComplete:payload.buildingInventoryComplete===true,inventoryVersion:payload.inventoryVersion||'LegacySelectedObjectsV1',
     unresolvedReferenceCount:(payload.missingMemberWays||[]).length+(payload.unsupportedNestedRelations||[]).length,tiles:{}};
   if(!cache.safeMetadata(manifest)||!manifest.coverage.length||!Array.isArray(payload.elements))throw Error('invalid_source_metadata');
   if(!manifest.complete)throw Error('incomplete_source_geometry');

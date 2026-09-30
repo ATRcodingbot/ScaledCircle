@@ -8683,9 +8683,9 @@ exports.getCampaignZoneIntelligence = onCall(
       throw new HttpsError("permission-denied", "Business campaign access is required.");
     }
     try {
-      return await require('./zone_intelligence_runtime').preview({db, context, data:request.data || {},
+      return await require('./zone_intelligence_runtime').preview({db, context, data:request.data || {},onDiagnostic:trace=>logger.info('Manual Zone evidence',trace),
         fetchSnapshot:require('./smart_zone_public_cache_runtime').createAcquirer({
-          db, bucket:getStorage().bucket(), liveFetch:smartZoneGeography.fetchSnapshot}), endpoint:OVERPASS_URL});
+          db, bucket:getStorage().bucket(), liveFetch:smartZoneGeography.fetchSnapshot,allowPartialRegional:true}), endpoint:OVERPASS_URL});
     } catch (error) {
       const known = ["unauthenticated", "permission-denied", "not-found", "invalid-argument", "failed-precondition"].includes(error.code);
       throw new HttpsError(known ? error.code : "unavailable", known ? error.message :
@@ -8704,6 +8704,6 @@ exports.confirmCampaignZoneIntelligence = onCall(
       reauthorize:transaction=>businessWorkspaceService().authority({uid:context.actorUid||context.uid,
         businessId:context.uid,permission:'campaigns',transaction,allowExpired:true}),
       fetchSnapshot:require('./smart_zone_public_cache_runtime').createAcquirer({
-        db,bucket:getStorage().bucket(),liveFetch:smartZoneGeography.fetchSnapshot}),endpoint:OVERPASS_URL});
+        db,bucket:getStorage().bucket(),liveFetch:smartZoneGeography.fetchSnapshot,allowPartialRegional:true}),endpoint:OVERPASS_URL});
   }),
 );

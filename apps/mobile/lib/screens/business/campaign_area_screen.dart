@@ -53,6 +53,7 @@ class CampaignAreaScreen extends StatefulWidget {
   final bool focusMapOnOpen;
   final Future<bool> Function()? beforeAccept;
   final ZoneEvidenceLoader? zoneEvidenceLoader;
+  final Map<String, dynamic>? teamCapacity;
   final String Function()? zoneEvidenceIdentity;
   final MapController? mapController;
   final Future<bool> Function()? analyzePersistedZone;
@@ -80,6 +81,7 @@ class CampaignAreaScreen extends StatefulWidget {
     this.focusMapOnOpen = false,
     this.beforeAccept,
     this.zoneEvidenceLoader,
+    this.teamCapacity,
     this.zoneEvidenceIdentity,
     this.mapController,
     this.analyzePersistedZone,
@@ -2061,8 +2063,9 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
                             key: ValueKey(_tileAttempt),
                             errorTileCallback: (_, error, stack) {
                               WidgetsBinding.instance.addPostFrameCallback((_) {
-                                if (mounted && !_tileLoadFailed)
+                                if (mounted && !_tileLoadFailed) {
                                   setState(() => _tileLoadFailed = true);
+                                }
                               });
                               WidgetsBinding.instance.ensureVisualUpdate();
                             },
@@ -2157,6 +2160,7 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
                                       ? widget.campaignReference.id
                                       : null,
                                   loader: widget.zoneEvidenceLoader,
+                                  teamCapacity: widget.teamCapacity,
                                   identity: widget.zoneEvidenceIdentity,
                                 ),
                               ],

@@ -81,7 +81,7 @@ function decode(bytes,expectedHash,onBytes=()=>{}){
 }
 const blobPath=digest=>`${PREFIX}blobs/${digest}.json.gz`;
 function decorate(snapshot,meta,now,extra={}){
-  return {...snapshot,cacheEvidence:{provider:meta.provider,snapshotAt:meta.snapshotAt,
+  return {...snapshot,buildingInventoryComplete:meta.buildingInventoryComplete===true,cacheEvidence:{provider:meta.provider,snapshotAt:meta.snapshotAt,
     retrievedAt:meta.retrievedAt,importedAt:meta.importedAt,sourceHash:meta.sourceHash,
     bounds:meta.bounds,geometryVersion:'WGS84_OSM_complete_geometry_v2',datasetVersion:meta.version,parserVersion:meta.parserVersion,
     freshness:freshness(meta.snapshotAt,now),transport:meta.provider==='overpass'?'cached_overpass':'regional_cache',
@@ -98,7 +98,7 @@ function evidenceBounds(bounds) {
   const lat=geography.POINT_GUARD_METERS/111320,lon=lat/Math.cos(Math.max(Math.abs(bounds[1]),Math.abs(bounds[3]))*Math.PI/180);
   return [bounds[0]-lon,bounds[1]-lat,bounds[2]+lon,bounds[3]+lat];
 }
-function createReader({store,now=Date.now}){
+function createReader({store,now=Date.now,allowPartial=false,onCoverage}){
   let manifestPromise;const blobs=new Map();let bytesRead=0,rawBytesRead=0;
   const blob=async digest=>{
     if(!/^[a-f0-9]{64}$/.test(digest||''))throw Error('cache_integrity');
@@ -111,14 +111,19 @@ function createReader({store,now=Date.now}){
   };
   return async boundary=>{
     const bounds=boundsOf(boundary),m=await(manifestPromise??=store.readManifest());
+    const report=(reasonCode,extra={})=>{try{onCoverage?.({reasonCode,queryBounds:bounds,
+      provider:safeMetadata(m)?m.provider:null,snapshotAt:safeMetadata(m)?m.snapshotAt:null,...extra});}catch(_){}};
     const halo=evidenceBounds(bounds),coverageBoundary=[{longitude:halo[0],latitude:halo[1]},{longitude:halo[2],latitude:halo[1]},
       {longitude:halo[2],latitude:halo[3]},{longitude:halo[0],latitude:halo[3]}];
     if(!safeMetadata(m)||m.provider!=='geofabrik_maryland'||m.complete!==true||
-      !Array.isArray(m.coverage)||!areas.isContained(coverageBoundary,m.coverage))return null;
-    const keys=tileKeys(halo);if(keys.length>16)return null;
-    const elements=new Map();
+      !Array.isArray(m.coverage)){report('manifest_unavailable');return null;}
+    const fullCoverage=areas.isContained(coverageBoundary,m.coverage);
+    if(!allowPartial&&!fullCoverage){report('outside_cache_coverage');return null;}
+    const keys=tileKeys(halo);if(keys.length>16){report('cache_tile_limit',{requestedTileCount:keys.length});return null;}
+    const elements=new Map(),availableKeys=[],missingKeys=[],coverageTiles=[];
     for(const key of keys){
-      const ref=m.tiles?.[key];if(!ref||ref.complete!==true)return null;
+      const ref=m.tiles?.[key];if(!ref||ref.complete!==true){if(!allowPartial){report('tile_unavailable',{requestedTileCount:keys.length,missingTileKeys:[key]});return null;}missingKeys.push(key);continue;}
+      availableKeys.push(key);const [x,y]=key.split('_').map(Number);coverageTiles.push([[[x*GRID,y*GRID],[(x+1)*GRID,y*GRID],[(x+1)*GRID,(y+1)*GRID],[x*GRID,(y+1)*GRID],[x*GRID,y*GRID]]]);
       const tile=await blob(ref.hash);
       if(tile.version!==VERSION||tile.sourceHash!==m.sourceHash||tile.key!==key||!Array.isArray(tile.elements))throw Error('cache_integrity');
       for(const e of tile.elements){
@@ -129,19 +134,24 @@ function createReader({store,now=Date.now}){
         elements.set(id,e);if(elements.size>MAX_ELEMENTS)throw Error('element_limit_exceeded');
       }
     }
-    const snap=geography.snapshotFromElements(boundary,[...elements.values()],{dataTimestamp:m.snapshotAt,fetchedAt:m.retrievedAt});
-    return {snapshot:decorate(snap,{...m,evidenceHash:hash(JSON.stringify(keys.map(k=>m.tiles[k].hash)))},now(),
-      {queryBounds:bounds,evidenceBounds:halo,geometryDigest:pi.geometryDigest(boundary)}),
+    if(!availableKeys.length){report('outside_cache_coverage',{requestedTileCount:keys.length,availableTileCount:0});return null;}
+    const clipping=require('polygon-clipping'),coverage=clipping.intersection(m.coverage,clipping.union(...coverageTiles));
+    if(!coverage.length||!clipping.intersection(coverage,[[[...boundary,boundary[0]].map(p=>[p.longitude,p.latitude])]]).length){report('outside_cache_coverage');return null;}
+    report(fullCoverage&&!missingKeys.length?'coverage_complete':'partial_coverage',{requestedTileCount:keys.length,availableTileCount:availableKeys.length,missingTileKeys:missingKeys});
+    const snap=geography.snapshotFromElements(boundary,[...elements.values()],{dataTimestamp:m.snapshotAt,fetchedAt:m.retrievedAt,buildingInventoryComplete:m.buildingInventoryComplete});
+    snap.evidenceCoverage=coverage;
+    return {snapshot:decorate(snap,{...m,evidenceHash:hash(JSON.stringify(availableKeys.map(k=>m.tiles[k].hash)))},now(),
+      {queryBounds:bounds,evidenceBounds:halo,geometryDigest:pi.geometryDigest(boundary),coverageState:fullCoverage&&!missingKeys.length?'complete':'partial',requestedTileCount:keys.length,availableTileCount:availableKeys.length,missingTileKeys:missingKeys,buildingInventoryComplete:m.buildingInventoryComplete===true}),
       rawElementCount:elements.size};
   };
 }
-function createAcquirer({store,liveFetch=geography.fetchSnapshot,now=Date.now}){
-  const regional=createReader({store,now});let refreshes=0;
+function createAcquirer({store,liveFetch=geography.fetchSnapshot,now=Date.now,allowPartialRegional=false}){
+  let regionalCoverage=null;const regional=createReader({store,now,allowPartial:allowPartialRegional,onCoverage:value=>{regionalCoverage=value;}});let refreshes=0;
   return async({selectedBoundary,endpoint,onDiagnostic})=>{
-    const started=now();let cached=null,cacheReason='cache_missing',rawElementCount=null;
+    regionalCoverage=null;const started=now();let cached=null,cacheReason='cache_missing',rawElementCount=null;
     const emit=(snapshot,reasonCode,refresh=null)=>{
       try{onDiagnostic?.({status:snapshot?'success':'unavailable',stage:'public_cache',reasonCode,
-        elapsedMs:now()-started,cacheReason,rawElementCount,
+        elapsedMs:now()-started,cacheReason,rawElementCount,coverage:regionalCoverage,
         ...(snapshot?counts(snapshot):{}),cacheEvidence:snapshot?.cacheEvidence||null,refresh});}catch(_){}
       return snapshot;
     };
@@ -149,7 +159,7 @@ function createAcquirer({store,liveFetch=geography.fetchSnapshot,now=Date.now}){
     if(!valid.valid||valid.areaSquareMeters>geography.MAX_QUERY_AREA_SQUARE_METERS)return emit(null,'invalid_query_geometry');
     const digest=pi.geometryDigest(selectedBoundary);
     try{const hit=await regional(selectedBoundary);cached=hit?.snapshot||null;rawElementCount=hit?.rawElementCount??null;
-      if(cached)cacheReason='regional_cache_found';}catch(_){cacheReason='regional_cache_unavailable';}
+      if(cached)cacheReason='regional_cache_found';else if(regionalCoverage)cacheReason=regionalCoverage.reasonCode;}catch(error){cacheReason=['cache_integrity','cache_conflicting_evidence','cache_read_budget','cache_size_limit','element_limit_exceeded'].includes(error?.message)?error.message:'regional_cache_unavailable';}
     // A fresh regional snapshot needs no Firestore refresh lookup or provider call.
     if(cached&&['fresh','usable_cached'].includes(cached.cacheEvidence.freshness))return emit(cached,'cache_ready');
     try{
@@ -177,7 +187,7 @@ function createAcquirer({store,liveFetch=geography.fetchSnapshot,now=Date.now}){
     if(snapshot&&freshness(snapshot.dataTimestamp,now())!=='unavailable'){
       const meta={version:VERSION,parserVersion:PARSER_VERSION,provider:'overpass',snapshotAt:snapshot.dataTimestamp,
         retrievedAt:snapshot.fetchedAt,importedAt:new Date(now()).toISOString(),bounds:boundsOf(selectedBoundary),
-        sourceHash:hash(JSON.stringify(snapshot)),geometryDigest:digest,complete:true};
+        sourceHash:hash(JSON.stringify(snapshot)),geometryDigest:digest,complete:true,buildingInventoryComplete:snapshot.buildingInventoryComplete===true};
       try{await store.finishRefresh(digest,lease,{meta,snapshot,diagnostic});}catch(_){/* Local result is still usable; no stale pointer deletion. */}
       return emit(decorate(snapshot,meta,now(),{transport:'live_refresh',queryBounds:boundsOf(selectedBoundary),geometryDigest:digest}),'refresh_ready',diagnostic);
     }

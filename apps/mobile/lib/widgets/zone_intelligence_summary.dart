@@ -7,6 +7,11 @@ import '../services/business_workspace_service.dart';
 
 bool zoneEvidenceMatches(Map? data, dynamic geometry) =>
     data?['version'] == 'ZoneIntelligenceV1' &&
+    !(data?['mode'] == 'manual' &&
+        data?['status'] != 'unavailable' &&
+        data?['mappedTargetCount'] == 0 &&
+        data?['workload'] == null &&
+        data?['analysisRevision'] == null) &&
     data?['geometryDigest'] != null &&
     data?['geometryDigest'] == CampaignAreaGeometry.savedDigest(geometry);
 
@@ -40,7 +45,11 @@ class ZoneIntelligenceSummary extends StatelessWidget {
     final workload = data['workload'] as Map?;
     final regional = data['regionalContext'] as Map?;
     final source = data['source'] as Map?;
-    final count = data['mappedTargetCount'];
+    final count = data['status'] == 'unavailable'
+        ? null
+        : data['mappedTargetCount'];
+    final walking = data['walkingEvidence'] as Map?;
+    final team = data['teamCapacityAnalysis'] as Map?;
     final meters = data['supportingStreetMeters'] as num?;
     final signals = (regional?['signals'] as List? ?? [])
         .whereType<Map>()
@@ -78,12 +87,24 @@ class ZoneIntelligenceSummary extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        if (data['status'] == 'partial')
+          const Text(
+            'Partial mapping evidence · observations, not a complete inventory',
+          ),
+        if (data['status'] == 'empty')
+          const Text(
+            'Analysis completed: no matching classified mapped targets',
+          ),
         Text(
           count is num
               ? '$count mapped ${business ? 'business' : 'residential'} targets'
               : 'Mapped target count unavailable',
           style: theme.textTheme.titleLarge,
         ),
+        if ((data['unclassifiedMappedFeatureCount'] as num? ?? 0) > 0)
+          Text(
+            '${data['unclassifiedMappedFeatureCount']} unclassified mapped buildings / addresses',
+          ),
         if (mix != null) ...[
           for (final category in categories)
             Text(
@@ -112,6 +133,22 @@ class ZoneIntelligenceSummary extends StatelessWidget {
                 ? 'One-Scaler planning estimate'
                 : 'Exceeds the six-hour one-Scaler limit. Review smaller work areas.',
           ),
+        if (walking?['walkingOnly'] == true && walking?['minutes'] is num) ...[
+          Text(
+            'Walking-only planning estimate: ~${fieldWorkload(walking!['minutes'] as num)}',
+          ),
+          const Text(
+            'This does not establish full field workload or an execution route.',
+          ),
+        ],
+        if (team?['marketerCount'] is num) ...[
+          Text(
+            'Team planning: ${team!['marketerCount']} marketers · ${team['sessionHours']} hr each',
+          ),
+          const Text(
+            'Whole-area evidence does not establish an even split between marketers. Travel and total team elapsed time remain unknown.',
+          ),
+        ],
         const SizedBox(height: 16),
         Text(
           meters == null
@@ -202,6 +239,17 @@ class ZoneIntelligenceSummary extends StatelessWidget {
                     ),
                     Text('Freshness: ${source['freshness'] ?? 'Not recorded'}'),
                   ],
+                  if (data['workloadComponents'] is Map) ...[
+                    Text(
+                      'Target handling: ${(data['workloadComponents']['targetHandlingMinutes'] as num).toStringAsFixed(1)} min',
+                    ),
+                    Text(
+                      'Advisory walking component: ${(data['workloadComponents']['walkingMinutes'] as num).toStringAsFixed(1)} min',
+                    ),
+                    Text(
+                      'Supported person-work: ${data['workloadComponents']['totalPersonMinutes']} min · total team elapsed time not established',
+                    ),
+                  ],
                   if (workload != null)
                     const Text(
                       'Planning assumptions: 45 mapped targets/hour plus walking at 80 m/min over twice the supporting network length; minimum 15 minutes. The maintained model uses the same pace for flyers, door hangers and door-to-door outreach. No conversation duration is assumed. This is not a reviewed walking itinerary.',
@@ -245,6 +293,7 @@ class ZoneIntelligencePreview extends StatefulWidget {
     this.initialEvidence,
     this.loader,
     this.identity,
+    this.teamCapacity,
   });
   final dynamic geometry;
   final String campaignId;
@@ -252,6 +301,7 @@ class ZoneIntelligencePreview extends StatefulWidget {
   final Map<String, dynamic>? initialEvidence;
   final ZoneEvidenceLoader? loader;
   final String Function()? identity;
+  final Map<String, dynamic>? teamCapacity;
   @override
   State<ZoneIntelligencePreview> createState() =>
       _ZoneIntelligencePreviewState();
@@ -296,13 +346,16 @@ class _ZoneIntelligencePreviewState extends State<ZoneIntelligencePreview> {
   void didUpdateWidget(ZoneIntelligencePreview oldWidget) {
     super.didUpdateWidget(oldWidget);
     final changedOwner = _owner != _identity;
+    final changedTeam =
+        widget.teamCapacity.toString() != oldWidget.teamCapacity.toString();
     if (CampaignAreaGeometry.savedDigest(widget.geometry) !=
             CampaignAreaGeometry.savedDigest(oldWidget.geometry) ||
         widget.campaignId != oldWidget.campaignId ||
         widget.zoneId != oldWidget.zoneId ||
+        changedTeam ||
         changedOwner) {
       _owner = _identity;
-      _reset(useInitial: !changedOwner);
+      _reset(useInitial: !changedOwner && !changedTeam);
     }
   }
 
@@ -334,6 +387,7 @@ class _ZoneIntelligencePreviewState extends State<ZoneIntelligencePreview> {
       'campaignId': widget.campaignId,
       'geometry': widget.geometry,
       if (widget.zoneId != null) 'zoneId': widget.zoneId,
+      if (widget.teamCapacity != null) 'teamCapacity': widget.teamCapacity,
     };
     try {
       final result =

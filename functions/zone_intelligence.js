@@ -73,28 +73,54 @@ function recommended(candidate, workType, intent) {
     limitations:candidate.source?.uncertaintyGuards>0?
       ['Incomplete mapped exclusion features have conservative avoidance areas.']:[]});
 }
-function analyze({geometry, snapshot, workType, propertyContext}) {
-  const intent = serviceability.intent(workType);
-  const unavailable = message => project({geometry,features:null,segments:null,source:null,intent,workType,
-    propertyContext,status:'unavailable',limitations:[message]});
-  if (planning.polygonAreaSquareMeters(geometry)>planning.MAX_GEOGRAPHIC_QUERY_SQUARE_METERS)
+function analyze({geometry, snapshot, workType, propertyContext, acquisition=null}) {
+  const intent=serviceability.intent(workType);
+  const unavailable=message=>({...project({geometry,features:null,segments:null,source:null,intent,workType,
+    propertyContext,status:'unavailable',limitations:[message]}),analysisRevision:'ManualBoundaryEvidenceV2',
+    acquisition,diagnostics:{acquisitionState:'unavailable'}});
+  if(planning.polygonAreaSquareMeters(geometry)>planning.MAX_GEOGRAPHIC_QUERY_SQUARE_METERS)
     return unavailable('This boundary exceeds the 25 km² map-analysis limit. Your territory has not been changed.');
-  if (!['residential','business'].includes(intent))
-    return unavailable('This campaign type needs manual target and workload review.');
-  if (!snapshot) return unavailable('Reliable mapping evidence is unavailable for this boundary. You can keep or adjust your area.');
-  const shaped = serviceability.shape({boundary:geometry,snapshot,workType,propertiesPerHour:45,
-    anchor:geometry[0],desiredTargetLimit:5000,maximumZones:32,desiredMinutes:360},planning);
-  const analysis = shaped.analysis;
-  if (!analysis) return unavailable(shaped.reasons.join(' '));
-  const meters = analysis.streetMeters;
-  const workload = analysis.supportedFeatures.length && meters>0 ? planning.estimateWorkload({
-    estimatedProperties:analysis.supportedFeatures.length,estimatedWalkingMeters:meters*2,propertiesPerHour:45,workType}) : null;
-  return project({geometry,features:analysis.features,segments:analysis.segments,workload,intent,workType,propertyContext,
-    status:analysis.supportedFeatures.length < shaped.eligibleMappedFeatureCount?'partial':'available',
+  if(!['residential','business'].includes(intent))return unavailable('This campaign type needs manual target and workload review.');
+  if(!snapshot)return unavailable(acquisition?.cacheReason==='outside_cache_coverage'?
+    'Cached mapping does not cover this boundary yet. Your area has not changed; you can keep it for planning.':
+    'Reliable mapping evidence is unavailable for this boundary. You can keep or adjust your area.');
+  const shaped=serviceability.shape({boundary:geometry,snapshot,workType,propertiesPerHour:45,
+    anchor:geometry[0],desiredTargetLimit:5000,maximumZones:32,desiredMinutes:360,factualOnly:true},planning);
+  const a=shaped.analysis;
+  if(!a)return unavailable(shaped.reasons.join(' '));
+  const partialCoverage=snapshot.cacheEvidence?.coverageState==='partial';
+  const unclassified=a.unclassifiedFeatures||[],inventoryComplete=snapshot.buildingInventoryComplete===true;
+  const incompleteClassification=unclassified.length>0||!inventoryComplete;
+  const segments=a.supportedFeatures.length?a.segments:a.availableSegments;
+  const meters=a.supportedFeatures.length?a.streetMeters:a.availableStreetMeters;
+  const workload=!partialCoverage&&a.supportedFeatures.length&&meters>0?planning.estimateWorkload({
+    estimatedProperties:a.supportedFeatures.length,estimatedWalkingMeters:meters*2,propertiesPerHour:45,workType}):null;
+  const empty=inventoryComplete&&!partialCoverage&&!unclassified.length&&!a.features.length;
+  const status=partialCoverage||incompleteClassification||a.supportedFeatures.length<a.features.length?'partial':empty?'empty':'available';
+  const result=project({geometry,features:a.features.length||(!incompleteClassification&&!partialCoverage)?a.features:null,
+    segments,workload,intent,workType,propertyContext,status,
     source:{name:'OpenStreetMap',dataTimestamp:snapshot.dataTimestamp||null,fetchedAt:snapshot.fetchedAt||null,
       ...snapshot.cacheEvidence},limitations:[
-      `${analysis.supportedFeatures.length} of ${shaped.eligibleMappedFeatureCount} eligible mapped features have supporting local-street evidence.`,
+      ...(partialCoverage?['Only part of this boundary has complete cached mapping coverage. Counts and streets describe supported observations, not the whole area.']:[]),
+      ...(!inventoryComplete?['This cached source used a selected-object import. A complete building inventory has not been established.']:[]),
+      ...(unclassified.length?['Some mapped buildings or addresses have no supported residential/business classification.']:[]),
+      `${a.supportedFeatures.length} of ${a.features.length} classified mapped features have supporting local-street evidence.`,
       'The street network may contain separate components; no connectors or walking itinerary are inferred.',
       ...(shaped.geometryDiagnostics?.localizedUncertainties>0?['Uncertain exclusion features are conservatively avoided.']:[])]});
+  return {...result,analysisRevision:'ManualBoundaryEvidenceV2',acquisition,
+    coverage:{state:partialCoverage?'partial':'complete',inventoryComplete,observationsOnly:partialCoverage||incompleteClassification,
+      requestedTileCount:snapshot.cacheEvidence?.requestedTileCount??null,availableTileCount:snapshot.cacheEvidence?.availableTileCount??null},
+    unclassifiedMappedFeatureCount:unclassified.length,
+    walkingEvidence:meters>0?{minutes:meters*2/80,networkTraversalFactor:2,walkingMetersPerMinute:80,
+      walkingOnly:workload==null,partialCoverage,executionRouteVerified:false}:null,
+    workloadComponents:workload?{targetHandlingMinutes:a.supportedFeatures.length*60/45,walkingMinutes:meters*2/80,
+      totalPersonMinutes:workload.estimatedMinutes,estimatedTeamElapsedMinutes:null,sharedTravelMinutes:null}:null,
+    diagnostics:{acquisitionState:'supported_snapshot',inputTargetFeatureCount:snapshot.targetFeatures?.length??null,
+      filterCounts:a.filterCounts,
+      inputRoadWayCount:snapshot.routeWays?.length??null,inputExclusionCount:snapshot.landFeatures?.length??null,
+      inputUnresolvedExclusionCount:snapshot.unresolvedLandFeatures?.length??null,
+      classifiedInBoundaryCount:a.features.length,unclassifiedInBoundaryCount:unclassified.length,
+      streetSupportedTargetCount:a.supportedFeatures.length,permittedStreetSegmentCount:a.availableSegments.length,
+      targetServingStreetSegmentCount:a.segments.length,geometryDiagnostics:shaped.geometryDiagnostics}};
 }
 module.exports={VERSION,propertyMix,project,recommended,analyze};

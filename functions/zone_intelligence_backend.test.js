@@ -79,6 +79,32 @@ test('provider failure returns safe unknown fields and does not write a campaign
  assert.equal(r.mappedTargetCount,null);assert.ok(!JSON.stringify(r).includes('private provider detail'));
  assert.deepEqual((await db.doc('campaigns/'+s.campaignId).get()).data(),s.campaign);
 });
+
+test('manual acquisition records safe stage counts and separates timeout from a completed empty result',async()=>{
+ const s=await setup();let trace;
+ const result=await preview({...s.input,onDiagnostic:d=>trace=d,fetchSnapshot:async({onDiagnostic})=>{
+  onDiagnostic({status:'unavailable',reasonCode:'refresh_unavailable',cacheReason:'cache_missing',
+   refresh:{status:'unavailable',stage:'request',reasonCode:'timeout',elapsedMs:12000,raw:'never expose'}});return null;
+ }});
+ assert.equal(result.status,'unavailable');assert.equal(result.mappedTargetCount,null);
+ assert.equal(trace.requestId,result.requestId);assert.equal(trace.geometryDigest,result.geometryDigest);
+ assert.equal(trace.acquisition.providerResult.reasonCode,'timeout');
+ assert.ok(!JSON.stringify(trace).includes('never expose'));
+ assert.deepEqual((await db.doc('campaigns/'+s.campaignId).get()).data(),s.campaign);
+});
+
+test('own-team preview inputs update capacity without changing geometry, workload evidence, saved records or people',async()=>{
+ const s=await setup();await db.doc('campaigns/'+s.campaignId).update({executionMode:'own_team'});
+ const before=(await db.doc('campaigns/'+s.campaignId).get()).data();
+ const call=marketerCount=>preview({...s.input,data:{...s.input.data,teamCapacity:{sessionHours:4,marketerCount,coveragePattern:'split_streets'}}});
+ const one=await call(1),three=await call(3);
+ assert.equal(one.geometryDigest,three.geometryDigest);assert.deepEqual(one.workload,three.workload);
+ assert.equal(one.teamCapacityAnalysis.requestedMinutes,240);assert.equal(three.teamCapacityAnalysis.requestedMinutes,720);
+ assert.equal(three.teamCapacityAnalysis.allocations.length,1); // one whole Zone, no invented subdivision
+ assert.equal(three.teamCapacityAnalysis.estimatedElapsedMinutes,null);
+ assert.deepEqual((await db.doc('campaigns/'+s.campaignId).get()).data(),before);
+ assert.deepEqual((await db.doc('campaignZones/'+s.zoneId).get()).data(),s.zone);
+});
 test('saved recommendation evidence stays bound to owning campaign and geometry; edited or stale evidence is reacquired',async()=>{
  const s=await setup(),runId='a'.repeat(64),now=Date.now();
  const candidate={geometry:fixture.selectedBoundary,features:[{id:'exact-target',observedTags:{building:'detached'}}],

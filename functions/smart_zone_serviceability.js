@@ -79,7 +79,7 @@ function permitted(way) {
   if (['driveway', 'parking_aisle', 'drive-through'].includes(way.service)) return false;
   return (!way.bridge || way.bridge === 'no') && (!way.tunnel || way.tunnel === 'no') && (!way.layer || way.layer === '0');
 }
-function shape({anchor, boundary, snapshot, workType, propertiesPerHour, desiredTargetLimit, maximumZones, desiredMinutes}, geo) {
+function shape({anchor, boundary, snapshot, workType, propertiesPerHour, desiredTargetLimit, maximumZones, desiredMinutes, factualOnly=false}, geo) {
   const targetIntent = intent(workType);
   let geometryDiagnostics = null;
   const empty = reason => ({candidates: [], targetIntent, eligibleMappedFeatureCount: 0, reasons: [reason],geometryDiagnostics});
@@ -115,23 +115,41 @@ function shape({anchor, boundary, snapshot, workType, propertiesPerHour, desired
     .map((p, i) => [way.geometry[i], p]));
   const blocked = (a, b) => lands.some(p => lineHitsLand(a, b, p, geo)) ||
     barriers.some(([c, d]) => intersects(a, b, c, d));
-  const features = [];
-  const seen = new Set();
-  for (const feature of [...snapshot.targetFeatures].sort((a, b) => String(a.id).localeCompare(String(b.id)))) {
-    if (feature.kind !== targetIntent || !Number.isFinite(feature.latitude) || !Number.isFinite(feature.longitude) ||
-        !geo.pointInsidePolygon(feature, boundary) || lands.some(p => landContains(feature,p,geo) ||
-          feature.footprint && polygonHitsLand(feature.footprint,p,geo))) continue;
-    const duplicateKey = feature.addressKey || key(feature);
-    if (seen.has(duplicateKey) || features.some(f => distance(feature, f) < 1 ||
-        (f.footprint && geo.pointInsidePolygon(feature, f.footprint)) ||
-        (feature.footprint && geo.pointInsidePolygon(f, feature.footprint)))) continue;
-    seen.add(duplicateKey); features.push(feature);
+  const withinCoverage=(a,b=a)=>{if(!factualOnly||!snapshot.evidenceCoverage||snapshot.cacheEvidence?.coverageState!=='partial')return true;
+    const dlat=require('./smart_zone_geography').POINT_GUARD_METERS/METERS,dlon=dlat/Math.cos(a.latitude*Math.PI/180);
+    return require('./property_service_area_geometry').isContained([{latitude:Math.min(a.latitude,b.latitude)-dlat,longitude:Math.min(a.longitude,b.longitude)-dlon},{latitude:Math.min(a.latitude,b.latitude)-dlat,longitude:Math.max(a.longitude,b.longitude)+dlon},{latitude:Math.max(a.latitude,b.latitude)+dlat,longitude:Math.max(a.longitude,b.longitude)+dlon},{latitude:Math.max(a.latitude,b.latitude)+dlat,longitude:Math.min(a.longitude,b.longitude)-dlon}],snapshot.evidenceCoverage);};
+  const features=[],unknownCandidates=[],unclassifiedFeatures=[],seen=new Set();
+  const filterCounts={inputFeatures:snapshot.targetFeatures.length,invalidPoint:0,outsideBoundary:0,
+    outsideCompleteCoverage:0,excludedLand:0,otherIntent:0,duplicateClassified:0,duplicateUnclassified:0,
+    inputRoadWays:snapshot.routeWays.length,permittedRoadWays:0};
+  for(const feature of [...snapshot.targetFeatures].sort((a,b)=>String(a.id).localeCompare(String(b.id)))){
+    if(!Number.isFinite(feature.latitude)||!Number.isFinite(feature.longitude)){filterCounts.invalidPoint++;continue;}
+    if(!geo.pointInsidePolygon(feature,boundary)){filterCounts.outsideBoundary++;continue;}
+    if(!withinCoverage(feature)){filterCounts.outsideCompleteCoverage++;continue;}
+    if(lands.some(p=>landContains(feature,p,geo)||feature.footprint&&polygonHitsLand(feature.footprint,p,geo))){filterCounts.excludedLand++;continue;}
+    if(feature.kind!==targetIntent){
+      if(/^unclassified_/.test(feature.kind))unknownCandidates.push(feature);else filterCounts.otherIntent++;
+      continue;
+    }
+    const duplicateKey=feature.addressKey||key(feature);
+    if(seen.has(duplicateKey)||features.some(f=>distance(feature,f)<1||
+      f.footprint&&geo.pointInsidePolygon(feature,f.footprint)||feature.footprint&&geo.pointInsidePolygon(f,feature.footprint))){
+      filterCounts.duplicateClassified++;continue;
+    }
+    seen.add(duplicateKey);features.push(feature);
+  }
+  for(const f of unknownCandidates){
+    const duplicate=q=>(f.addressKey&&q.addressKey===f.addressKey)||distance(f,q)<1||
+      q.footprint&&geo.pointInsidePolygon(f,q.footprint)||f.footprint&&geo.pointInsidePolygon(q,f.footprint);
+    if(features.some(duplicate)||unclassifiedFeatures.some(duplicate))filterCounts.duplicateUnclassified++;
+    else unclassifiedFeatures.push(f);
   }
   if (targetIntent === 'event') return {...empty('Mapped venues can be relevant to this campaign. Event access and work duration require manual review.'),
     eligibleMappedFeatureCount: features.length};
   const edges = new Map(), adjacency = new Map();
   for (const way of snapshot.routeWays) {
     if (!permitted(way) || !Array.isArray(way.geometry)) continue;
+    filterCounts.permittedRoadWays++;
     for (let i = 1; i < way.geometry.length; i++) {
       const from = way.geometry[i - 1], to = way.geometry[i];
       if (![from.latitude, from.longitude, to.latitude, to.longitude].every(Number.isFinite)) continue;
@@ -141,7 +159,7 @@ function shape({anchor, boundary, snapshot, workType, propertiesPerHour, desired
       if (steps > MAX_EDGES) return empty('Road linework is too broad for reliable bounded planning.');
       for (let j = 0; j < steps; j++) {
         const a = interpolate(from, to, j / steps), b = interpolate(from, to, (j + 1) / steps);
-        if (!geo.pointInsidePolygon(a, boundary) || !geo.pointInsidePolygon(b, boundary) || blocked(a, b)) continue;
+        if (!geo.pointInsidePolygon(a, boundary) || !geo.pointInsidePolygon(b, boundary) || !withinCoverage(a,b) || blocked(a, b)) continue;
         if (boundary.some((p, n) => intersects(a, b, p, boundary[(n + 1) % boundary.length]))) continue;
         const ids = [key(a), key(b)], id = [...ids].sort().join('|');
         if (edges.has(id)) continue;
@@ -175,7 +193,7 @@ function shape({anchor, boundary, snapshot, workType, propertiesPerHour, desired
   // checks. It never substitutes a candidate hull for the user's boundary.
   const servingComponents = new Set(associated.map(f => f.component));
   const servingEdges = [...edges.values()].filter(e => servingComponents.has(components.get(e.from)));
-  const analysis = {features, supportedFeatures:associated.map(({edge,snap,meters,component,...f})=>f),
+  const analysis = {features, unclassifiedFeatures, filterCounts, availableSegments:[...edges.values()].map(e=>({from:e.a,to:e.b})), availableStreetMeters:[...edges.values()].reduce((sum,e)=>sum+e.meters,0), supportedFeatures:associated.map(({edge,snap,meters,component,...f})=>f),
     segments:servingEdges.map(e=>({from:e.a,to:e.b})),
     streetMeters:servingEdges.reduce((sum,e)=>sum+e.meters,0)};
   const groups = new Map();
@@ -228,7 +246,7 @@ function shape({anchor, boundary, snapshot, workType, propertiesPerHour, desired
     const middle = Math.floor(items.length / 2);
     partition(items.slice(0, middle)); partition(items.slice(middle));
   }
-  for (const items of groups.values()) partition(items);
+  if(!factualOnly)for (const items of groups.values()) partition(items);
   return {candidates, analysis, targetIntent, geometryDiagnostics, eligibleMappedFeatureCount: features.length,
     eligibleMappedSourceIds: features.map(feature => feature.id),
     roadSupportedTargetCount: associated.length,

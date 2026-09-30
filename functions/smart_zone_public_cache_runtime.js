@@ -58,5 +58,5 @@ function createStore({db,bucket,now=Date.now}){
     },
   };
 }
-function createAcquirer({db,bucket,liveFetch,now}){return cache.createAcquirer({store:createStore({db,bucket,now}),liveFetch,now});}
+function createAcquirer({db,bucket,liveFetch,now,allowPartialRegional=false}){return cache.createAcquirer({store:createStore({db,bucket,now}),liveFetch,now,allowPartialRegional});}
 module.exports={COLLECTION,MAX_DAILY_REFRESHES,MANIFEST,readObject,safeDiagnostic,createStore,createAcquirer};

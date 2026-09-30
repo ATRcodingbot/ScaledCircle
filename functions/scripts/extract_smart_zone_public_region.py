@@ -19,13 +19,13 @@ download = json.loads(Path(opts.download_metadata).read_text(encoding='utf-8'))
 with PBF.open('rb') as source:
     if hashlib.file_digest(source, 'sha256').hexdigest() != download['sha256']:
         raise ValueError('source_checksum_mismatch')
-ALLOWED = set('building building:levels building:material roof:shape roof:material shop office amenity craft landuse access foot barrier entrance area highway railway natural waterway leisure boundary place type service bridge tunnel layer addr:housenumber addr:street'.split())
+ALLOWED = set('building building:use building:levels building:material roof:shape roof:material shop office amenity craft landuse access foot barrier entrance area highway railway natural waterway leisure boundary place type service bridge tunnel layer addr:housenumber addr:street'.split())
 BUILDINGS = set('apartments bungalow detached house residential semidetached_house terrace commercial retail school college university hospital civic government industrial warehouse'.split())
 AMENITIES = set('school kindergarten college university hospital prison community_centre theatre place_of_worship grave_yard townhall courthouse police fire_station parking'.split())
 ROADS = set('residential living_street service unclassified tertiary pedestrian motorway motorway_link trunk trunk_link'.split())
 
 def selected(t, kind):
-    return ('addr:housenumber' in t or t.get('building') in BUILDINGS or 'shop' in t or 'office' in t
+    return ('addr:housenumber' in t or bool(t.get('building')) and t.get('building') != 'no' or 'shop' in t or 'office' in t
         or t.get('amenity') in AMENITIES or t.get('landuse') in {'education','institutional','industrial','cemetery','commercial','retail'}
         or t.get('access') in {'private','no','permit'} or kind=='way' and (t.get('highway') in ROADS or t.get('railway') in {'rail','light_rail'})
         or t.get('natural')=='water' or t.get('waterway')=='riverbank' or t.get('leisure') in {'park','nature_reserve','stadium','sports_centre'}
@@ -115,11 +115,11 @@ reader=osmium.io.Reader(str(PBF));header=reader.header();timestamp=header.get('o
 
 payload={'source':'OpenStreetMap via Geofabrik Maryland regional extract','sourceDataTimestamp':timestamp,
  'retrievedAt':download['retrievedAt'],'sourceSha256':download['sha256'],'bounds':BOX,'referenceIncomplete':bool(missing or nested),
- 'invalidSourceWays':region.invalid,'missingMemberWays':missing,'unsupportedNestedRelations':nested,'elements':region.elements}
+ 'buildingInventoryComplete':True,'inventoryVersion':'OsmPublicObjectsV2','invalidSourceWays':region.invalid,'missingMemberWays':missing,'unsupportedNestedRelations':nested,'elements':region.elements}
 encoded=json.dumps(payload,separators=(',',':')).encode();compressed=gzip.compress(encoded,mtime=0)
 Path(opts.output).write_bytes(encoded)
 Path(opts.output + '.gz').write_bytes(compressed)
 result={'stage':'complete','sourceDataTimestamp':timestamp,'elements':len(region.elements),'bufferedBounds':BOX,
- 'missingMemberWays':len(missing),'unsupportedNestedRelations':len(nested),'invalidSourceWays':region.invalid,
+ 'missingMemberWays':len(missing),'unsupportedNestedRelations':len(nested),'buildingInventoryComplete':True,'inventoryVersion':'OsmPublicObjectsV2','invalidSourceWays':region.invalid,
  'jsonBytes':len(encoded),'gzipBytes':len(compressed),'sha256':hashlib.sha256(encoded).hexdigest(),'seconds':round(time.monotonic()-start,3)}
 Path(opts.output + '.receipt.json').write_text(json.dumps(result,indent=2)+'\n',encoding='utf-8');print(json.dumps(result,indent=2))

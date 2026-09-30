@@ -56,6 +56,89 @@ Widget page(Widget child, {double scale = 1}) => MaterialApp(
   ),
 );
 void main() {
+  testWidgets(
+    'acquisition failure cannot display zero even from a legacy response',
+    (t) async {
+      final value = evidence()
+        ..addAll({
+          'status': 'unavailable',
+          'mappedTargetCount': 0,
+          'workload': null,
+          'supportingStreetMeters': null,
+        });
+      await t.pumpWidget(
+        page(ZoneIntelligenceSummary(data: value, geometry: area)),
+      );
+      expect(find.text('0 mapped residential targets'), findsNothing);
+      expect(find.text('Mapped target count unavailable'), findsOneWidget);
+    },
+  );
+  testWidgets(
+    'partial observations and walking-only evidence remain independently readable',
+    (t) async {
+      final value = evidence()
+        ..addAll({
+          'status': 'partial',
+          'mappedTargetCount': null,
+          'propertyMix': null,
+          'regionalContext': null,
+          'workload': null,
+          'analysisRevision': 'ManualBoundaryEvidenceV2',
+          'unclassifiedMappedFeatureCount': 46,
+          'walkingEvidence': {'minutes': 26.6, 'walkingOnly': true},
+        });
+      await t.pumpWidget(
+        page(ZoneIntelligenceSummary(data: value, geometry: area), scale: 2),
+      );
+      expect(find.textContaining('Partial mapping evidence'), findsOneWidget);
+      expect(
+        find.text('46 unclassified mapped buildings / addresses'),
+        findsOneWidget,
+      );
+      expect(find.text('620 m supporting streets'), findsOneWidget);
+      expect(
+        find.textContaining('Walking-only planning estimate'),
+        findsOneWidget,
+      );
+      expect(find.text('Not established'), findsOneWidget);
+      expect(t.takeException(), isNull);
+    },
+  );
+  testWidgets(
+    'team input change discards old pending response without changing the boundary',
+    (t) async {
+      final pending = <Completer<Map<String, dynamic>>>[];
+      Widget preview(int count) => page(
+        ZoneIntelligencePreview(
+          geometry: area,
+          campaignId: 'fixture',
+          identity: () => 'fixture-owner',
+          teamCapacity: {
+            'sessionHours': 4,
+            'marketerCount': count,
+            'coveragePattern': 'split_streets',
+          },
+          loader: (input) {
+            final future = Completer<Map<String, dynamic>>();
+            pending.add(future);
+            return future.future;
+          },
+        ),
+      );
+      await t.pumpWidget(preview(1));
+      await t.pump(const Duration(milliseconds: 501));
+      await t.pumpWidget(preview(3));
+      await t.pump(const Duration(milliseconds: 501));
+      expect(pending.length, 2);
+      pending.first.complete(evidence(count: 111));
+      await t.pump();
+      expect(find.textContaining('111 mapped'), findsNothing);
+      pending.last.complete(evidence(count: 12));
+      await t.pump();
+      expect(find.text('12 mapped residential targets'), findsOneWidget);
+      await t.pumpWidget(const SizedBox());
+    },
+  );
   test(
     'all retained production Area/alternate cards match the exact server/map digest',
     () {

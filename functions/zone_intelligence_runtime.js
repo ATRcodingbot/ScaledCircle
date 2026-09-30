@@ -7,7 +7,7 @@ const planning=require('./smart_zone_planning');
 const pi=require('./property_intelligence');
 const fail=(code,message)=>{const e=Error(message);e.code=code;throw e;};
 const id=v=>{if(typeof v!=='string'||!/^[A-Za-z0-9_-]{1,128}$/.test(v))fail('invalid-argument','Choose a valid campaign or area.');return v;};
-async function preview({db,context,data,fetchSnapshot,endpoint,now=Date.now}) {
+async function preview({db,context,data,fetchSnapshot,endpoint,now=Date.now,onDiagnostic}) {
   if(!context?.uid)fail('unauthenticated','Sign in to review your area.');
   if(context.role!=='business'||context.isAdmin||!context.permissions?.includes('campaigns'))
     fail('permission-denied','Business campaign access is required.');
@@ -55,9 +55,31 @@ async function preview({db,context,data,fetchSnapshot,endpoint,now=Date.now}) {
       fetchedAt:a.generatedAt||null},signals:a.predominantConstructionEra?[{label:'Predominant nearby housing era',
       value:a.predominantConstructionEra,source:a.source}]:[],partial:a.partialCoverage===true};
   }
-  let snapshot=null;
-  try{snapshot=await fetchSnapshot({selectedBoundary:geometry,endpoint});}catch(_){/* safe unavailable projection */}
-  return projection.analyze({geometry,snapshot,workType,propertyContext});
+  let snapshot=null,acquisition=null;
+  const requestId=crypto.randomUUID(),started=now();
+  try{snapshot=await fetchSnapshot({selectedBoundary:geometry,endpoint,onDiagnostic:d=>{
+    acquisition={status:d.status,reasonCode:d.reasonCode,cacheReason:d.cacheReason,coverage:d.coverage||null,rawElementCount:d.rawElementCount??null,
+      classifications:Object.fromEntries(Object.entries(d.classifiedTargetCounts||{}).filter(([k,v])=>['residential','business','event','unclassified_address','unclassified_building'].includes(k)&&Number.isInteger(v)&&v>=0)),
+      targetFeatureCount:d.targetFeatureCount??null,routeWayCount:d.routeWayCount??null,
+      exclusionPolygonCount:d.exclusionPolygonCount??null,unresolvedLandFeatureCount:d.unresolvedLandFeatureCount??null,
+      providerResult:d.refresh?require('./smart_zone_public_cache_runtime').safeDiagnostic(d.refresh):null};
+  }});}catch(_){acquisition={status:'unavailable',reasonCode:'acquisition_failed'};}
+  const result=projection.analyze({geometry,snapshot,workType,propertyContext,acquisition});
+  const trace={requestId,campaignId,workspaceId:context.uid,geometryDigest:digest,
+    vertexCount:geometry.length,bounds:require('./smart_zone_public_cache').boundsOf(geometry),intent:result.targetIntent,
+    elapsedMs:now()-started,status:result.status,acquisition,diagnostics:result.diagnostics||null,
+    source:result.source,coverage:result.coverage||null,mappedTargetCount:result.mappedTargetCount,
+    supportingStreetMeters:result.supportingStreetMeters,workloadMinutes:result.workload?.minutes??null};
+  try{onDiagnostic?.(trace);}catch(_){}
+  let teamCapacityAnalysis=null;
+  if(campaign.executionMode==='own_team'){
+    const input=data.teamCapacity??campaign.campaignWorkload;
+    try{const capacity=require('./own_team_capacity'),r=capacity.requirement(input);
+      teamCapacityAnalysis=result.workload?capacity.allocate(r,[{id:digest,workload:{estimatedMinutes:result.workload.minutes}}]):
+        {...r,supportedMinutes:null,estimatedFieldElapsedMinutes:null,estimatedElapsedMinutes:null,sharedTravelMinutes:null};
+    }catch(_){teamCapacityAnalysis={state:'review_inputs',supportedMinutes:null,estimatedElapsedMinutes:null};}
+  }
+  return {...result,requestId,teamCapacityAnalysis};
 }
 async function confirm(options) {
   const {db,FieldValue,context,data}=options;

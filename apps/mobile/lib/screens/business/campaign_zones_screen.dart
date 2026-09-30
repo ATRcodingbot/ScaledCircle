@@ -109,12 +109,14 @@ class CampaignZoneAreaEntry extends StatefulWidget {
     this.executionMode = 'marketplace',
     this.initialTeamCapacity,
     this.onSaveTeamCapacity,
+    this.onManualTeamCapacity,
     this.onPlanningInputChanged,
     this.initialHours = 5,
   });
 
   final String executionMode;
   final Map? initialTeamCapacity;
+  final ValueChanged<Map<String, dynamic>?>? onManualTeamCapacity;
   final Future<bool> Function(double, Map<String, dynamic>)? onSaveTeamCapacity;
   final VoidCallback? onPlanningInputChanged;
   final bool locked;
@@ -240,6 +242,19 @@ class _SmartZoneEntryState extends State<CampaignZoneAreaEntry> {
       );
       return;
     }
+    Map<String, dynamic>? previewCapacity;
+    if (_ownTeam) {
+      try {
+        previewCapacity = ownTeamCapacityInput(
+          double.tryParse(_hoursController.text) ?? 0,
+          _teamCountController.text,
+          _coveragePattern,
+        );
+      } on FormatException {
+        /* Optional planning inputs do not gate manual drawing. */
+      }
+    }
+    widget.onManualTeamCapacity?.call(previewCapacity);
     // Manual entry is navigation, not a workload write or recommendation.
     // Explicit acceptance rechecks saved-plan capacity separately.
     if (mounted) {
@@ -473,6 +488,7 @@ class _CampaignZonesScreenState extends State<CampaignZonesScreen> {
   DocumentSnapshot? _currentCampaign;
   DocumentSnapshot get campaign => _currentCampaign ?? widget.campaign;
   Map<String, dynamic>? _workloadState;
+  Map<String, dynamic>? _manualTeamCapacity;
   int _planningRevision = 0;
   double get _requestedHours =>
       (_workloadState?['requestedHours'] as num?)?.toDouble() ?? 5;
@@ -1541,6 +1557,9 @@ class _CampaignZonesScreenState extends State<CampaignZonesScreen> {
             campaignReference: zoneReference!,
             pendingZoneData: pendingZoneData,
             focusMapOnOpen: true,
+            teamCapacity: _ownTeam
+                ? _manualTeamCapacity ?? _workloadState
+                : null,
             beforeAccept: () async {
               if (!_ownTeam) {
                 await _refreshWorkload();
@@ -1678,6 +1697,7 @@ class _CampaignZonesScreenState extends State<CampaignZonesScreen> {
       MaterialPageRoute(
         builder: (_) => CampaignAreaScreen(
           campaignReference: zone.reference,
+          teamCapacity: _ownTeam ? _workloadState : null,
           materialQuantity: _materialQuantity,
         ),
       ),
@@ -2908,6 +2928,8 @@ class _CampaignZonesScreenState extends State<CampaignZonesScreen> {
                     onSaveWorkload: _saveWorkload,
                     executionMode: _ownTeam ? 'own_team' : 'marketplace',
                     initialTeamCapacity: _ownTeam ? _workloadState : null,
+                    onManualTeamCapacity: (input) =>
+                        _manualTeamCapacity = input,
                     onSaveTeamCapacity: (hours, input) =>
                         _saveWorkload(hours, teamCapacity: input),
                     onPlanningInputChanged: () => _planningRevision++,

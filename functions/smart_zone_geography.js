@@ -45,7 +45,7 @@ async function fetchSnapshot({selectedBoundary, endpoint, fetchImpl = fetch, onD
     `${Number(item.latitude).toFixed(7)} ${Number(item.longitude).toFixed(7)}`).join(" ");
   const query = `[out:json][timeout:15];(
     nwr["addr:housenumber"](poly:"${polygon}");
-    nwr["building"~"^(apartments|bungalow|detached|house|residential|semidetached_house|terrace)$"](poly:"${polygon}");
+    nwr["building"](poly:"${polygon}");
     nwr["shop"](poly:"${polygon}");
     nwr["office"](poly:"${polygon}");
     nwr["building"~"^(commercial|retail|school|college|university|hospital|civic|government|industrial|warehouse)$"](poly:"${polygon}");
@@ -94,8 +94,8 @@ async function fetchSnapshot({selectedBoundary, endpoint, fetchImpl = fetch, onD
     stage = 'classify';
     const snapshot = snapshotFromElements(selectedBoundary, payload.elements, {
       dataTimestamp: payload.osm3s?.timestamp_osm_base || null,
-      fetchedAt: new Date().toISOString()});
-    diagnostic.classifiedTargetCounts = {residential: 0, business: 0, event: 0, unclassified_address: 0};
+      fetchedAt: new Date().toISOString(), buildingInventoryComplete:true});
+    diagnostic.classifiedTargetCounts = {residential: 0, business: 0, event: 0, unclassified_address: 0, unclassified_building:0};
     for (const feature of snapshot.targetFeatures) diagnostic.classifiedTargetCounts[feature.kind]++;
     Object.assign(diagnostic, {targetFeatureCount: snapshot.targetFeatures.length,
       routeWayCount: snapshot.routeWays.length, landFeatureCount: snapshot.landFeatures.length,
@@ -229,7 +229,7 @@ function targetKind(tags) {
   if (/^(apartments|bungalow|detached|house|residential|semidetached_house|terrace)$/.test(tags.building || '') ||
       /^(residential|apartments|house)$/.test(tags['building:use'] || '')) return 'residential';
   // An unclassified street address does not establish residential eligibility.
-  return tags['addr:housenumber'] ? 'unclassified_address' : null;
+  return tags.building && tags.building !== 'no' ? 'unclassified_building' : tags['addr:housenumber'] ? 'unclassified_address' : null;
 }
 function representativePoint(polygon) {
   if (!polygon || !simpleRing(polygon)) return null;
@@ -346,6 +346,7 @@ function snapshotFromElements(selectedBoundary, rawElements, provenance = {}) {
   return {source: "openstreetmap_bounded_snapshot_v1", serviceablePoints,
     routeWays, targetFeatures, landFeatures, barrierWays, unresolvedLandFeatures,
     dataTimestamp: provenance.dataTimestamp || null, fetchedAt: provenance.fetchedAt || null,
+    buildingInventoryComplete:provenance.buildingInventoryComplete===true,
     exclusionPolygons, waterFeatureCount, parkFeatureCount, barrierFeatureCount,
     serviceableBoundary, serviceableBoundaryType: serviceableBoundary ?
       "mapped_place_boundary" : null};

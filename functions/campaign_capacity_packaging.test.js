@@ -15,3 +15,10 @@ test('team authority is copied exactly; unchanged locks retain existing polygon 
  }
  const lock=require('../functions-business-operations/package-lock.json');assert.ok(lock.packages['node_modules/polygon-clipping']);
 });
+
+test('manual evidence declarations and transitive geographic modules match the maintained discovery package',()=>{
+ const a=declarations(require.resolve('./index')),b=declarations(require.resolve('../functions-discovery/index'));
+ for(const name of ['exports.getCampaignZoneIntelligence','exports.confirmCampaignZoneIntelligence'])assert.equal(a.get(name),b.get(name));
+ for(const name of ['zone_intelligence','zone_intelligence_runtime','smart_zone_public_cache','smart_zone_public_cache_runtime','smart_zone_geography','smart_zone_serviceability'])
+  assert.equal(fs.readFileSync(require.resolve('./'+name),'utf8'),fs.readFileSync(require.resolve('../functions-discovery/'+name),'utf8'));
+});

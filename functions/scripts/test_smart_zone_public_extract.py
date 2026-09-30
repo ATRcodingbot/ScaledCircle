@@ -17,6 +17,12 @@ def relation(members, **tags):
                members=[Obj(type='w', ref=ref, role='outer') for ref in members])
 
 class ExtractionTests(unittest.TestCase):
+    def test_generic_building_is_retained_without_address_or_residential_inference(self):
+        self.assertTrue(env['selected']({'building': 'yes'}, 'way'))
+        self.assertTrue(env['selected']({'building': 'garage'}, 'way'))
+        self.assertFalse(env['selected']({'building': 'no'}, 'way'))
+        result = env['tags'](relation([], **{'building':'yes','building:use':'residential','email':'private'}))
+        self.assertEqual(result, {'building':'yes','building:use':'residential'})
     def test_enclosing_multi_way_exclusion_is_not_dropped(self):
         region = env['Region']()
         region.way_bounds = {1: (-1, -1, 2, -1), 2: (2, -1, 2, 2),
