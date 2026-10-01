@@ -20,6 +20,7 @@ import zipfile
 from verify_ios_production_bundle import inspect
 from verify_ios_push import verify as verify_push
 from verify_native_branding import verify_source, verify_ipa
+from prepare_ios39_source import prepare_source
 
 ROOT = Path(__file__).resolve().parent.parent
 APP_SOURCE = 'd60920930c81253f9019c19bed47a3eaf184dd3e'
@@ -86,12 +87,12 @@ def fetch_original(destination):
     Path(destination).write_bytes(data)
 
 
-def verify_provenance(_ipa):
-    head = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip()
+def verify_provenance(_ipa, app_dir):
+    head = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=app_dir, text=True).strip()
     if head != APP_SOURCE:
         raise ValueError('Application checkout must remain exact d609209')
-    subprocess.run(['git', 'diff', '--exit-code', '--', 'apps/mobile'], cwd=ROOT, check=True)
-    if digest(ROOT / 'apps/mobile/pubspec.lock') != LOCK_SHA256:
+    subprocess.run(['git', 'diff', '--exit-code', '--', 'apps/mobile'], cwd=app_dir, check=True)
+    if digest(app_dir / 'apps/mobile/pubspec.lock') != LOCK_SHA256:
         raise ValueError('Dependency lock changed')
     return True
 
@@ -135,24 +136,23 @@ def verify_distribution(ipa):
     return True
 
 
-def production_checks():
+def production_checks(app_dir):
     def content(ipa):
         return inspect(ipa, '1.0.0', '39', 'production')['content_gate'] == 'PASS'
     def branding(ipa):
-        return verify_ipa(ipa, verify_source()).startswith('PASS:')
+        return verify_ipa(ipa, verify_source(app_dir), app_dir).startswith('PASS:')
     def push(ipa):
         result = verify_push(ipa)
         return result['signedPushEntitlement'] == result['provisioningPushEntitlement'] == 'PASS'
-    return dict(provenance=verify_provenance, content=content, branding=branding,
+    return dict(provenance=lambda ipa: verify_provenance(ipa, app_dir), content=content, branding=branding,
                 push=push, markers=verify_markers, signing=verify_distribution)
 
 
-def validate_and_stage(ipa, output, checks=None):
+def validate_and_stage(ipa, output, checks):
     """No publishing-path artifact is created unless every required guard passes."""
     ipa, output = Path(ipa), Path(output)
     if output.exists():
         raise ValueError('Publishing destination must be empty')
-    checks = production_checks() if checks is None else checks
     if set(checks) != set(REQUIRED_CHECKS):
         raise ValueError('Missing or unexpected required artifact validation')
     require_original(ipa)
@@ -176,13 +176,22 @@ def validate_and_stage(ipa, output, checks=None):
             'rebuilt': False, 'resigned': False, 'upload': 'NOT_YET_ATTEMPTED'}
 
 
+def recover(app_dir, ipa, download=False):
+    app_dir = prepare_source(ROOT, app_dir)
+    if download:
+        fetch_original(ipa)
+    return validate_and_stage(ipa, Path('validated/recovered-ios39.ipa'), production_checks(app_dir))
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--ipa', type=Path, default=Path('recovered-ios39.original.ipa'))
     parser.add_argument('--download', action='store_true')
+    parser.add_argument('--app-dir', type=Path, required=True)
     args = parser.parse_args()
-    if args.download:
-        fetch_original(args.ipa)
-    result = validate_and_stage(args.ipa, Path('validated/recovered-ios39.ipa'))
+    try:
+        result = recover(args.app_dir, args.ipa, args.download)
+    except (ValueError, subprocess.CalledProcessError) as error:
+        raise SystemExit('Recovery stopped before publishing: ' + str(error)) from None
     Path('ios39-validation.safe.json').write_text(json.dumps(result, indent=2))
     print(json.dumps(result, indent=2))

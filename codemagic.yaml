@@ -16,7 +16,7 @@
       "scripts": [
         {
           "name": "Validate exact retained iOS39; never compile or re-sign",
-          "script": "#!/bin/bash\nset -euo pipefail\ncd \"$CM_BUILD_DIR\"\nexport IOS39_TOOLING_REVISION=\"$(git rev-parse HEAD)\"\necho \"Release-validation tooling: $IOS39_TOOLING_REVISION\"\ngit checkout --detach d60920930c81253f9019c19bed47a3eaf184dd3e\ngit archive \"$IOS39_TOOLING_REVISION\" tools | tar -x\ntest \"$(git rev-parse HEAD)\" = d60920930c81253f9019c19bed47a3eaf184dd3e\ngit diff --exit-code -- apps/mobile\npython3 tools/recover_ios39_artifact.py --download\n"
+          "script": "#!/bin/bash\nset -euo pipefail\nexport TOOLING_DIR=\"$CM_BUILD_DIR\"\nexport APP_DIR=\"$(dirname \"$CM_BUILD_DIR\")/ios39-application\"\ncd \"$TOOLING_DIR\"\necho \"Release-validation tooling: $(git rev-parse HEAD)\"\npython3 \"$TOOLING_DIR/tools/recover_ios39_artifact.py\" --app-dir \"$APP_DIR\" --download"
         }
       ],
       "artifacts": [

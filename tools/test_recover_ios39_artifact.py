@@ -81,6 +81,13 @@ class RecoveryGateTest(unittest.TestCase):
 
 
 class RecoveryWorkflowTest(unittest.TestCase):
+    def test_preparation_failure_never_retrieves_or_stages_artifact(self):
+        with patch.object(recovery, 'prepare_source', side_effect=ValueError('fetch failed')), patch.object(recovery, 'fetch_original') as fetch, patch.object(recovery, 'validate_and_stage') as stage:
+            with self.assertRaises(ValueError):
+                recovery.recover(Path('app'), Path('original.ipa'), True)
+            fetch.assert_not_called()
+            stage.assert_not_called()
+
     def test_missing_or_wrong_artifact_link_fails_before_network(self):
         for env in ({}, {'IOS39_RECOVERY_ARTIFACT_URL': 'https://example.com/artifact'}):
             with patch.dict(recovery.os.environ, env, clear=True), patch.object(recovery.urllib.request, 'build_opener') as opener:
@@ -109,8 +116,9 @@ class RecoveryWorkflowTest(unittest.TestCase):
             'auth': 'integration', 'submit_to_testflight': False, 'submit_to_app_store': False}})
         script = workflow['scripts'][0]['script']
         self.assertIn('set -euo pipefail', script)
-        self.assertIn('git checkout --detach ' + recovery.APP_SOURCE, script)
-        self.assertIn('python3 tools/recover_ios39_artifact.py --download', script)
+        self.assertIn('TOOLING_DIR', script)
+        self.assertIn('APP_DIR', script)
+        self.assertIn('"$TOOLING_DIR/tools/recover_ios39_artifact.py" --app-dir "$APP_DIR" --download', script)
         for forbidden in ('flutter build', 'xcodebuild', 'codesign --sign', '|| true', 'ignore_failure'):
             self.assertNotIn(forbidden, script)
 
