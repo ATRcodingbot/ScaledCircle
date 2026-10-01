@@ -117,6 +117,112 @@ Future<void> crew(WidgetTester t, int count) async {
 }
 
 void main() {
+  for (final accept in [true, false]) {
+    testWidgets(
+      'explicit area acceptance forwards selected settings; authority accepts=$accept',
+      (t) async {
+        final ref = h.SavedDraftReference();
+        final events = <String>[];
+        Map<String, dynamic>? sent;
+        var reads = 0;
+        await h.surface(
+          t,
+          CampaignAreaScreen(
+            campaignReference: ref,
+            pendingZoneData: const {
+              'zoneName': 'Fixture',
+              'campaignId': 'fixture',
+            },
+            initialArea: c.geometry,
+            tileProvider: h.MapTiles(),
+            teamCapacity: const {
+              'sessionHours': 4,
+              'marketerCount': 2,
+              'coveragePattern': 'stay_together',
+            },
+            zoneEvidenceIdentity: () => 'fixture-owner/fixture-workspace',
+            zoneEvidenceLoader: (input) async {
+              reads++;
+              return reviewEvidence(input['geometry']);
+            },
+            beforeAccept: () async {
+              events.add('existing gate');
+              return true;
+            },
+            saveTeamCapacity: (input) async {
+              events.add('server workload validation');
+              sent = input;
+              return accept;
+            },
+            analyzePersistedZone: () async {
+              events.add('analyze saved area');
+              return true;
+            },
+          ),
+        );
+        await t.pump(const Duration(seconds: 1));
+        await t.pumpAndSettle();
+        await crew(t, 3);
+        await mode(t, 'split_streets');
+        expect(selectedTime(t), '~1 hr 6 min');
+        expect(sent, isNull);
+        expect(ref.saved, isNull);
+        expect(reads, 1);
+        await h.choose(t, 'Use This Area');
+        await t.pumpAndSettle();
+        expect(sent, {
+          'sessionHours': 4,
+          'marketerCount': 3,
+          'coveragePattern': 'split_streets',
+        });
+        expect(events.take(2), ['existing gate', 'server workload validation']);
+        expect(ref.saved != null, accept);
+        if (accept) expect(events.last, 'analyze saved area');
+        expect(reads, 1);
+        expect(t.takeException(), isNull);
+      },
+    );
+  }
+
+  testWidgets(
+    'invalid preview setting cannot save an older valid crew choice',
+    (t) async {
+      final ref = h.SavedDraftReference();
+      var writes = 0;
+      await h.surface(
+        t,
+        CampaignAreaScreen(
+          campaignReference: ref,
+          pendingZoneData: const {
+            'zoneName': 'Fixture',
+            'campaignId': 'fixture',
+          },
+          initialArea: c.geometry,
+          tileProvider: h.MapTiles(),
+          zoneEvidenceIdentity: () => 'fixture-owner/fixture-workspace',
+          zoneEvidenceLoader: (input) async =>
+              reviewEvidence(input['geometry']),
+          saveTeamCapacity: (_) async {
+            writes++;
+            return true;
+          },
+        ),
+      );
+      await t.pump(const Duration(seconds: 1));
+      await t.pumpAndSettle();
+      await crew(t, 3);
+      await t.enterText(
+        find.byKey(const ValueKey('preview-marketer-count')),
+        '',
+      );
+      await h.choose(t, 'Use This Area');
+      await t.pumpAndSettle();
+      expect(writes, 0);
+      expect(ref.saved, isNull);
+      expect(t.takeException(), isNull);
+    },
+  );
+
   for (final complete in [true, false]) {
     testWidgets(
       'complete=$complete keeps field coverage separate from whole session',

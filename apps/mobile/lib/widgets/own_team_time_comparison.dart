@@ -21,16 +21,27 @@ class OwnTeamTimeComparison extends StatefulWidget {
   }
 
   @override
-  State<OwnTeamTimeComparison> createState() => _OwnTeamTimeComparisonState();
+  State<OwnTeamTimeComparison> createState() => OwnTeamTimeComparisonState();
 }
 
 /// These choices live only in this preview. They select already-authorized
 /// server rows, never call an acquisition endpoint or write campaign settings.
-class _OwnTeamTimeComparisonState extends State<OwnTeamTimeComparison> {
+class OwnTeamTimeComparisonState extends State<OwnTeamTimeComparison> {
   late final TextEditingController _crew;
   late int _count;
   late String _mode;
   String? _inputError;
+
+  /// Read only at explicit acceptance; changing a control never writes or loads.
+  Map<String, dynamic> get selectedSettings {
+    if (_inputError != null) {
+      throw const FormatException(
+        'Enter a positive whole number of marketers.',
+      );
+    }
+    return {'marketerCount': _count, 'coveragePattern': _mode};
+  }
+
   Map get data => widget.data;
   dynamic get geometry => widget.geometry;
   String minutes(dynamic n) => widget.minutes(n);
@@ -146,7 +157,7 @@ class _OwnTeamTimeComparisonState extends State<OwnTeamTimeComparison> {
           style: Theme.of(context).textTheme.titleLarge,
         ),
         const Text(
-          'Local preview only. These choices do not save campaign settings.',
+          'Unsaved comparison. Changing these controls does not save campaign settings.',
         ),
         if (widget.sessionHours != null)
           Text(

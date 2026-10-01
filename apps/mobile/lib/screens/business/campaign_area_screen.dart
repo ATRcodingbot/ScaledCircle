@@ -52,6 +52,7 @@ class CampaignAreaScreen extends StatefulWidget {
   final TileProvider? tileProvider;
   final bool focusMapOnOpen;
   final Future<bool> Function()? beforeAccept;
+  final Future<bool> Function(Map<String, dynamic>)? saveTeamCapacity;
   final ZoneEvidenceLoader? zoneEvidenceLoader;
   final Map<String, dynamic>? teamCapacity;
   final String Function()? zoneEvidenceIdentity;
@@ -80,6 +81,7 @@ class CampaignAreaScreen extends StatefulWidget {
     this.tileProvider,
     this.focusMapOnOpen = false,
     this.beforeAccept,
+    this.saveTeamCapacity,
     this.zoneEvidenceLoader,
     this.teamCapacity,
     this.zoneEvidenceIdentity,
@@ -96,6 +98,7 @@ class CampaignAreaScreen extends StatefulWidget {
 class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
   late final MapController _mapController =
       widget.mapController ?? MapController();
+  final _teamPreviewKey = GlobalKey<ZoneIntelligencePreviewState>();
   final GlobalKey _mapViewportKey = GlobalKey();
   final GlobalKey _mapFrameKey = GlobalKey();
 
@@ -1408,6 +1411,16 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
     });
 
     try {
+      final selectedTeam = _teamPreviewKey.currentState?.changedTeamSettings;
+      if (selectedTeam != null) {
+        // The existing server workload operation validates these inputs. No
+        // preview minutes, allocation or readiness claims are persisted here.
+        if (widget.saveTeamCapacity == null ||
+            !await widget.saveTeamCapacity!(selectedTeam)) {
+          return;
+        }
+        if (!mounted) return;
+      }
       final polygonPoints = _generatedArea
           .map(
             (point) => {
@@ -2147,6 +2160,7 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
                                 ),
                                 const SizedBox(height: 8),
                                 ZoneIntelligencePreview(
+                                  key: _teamPreviewKey,
                                   geometry: _generatedArea
                                       .map(
                                         (p) => <String, double>{

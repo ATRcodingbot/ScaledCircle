@@ -527,6 +527,14 @@ class _CampaignZonesScreenState extends State<CampaignZonesScreen> {
     }
   }
 
+  Future<bool> _savePreviewTeamCapacity(Map<String, dynamic> input) async {
+    if (!_ownTeam || input['sessionHours'] is! num) return false;
+    return _saveWorkload(
+      (input['sessionHours'] as num).toDouble(),
+      teamCapacity: input,
+    );
+  }
+
   Future<bool> _saveWorkload(
     double hours, {
     Map<String, dynamic>? teamCapacity,
@@ -1574,6 +1582,7 @@ class _CampaignZonesScreenState extends State<CampaignZonesScreen> {
             teamCapacity: _ownTeam
                 ? _manualTeamCapacity ?? _workloadState
                 : null,
+            saveTeamCapacity: _ownTeam ? _savePreviewTeamCapacity : null,
             beforeAccept: () async {
               if (!_ownTeam) {
                 await _refreshWorkload();
@@ -1720,6 +1729,7 @@ class _CampaignZonesScreenState extends State<CampaignZonesScreen> {
         builder: (_) => CampaignAreaScreen(
           campaignReference: zone.reference,
           teamCapacity: _ownTeam ? _workloadState : null,
+          saveTeamCapacity: _ownTeam ? _savePreviewTeamCapacity : null,
           materialQuantity: _materialQuantity,
         ),
       ),

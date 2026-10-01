@@ -37,12 +37,14 @@ class ZoneIntelligenceSummary extends StatelessWidget {
     required this.data,
     required this.geometry,
     this.comparisonReason,
+    this.teamSelectionKey,
   });
   final Map<String, dynamic> data;
   final dynamic geometry;
 
   /// Only an explicit server comparison may describe an alternate as weaker.
   final String? comparisonReason;
+  final GlobalKey<OwnTeamTimeComparisonState>? teamSelectionKey;
 
   @override
   Widget build(BuildContext context) {
@@ -212,6 +214,7 @@ class ZoneIntelligenceSummary extends StatelessWidget {
         ],
         if (data['teamTimeComparison'] is Map)
           OwnTeamTimeComparison(
+            key: teamSelectionKey,
             data: data['teamTimeComparison'] as Map,
             geometry: geometry,
             sessionHours: team?['sessionHours'] as num?,
@@ -473,10 +476,31 @@ class ZoneIntelligencePreview extends StatefulWidget {
   final Map<String, dynamic>? teamCapacity;
   @override
   State<ZoneIntelligencePreview> createState() =>
-      _ZoneIntelligencePreviewState();
+      ZoneIntelligencePreviewState();
 }
 
-class _ZoneIntelligencePreviewState extends State<ZoneIntelligencePreview> {
+class ZoneIntelligencePreviewState extends State<ZoneIntelligencePreview> {
+  final _teamSelectionKey = GlobalKey<OwnTeamTimeComparisonState>();
+
+  /// Only the current displayed, geometry/account-bound response can contribute
+  /// settings to explicit acceptance. Estimates never become write authority.
+  Map<String, dynamic>? get changedTeamSettings {
+    if (_owner != _identity || !zoneEvidenceMatches(_data, widget.geometry)) {
+      return null;
+    }
+    final selected = _teamSelectionKey.currentState?.selectedSettings;
+    if (selected == null) return null;
+    final current =
+        (_data?['teamTimeComparison'] as Map?)?['currentTeam'] as Map?;
+    if (selected.entries.every((e) => current?[e.key] == e.value)) return null;
+    return {
+      'sessionHours':
+          (_data?['teamCapacityAnalysis'] as Map?)?['sessionHours'] ??
+          widget.teamCapacity?['sessionHours'],
+      ...selected,
+    };
+  }
+
   Timer? _debounce;
   StreamSubscription<User?>? _auth;
   Map<String, dynamic>? _data;
@@ -615,6 +639,7 @@ class _ZoneIntelligencePreviewState extends State<ZoneIntelligencePreview> {
     if (_data != null) {
       return ZoneIntelligenceSummary(
         key: ValueKey('$_owner/$_revision'),
+        teamSelectionKey: _teamSelectionKey,
         data: _data!,
         geometry: widget.geometry,
       );
