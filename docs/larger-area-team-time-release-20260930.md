@@ -1,0 +1,17 @@
+# Larger-area comparison — bounded release package
+
+Reviewed calculator source: `300a5f1b990e327757ad73aeeb7592f67d989162`.
+
+The deployment approval adds a display-only correction: dynamic “Estimated time for N supported targets”; readable hour/minute values; and a qualification directly under the comparison heading using the actual disconnected-section count. The 231-target case reads 8 hr 39 min / 4 hr 25 min / 3 hr 3 min / 2 hr 20 min for Split up. Stay together remains 8 hr 39 min for all four sizes. Calculator bytes, evidence, budget, assumptions, scope and allocator rules are unchanged from the reviewed candidate.
+
+The displayed qualification is: “Additional travel is not included. The mapped street evidence has 12 disconnected sections, so overall completion time remains unknown.” Other areas use their own count; connected cases still disclose unknown overall time. This does not claim that two or three marketers fulfill a four-hour request, certify all property records as stops, or authorize an assignment.
+
+Production capture confirms Hosting `4689816f7cf513ed` and endpoints getsmartzoneplan-00015-gur, applysmartzoneplan-00015-bep, getcampaignzoneintelligence-00004-dug and confirmcampaignzoneintelligence-00004-ker. Business Operations remains businessoperationsv1-00015-tar. Four generation-pinned function overlays change only the two reviewed comparison modules. Existing entrypoints, environment, dependency locks, IAM and all other modules are preserved. Hosting is assembled from the exact current retained production package, replacing only compiled main.dart.js and flutter_bootstrap.js; static marketing/analytics/branding and Hosting configuration are retained.
+
+The twelve components are disconnected in the supplied permitted target-serving linework. That proves a graph-connectivity limitation, not the physical cause of every gap. The retained stripped edges do not establish which gaps are missing map links, target-scope cuts or access/barrier exclusions. No connections are invented and no provider/cache expansion is performed. The one-practical-connected-area and transfer/access acceptance items remain open.
+
+The Business Operations copy-equality failure remains separately recorded. Its actual saved-whole-Zone summary does not consume comparison lanes; focused compatibility tests confirm complete-Zone semantics agree and partial preview cannot establish readiness. No operational allocator reconciliation is included.
+
+Evidence classes remain separate: generation-pinned deployed-code replay of exact retained inputs, unauthenticated HTTP gate checks, compiled/served bundle verification, actual authorized browser state, and physical observation. The existing browser draft currently has no saved Zones and no retained unsaved polygon. No WebMCP/read-only retained-geometry replay action is exposed by this document. Therefore opening that draft or verifying its new bundle alone cannot establish a live authenticated comparison-card result. No new drawing or campaign save is requested to conceal that gap.
+
+Deployment results, exact source, revisions, served-file hashes and before/after record-preservation evidence will be retained in the ignored `.firebase/larger-team-time-deployment` diagnostic folder and reported separately after promotion. The frozen native candidate remains `d60920930c81253f9019c19bed47a3eaf184dd3e`; no merge/build/CI or store changes.

@@ -11,10 +11,12 @@ class OwnTeamTimeComparison extends StatelessWidget {
   final Map data;
   final dynamic geometry;
   String minutes(dynamic n) => n is num ? n.toStringAsFixed(1) : 'Unavailable';
-  String finish(Map? value, {bool withMinimum = false}) =>
-      value?[withMinimum ? 'fieldMinutes' : 'calculatedFieldMinutes'] is num
-      ? '~${(value![withMinimum ? 'fieldMinutes' : 'calculatedFieldMinutes'] as num).ceil()} min'
-      : 'Not established';
+  String finish(Map? value, {bool withMinimum = false}) {
+    final n = value?[withMinimum ? 'fieldMinutes' : 'calculatedFieldMinutes'];
+    if (n is! num) return 'Not established';
+    final total = n.ceil();
+    return total < 60 ? '~$total min' : '~${total ~/ 60} hr ${total % 60} min';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -36,8 +38,15 @@ class OwnTeamTimeComparison extends StatelessWidget {
       children: [
         const SizedBox(height: 16),
         Text(
-          'Estimated time for supported targets',
+          data['coveredTargetCount'] is num
+              ? 'Estimated time for ${data['coveredTargetCount']} supported targets'
+              : 'Estimated time for supported targets',
           style: Theme.of(context).textTheme.titleMedium,
+        ),
+        Text(
+          separateSections
+              ? 'Additional travel is not included. The mapped street evidence has $sectionCount disconnected sections, so overall completion time remains unknown.'
+              : 'Additional travel is not included. Overall completion time remains unknown.',
         ),
         if (['unavailable', 'allocation_incomplete'].contains(data['status']))
           Text(
@@ -61,7 +70,7 @@ class OwnTeamTimeComparison extends StatelessWidget {
         ),
         if (separateSections)
           Text(
-            '$sectionCount separate local street sections. Estimates exclude travel between sections; overall team finish is not established. These are not additional campaign Zones.',
+            'The separate local street sections are not additional campaign Zones or an approved connected execution plan.',
           ),
         const Text(
           'Calculated times round up to whole minutes. The 15-minute planning minimum is shown separately; the 30-minute minimum campaign request is a separate input rule.',

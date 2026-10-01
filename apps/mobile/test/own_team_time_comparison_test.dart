@@ -151,7 +151,10 @@ void main() {
       await t.pumpWidget(
         page(ZoneIntelligenceSummary(data: data, geometry: geometry)),
       );
-      expect(find.text('Estimated time for supported targets'), findsOneWidget);
+      expect(
+        find.text('Estimated time for 12 supported targets'),
+        findsOneWidget,
+      );
       expect(find.text('Not established'), findsOneWidget);
       expect(find.text('Save'), findsNothing);
       expect(find.text('Assign'), findsNothing);
@@ -205,16 +208,13 @@ void main() {
             scale: scale,
           ),
         );
+        expect(find.textContaining('12 disconnected sections'), findsOneWidget);
         expect(
-          find.textContaining('12 separate local street sections'),
+          find.textContaining('overall completion time remains unknown'),
           findsOneWidget,
         );
         expect(
-          find.textContaining('overall team finish is not established'),
-          findsOneWidget,
-        );
-        expect(
-          find.text('Split up · local field subtotal: ~265 min'),
+          find.text('Split up · local field subtotal: ~4 hr 25 min'),
           findsOneWidget,
         );
         expect(
@@ -224,7 +224,7 @@ void main() {
           findsOneWidget,
         );
         expect(
-          find.text('Stay together · local field subtotal: ~519 min'),
+          find.text('Stay together · local field subtotal: ~8 hr 39 min'),
           findsNWidgets(4),
         );
         expect(
@@ -269,6 +269,64 @@ void main() {
       expect(find.textContaining('12 street-supported'), findsOneWidget);
       expect(find.textContaining('One-person baseline:'), findsOneWidget);
       expect(find.text('Split up: ~0 min'), findsNothing);
+    },
+  );
+
+  testWidgets(
+    'qualification and heading use selected evidence rather than retained Ferndale constants',
+    (t) async {
+      final data = comparison()
+        ..['version'] = 'OwnTeamFixedAreaTimeV3'
+        ..['coveredTargetCount'] = 88
+        ..['computation'] = {'connectedLocalSectionCount': 3};
+      await t.pumpWidget(
+        page(OwnTeamTimeComparison(data: data, geometry: geometry)),
+      );
+      expect(
+        find.text('Estimated time for 88 supported targets'),
+        findsOneWidget,
+      );
+      expect(
+        find.text(
+          'Additional travel is not included. The mapped street evidence has 3 disconnected sections, so overall completion time remains unknown.',
+        ),
+        findsOneWidget,
+      );
+      expect(find.textContaining('231 supported targets'), findsNothing);
+      expect(find.textContaining('12 disconnected sections'), findsNothing);
+    },
+  );
+  test(
+    'hour/minute presentation preserves calculated values and the separate planning floor',
+    () {
+      final widget = OwnTeamTimeComparison(
+        data: comparison(),
+        geometry: geometry,
+      );
+      for (final entry in {
+        519: '~8 hr 39 min',
+        265: '~4 hr 25 min',
+        183: '~3 hr 3 min',
+        140: '~2 hr 20 min',
+        60: '~1 hr 0 min',
+        59: '~59 min',
+      }.entries) {
+        expect(
+          widget.finish({'calculatedFieldMinutes': entry.key}),
+          entry.value,
+        );
+      }
+      expect(
+        widget.finish({'calculatedFieldMinutes': 7, 'fieldMinutes': 15}),
+        '~7 min',
+      );
+      expect(
+        widget.finish({
+          'calculatedFieldMinutes': 7,
+          'fieldMinutes': 15,
+        }, withMinimum: true),
+        '~15 min',
+      );
     },
   );
 }
