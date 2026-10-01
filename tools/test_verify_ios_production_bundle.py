@@ -9,7 +9,11 @@ from verify_ios_production_bundle import inspect
 class IpaGateTest(unittest.TestCase):
     def fixture(self, path, bad=None, environment='production'):
         info = dict(CFBundleIdentifier='com.scaledcircle.app', CFBundleShortVersionString='1.0.0',
-                    CFBundleVersion='1', CFBundleDisplayName='ScaledCircle', UIBackgroundModes=['location'])
+                    CFBundleVersion='1', CFBundleDisplayName='Scaled Circle', UIBackgroundModes=['location'])
+        if bad == 'display_name':
+            info['CFBundleDisplayName'] = 'ScaledCircle'
+        if bad == 'bundle':
+            info['CFBundleIdentifier'] = 'com.example.wrong'
         for key in ['NSCameraUsageDescription', 'NSPhotoLibraryUsageDescription',
                     'NSLocationWhenInUseUsageDescription', 'NSLocationAlwaysAndWhenInUseUsageDescription']:
             info[key] = 'Fixture permission'
@@ -63,10 +67,22 @@ class IpaGateTest(unittest.TestCase):
             self.assertEqual(inspect(path, '1.0.0', '1')['content_gate'], 'PASS')
             with self.assertRaises(ValueError):
                 inspect(path, '1.0.0', '2')
-            for bad in ['permission', 'firebase', 'staging', 'path', 'duplicate', 'nested_firebase', 'legacy_only']:
+            for bad in ['display_name', 'bundle', 'permission', 'firebase', 'staging', 'path', 'duplicate', 'nested_firebase', 'legacy_only']:
                 self.fixture(path, bad)
                 with self.assertRaises(ValueError):
                     inspect(path, '1.0.0', '1')
+
+    def test_approved_name_does_not_bypass_other_required_metadata(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / 'fixture.ipa'
+            self.fixture(path)
+            self.assertEqual(inspect(path, '1.0.0', '1')['content_gate'], 'PASS')
+            for version, build in [('2.0.0', '1'), ('1.0.0', '39')]:
+                with self.assertRaisesRegex(ValueError, 'Application metadata mismatch'):
+                    inspect(path, version, build)
+            self.fixture(path, bad='display_name')
+            with self.assertRaisesRegex(ValueError, 'CFBundleDisplayName'):
+                inspect(path, '1.0.0', '1')
 
     def test_reviewed_push_modes_require_opt_in_and_reject_private_keys(self):
         with tempfile.TemporaryDirectory() as folder:

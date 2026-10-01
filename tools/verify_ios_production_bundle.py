@@ -32,7 +32,7 @@ def inspect(path, version, build, environment='production'):
         config = plistlib.loads(archive.read(root + 'GoogleService-Info.plist'))
         expected = {'CFBundleIdentifier': 'com.scaledcircle.app',
                     'CFBundleShortVersionString': version, 'CFBundleVersion': build,
-                    'CFBundleDisplayName': 'ScaledCircle'}
+                    'CFBundleDisplayName': 'Scaled Circle'}
         for key, value in expected.items():
             if info.get(key) != value:
                 raise ValueError('Application metadata mismatch: ' + key)
