@@ -21,6 +21,16 @@ String fieldWorkload(num minutes) {
   return total >= 60 ? '${total ~/ 60} hr ${total % 60} min' : '$total min';
 }
 
+String readableEvidenceDate(BuildContext context, dynamic value) {
+  final text = value?.toString();
+  final date = text == null ? null : DateTime.tryParse(text);
+  if (date == null) return 'Not supplied';
+  final labels = MaterialLocalizations.of(context);
+  if (!text!.contains('T')) return labels.formatFullDate(date);
+  final local = date.toLocal();
+  return '${labels.formatFullDate(local)}, ${labels.formatTimeOfDay(TimeOfDay.fromDateTime(local))} (device time)';
+}
+
 class ZoneIntelligenceSummary extends StatelessWidget {
   const ZoneIntelligenceSummary({
     super.key,
@@ -62,6 +72,8 @@ class ZoneIntelligenceSummary extends StatelessWidget {
                 caseSensitive: false,
               ).hasMatch('${s['label']}'),
         );
+    final facts = data['selectedAreaPropertyFacts'] as Map?;
+    final comparison = data['teamTimeComparison'] as Map?;
     final theme = Theme.of(context);
     final categories = (mix?['categories'] as List? ?? [])
         .whereType<Map>()
@@ -88,6 +100,7 @@ class ZoneIntelligenceSummary extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        Text('About your selected area', style: theme.textTheme.titleLarge),
         if (data['status'] == 'partial')
           const Text(
             'Partial mapping evidence · observations, not a complete inventory',
@@ -120,63 +133,88 @@ class ZoneIntelligenceSummary extends StatelessWidget {
             ),
         ] else
           const Text('Property type unavailable'),
-        if (data['selectedAreaPropertyFacts'] is Map) ...[
+        if (facts != null) ...[
           const SizedBox(height: 12),
-          const Text('Recorded properties inside this area'),
-          Text(
-            '${data['selectedAreaPropertyFacts']['knownTypeRecords']} of ${data['selectedAreaPropertyFacts']['insideRecords']} parcel records have a recorded type',
-          ),
-          Text(
-            '${data['selectedAreaPropertyFacts']['knownYearRecords']} of ${data['selectedAreaPropertyFacts']['insideRecords']} parcel records have a usable construction year',
-          ),
-          if (data['selectedAreaPropertyFacts']['constructionEra'] != null)
+          if (facts['insideRecords'] is num)
             Text(
-              'Recorded construction era: ${data['selectedAreaPropertyFacts']['constructionEra']}',
+              "${facts['insideRecords']} property records fall within this boundary.",
             ),
-          const Text('Parcel points, not verified homes or delivery stops'),
-          if (data['selectedAreaPropertyFacts']['complete'] == false)
-            const Text('Property records: partial returned coverage'),
-        ],
-        const SizedBox(height: 16),
-        const Text('Estimated field time'),
-        Text(
-          workload?['minutes'] is num
-              ? '~${fieldWorkload(workload!['minutes'] as num)}'
-              : 'Not established',
-          style: theme.textTheme.headlineMedium,
-        ),
-        if (data['partialTargetEstimate'] is Map)
-          Text(
-            'Known-target subset: ~${fieldWorkload(data['partialTargetEstimate']['minutes'] as num)} for ${data['partialTargetEstimate']['supportedTargetCount']} street-supported targets including walking. Full area/team workload is incomplete.',
-          ),
-        if (workload != null)
-          Text(
-            workload['oneScaler'] == true
-                ? 'One-Scaler planning estimate'
-                : 'Exceeds the six-hour one-Scaler limit. Review smaller work areas.',
-          ),
-        if (walking?['walkingOnly'] == true && walking?['minutes'] is num) ...[
-          Text(
-            'Walking-only planning estimate: ~${fieldWorkload(walking!['minutes'] as num)}',
-          ),
+          if (facts['knownTypeRecords'] is num && facts['insideRecords'] is num)
+            Text(
+              "${facts['knownTypeRecords']} of ${facts['insideRecords']} property records have a recorded type.",
+            )
+          else
+            const Text('Recorded property types are unavailable.'),
+          if (facts['knownYearRecords'] is num && facts['insideRecords'] is num)
+            Text(
+              "${facts['knownYearRecords']} of ${facts['insideRecords']} records have a usable construction year; ${(facts['insideRecords'] as num) - (facts['knownYearRecords'] as num)} do not.",
+            )
+          else
+            const Text('Construction-year coverage is unavailable.'),
+          if (facts['constructionEra'] != null &&
+              facts['constructionEra'] != 'Unavailable')
+            Text(
+              "Largest recorded construction-year group: ${facts['constructionEra']}.",
+            )
+          else
+            const Text('Construction-era summary is unavailable.'),
           const Text(
-            'This does not establish full field workload or an execution route.',
+            'Property records are not verified houses or delivery stops.',
           ),
-        ],
-        if (team?['marketerCount'] is num) ...[
+          if (facts['complete'] == false)
+            const Text('Property-record coverage is partial.'),
+        ] else
+          const Text(
+            'Property records and construction years are unavailable.',
+          ),
+        if (mix?['classifiedCount'] is num && count is num)
           Text(
-            'Team planning: ${team!['marketerCount']} marketers · ${team['sessionHours']} hr each',
+            "${mix!['classifiedCount']} of $count mapped observations have a detailed property type.",
           ),
+        if (comparison == null) ...[
+          const SizedBox(height: 16),
+          const Text('Estimated field time'),
           Text(
-            team['coveragePattern'] == 'stay_together'
-                ? 'Stay together: one shared coverage area. Headcount does not multiply unique coverage. Travel and total team elapsed time remain unknown.'
-                : 'Split streets: complementary coverage must be planned within this area; an even split is not established. Travel and total team elapsed time remain unknown.',
+            workload?['minutes'] is num
+                ? '~${fieldWorkload(workload!['minutes'] as num)}'
+                : 'Not established',
+            style: theme.textTheme.headlineMedium,
           ),
+          if (data['partialTargetEstimate'] is Map)
+            Text(
+              'Known-target subset: ~${fieldWorkload(data['partialTargetEstimate']['minutes'] as num)} for ${data['partialTargetEstimate']['supportedTargetCount']} street-supported targets including walking. Full area/team workload is incomplete.',
+            ),
+          if (workload != null)
+            Text(
+              workload['oneScaler'] == true
+                  ? 'One-Scaler planning estimate'
+                  : 'Exceeds the six-hour one-Scaler limit. Review smaller work areas.',
+            ),
+          if (walking?['walkingOnly'] == true &&
+              walking?['minutes'] is num) ...[
+            Text(
+              'Walking-only planning estimate: ~${fieldWorkload(walking!['minutes'] as num)}',
+            ),
+            const Text(
+              'This does not establish full field workload or an execution route.',
+            ),
+          ],
+          if (team?['marketerCount'] is num) ...[
+            Text(
+              'Team planning: ${team!['marketerCount']} marketers · ${team['sessionHours']} hr each',
+            ),
+            Text(
+              team['coveragePattern'] == 'stay_together'
+                  ? 'Stay together: one shared coverage area. Headcount does not multiply unique coverage. Travel and total team elapsed time remain unknown.'
+                  : 'Split streets: complementary coverage must be planned within this area; an even split is not established. Travel and total team elapsed time remain unknown.',
+            ),
+          ],
         ],
         if (data['teamTimeComparison'] is Map)
           OwnTeamTimeComparison(
             data: data['teamTimeComparison'] as Map,
             geometry: geometry,
+            sessionHours: team?['sessionHours'] as num?,
           ),
         const SizedBox(height: 16),
         Text(
@@ -187,7 +225,7 @@ class ZoneIntelligenceSummary extends StatelessWidget {
         const SizedBox(height: 8),
         if (!business) ...[
           Text(
-            'Nearby housing: ${era.isEmpty ? 'Unavailable' : 'Predominantly ${era.first['value']}'}',
+            'Nearby housing era: ${era.isEmpty ? 'Unavailable' : era.first['value']}',
           ),
           Text('Regional property context', style: theme.textTheme.bodySmall),
         ],
@@ -214,98 +252,181 @@ class ZoneIntelligenceSummary extends StatelessWidget {
           style: theme.textTheme.bodySmall,
         ),
         if (data['status'] == 'unavailable')
-          for (final reason in data['limitations'] as List? ?? [])
-            Text(reason.toString()),
+          const Text(
+            'Area evidence is unavailable. Your boundary has not changed.',
+          ),
         ExpansionTile(
           key: ValueKey('zone-evidence-${data['geometryDigest']}'),
           tilePadding: EdgeInsets.zero,
-          title: const Text('View property evidence'),
+          title: const Text('About these estimates'),
           children: [
             Align(
               alignment: Alignment.centerLeft,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  if (data['selectedAreaPropertyFacts'] is Map)
-                    Text(
-                      'Property source: ${data['selectedAreaPropertyFacts']['source']} · scope: ${data['selectedAreaPropertyFacts']['scope']} · matching: ${data['selectedAreaPropertyFacts']['method']}',
-                    ),
-                  if (data['selectedAreaPropertyFacts'] is Map)
-                    Text(
-                      'Record source date: ${data['selectedAreaPropertyFacts']['dataUpdatedAt'] ?? 'Not supplied'} · Retrieved: ${data['selectedAreaPropertyFacts']['retrievedAt'] ?? 'Not recorded'} · Version: ${data['selectedAreaPropertyFacts']['sourceVersion'] ?? 'Not recorded'}',
-                    ),
-                  if (data['propertyMatching'] is Map)
-                    Text(
-                      'Footprint matching: ${data['propertyMatching']['matchedFootprints'] ?? 'Unavailable'} unique matches · ${data['propertyMatching']['ambiguousFootprints'] ?? 'Unavailable'} ambiguous footprints. Individual property ages are not attached to mapped buildings.',
-                    ),
-                  for (final component
-                      in data['serviceSuitability'] as List? ?? [])
-                    Text(
-                      '${component['intent']}: ${component['rule']} · ${component['scope']} · planning assumption, not component condition or customer intent',
-                    ),
-                  for (final reason in data['reasons'] as List? ?? [])
-                    Text('• $reason'),
-                  if (comparisonReason != null) Text(comparisonReason!),
-                  if (mix != null)
-                    Text(
-                      'Detailed mapped classification: ${mix['classifiedCount']} of $count; ${mix['unknownCount']} unspecified.',
-                    ),
-                  if (workload?['supportedTargetCount'] is num)
-                    Text(
-                      'Workload uses ${workload!['supportedTargetCount']} street-supported mapped targets.',
-                    ),
-                  const Text(
-                    'Mapped features are not verified households, entrances, delivery stops or a material quantity.',
+                  Text('What is included', style: theme.textTheme.titleSmall),
+                  Text(
+                    comparison != null
+                        ? '${comparison['coveredTargetCount'] ?? 'Unavailable'} street-supported mapped targets. Walking is already included in combined fieldwork; it is not added again. Split-up estimates use complementary local sections and the slowest marketer in each section. Stay together keeps shared coverage without dividing by headcount.'
+                        : workload != null
+                        ? 'Mapped targets and supporting street evidence, using the maintained one-Scaler planning model.'
+                        : 'Available property and street observations; a combined field estimate is not established.',
                   ),
-                  if (regional != null) ...[
-                    const Text(
-                      'Regional property context — analyzed nearby section, not facts about each target',
-                    ),
-                    for (final signal in signals)
-                      Text(
-                        '${signal['label']}: ${signal['value']}${signal['source'] == null ? '' : ' · ${signal['source']}'}',
-                      ),
-                    if (regional['partial'] == true)
-                      const Text('Partial property-source coverage.'),
-                    if (regional['source'] is Map)
-                      Text(
-                        'Property context source: ${regional['source']['source'] ?? regional['source']['name'] ?? 'Not recorded'} · Source date: ${regional['source']['dataUpdatedAt'] ?? regional['source']['dataTimestamp'] ?? 'Not supplied'} · Retrieved/analyzed: ${regional['source']['generatedAt'] ?? regional['source']['fetchedAt'] ?? 'Not recorded'}',
-                      ),
-                  ] else
-                    const Text(
-                      'Nearby property era and other detailed context unavailable.',
-                    ),
-                  if (source != null) ...[
-                    Text('Map source: ${source['name'] ?? 'OpenStreetMap'}'),
+                  const Text(
+                    'The field model uses 45 targets per hour and walking at 80 metres per minute over twice the supporting network length. Conversation time is not modeled. The 15-minute planning floor is separate from calculated time.',
+                  ),
+                  Text(
+                    'What is still missing',
+                    style: theme.textTheme.titleSmall,
+                  ),
+                  Text(
+                    comparison?['fullAreaWorkloadEstablished'] == true ||
+                            (comparison == null &&
+                                workload != null &&
+                                data['status'] != 'partial')
+                        ? 'The supported mapped inventory has a field estimate. Travel, setup and total session duration are still unverified.'
+                        : 'Coverage is incomplete. Unclassified observations and unmatched property records are not extra delivery stops and are not included in target handling time. Overall completion time remains unknown.',
+                  ),
+                  const Text(
+                    'Property-record years are not ages attached to individual mapped buildings. Age and type do not establish roof condition, deck presence or customer interest.',
+                  ),
+                  Text(
+                    'Where the information comes from',
+                    style: theme.textTheme.titleSmall,
+                  ),
+                  Text(
+                    'Mapping: ${source?['name'] ?? 'Unavailable'}. Source snapshot: ${readableEvidenceDate(context, source?['dataTimestamp'] ?? source?['snapshotAt'])}. Retrieved: ${readableEvidenceDate(context, source?['fetchedAt'] ?? source?['retrievedAt'])}. Freshness: ${source?['freshness'] ?? 'Not recorded'}. Cached evidence is not live data.',
+                  ),
+                  if (facts != null)
                     Text(
-                      'Source snapshot: ${source['dataTimestamp'] ?? source['snapshotAt'] ?? 'Not supplied'}',
+                      'Public property records. Record source date: ${readableEvidenceDate(context, facts['dataUpdatedAt'])}. Retrieved: ${readableEvidenceDate(context, facts['retrievedAt'])}. Retrieval does not establish the record update date.',
                     ),
-                    Text(
-                      'Retrieved: ${source['fetchedAt'] ?? source['retrievedAt'] ?? 'Not recorded'}',
-                    ),
-                    Text('Freshness: ${source['freshness'] ?? 'Not recorded'}'),
-                  ],
-                  if (data['workloadComponents'] is Map) ...[
-                    Text(
-                      'Target handling: ${(data['workloadComponents']['targetHandlingMinutes'] as num).toStringAsFixed(1)} min',
-                    ),
-                    Text(
-                      'Advisory walking component: ${(data['workloadComponents']['walkingMinutes'] as num).toStringAsFixed(1)} min',
-                    ),
-                    Text(
-                      data['workloadComponents']['completeAreaWorkload'] == true
-                          ? 'Supported person-work: ${data['workloadComponents']['totalPersonMinutes']} min · total team elapsed time not established'
-                          : 'Known-target subset: ${data['workloadComponents']['knownTargetSubtotalMinutes']} min including walking. Complete area/team workload is not established; unclassified observations are excluded.',
-                    ),
-                  ],
-                  if (workload != null)
-                    const Text(
-                      'Planning assumptions: 45 mapped targets/hour plus walking at 80 m/min over twice the supporting network length; minimum 15 minutes. The maintained model uses the same pace for flyers, door hangers and door-to-door outreach. No conversation duration is assumed. This is not a reviewed walking itinerary.',
-                    ),
-                  for (final limitation in data['limitations'] as List? ?? [])
-                    Text('• $limitation'),
+                  Text(
+                    'What to check before starting',
+                    style: theme.textTheme.titleSmall,
+                  ),
+                  const Text(
+                    'Review access, barriers, transfers between sections and the actual execution route. These estimates do not authorize an assignment, payment or work start.',
+                  ),
                 ],
               ),
+            ),
+            ExpansionTile(
+              title: const Text('Technical source details'),
+              children: [
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (data['selectedAreaPropertyFacts'] is Map)
+                        Text(
+                          'Property source: ${data['selectedAreaPropertyFacts']['source']} · scope: ${data['selectedAreaPropertyFacts']['scope']} · matching: ${data['selectedAreaPropertyFacts']['method']}',
+                        ),
+                      if (data['selectedAreaPropertyFacts'] is Map)
+                        Text(
+                          'Record source date: ${data['selectedAreaPropertyFacts']['dataUpdatedAt'] ?? 'Not supplied'} · Retrieved: ${data['selectedAreaPropertyFacts']['retrievedAt'] ?? 'Not recorded'} · Version: ${data['selectedAreaPropertyFacts']['sourceVersion'] ?? 'Not recorded'}',
+                        ),
+                      if (data['propertyMatching'] is Map)
+                        Text(
+                          'Footprint matching: ${data['propertyMatching']['matchedFootprints'] ?? 'Unavailable'} unique matches · ${data['propertyMatching']['ambiguousFootprints'] ?? 'Unavailable'} ambiguous footprints. Individual property ages are not attached to mapped buildings.',
+                        ),
+                      for (final component
+                          in data['serviceSuitability'] as List? ?? [])
+                        Text(
+                          '${component['intent']}: ${component['rule']} · ${component['scope']} · planning assumption, not component condition or customer intent',
+                        ),
+                      for (final reason in data['reasons'] as List? ?? [])
+                        Text('• $reason'),
+                      if (comparisonReason != null) Text(comparisonReason!),
+                      if (mix != null)
+                        Text(
+                          'Detailed mapped classification: ${mix['classifiedCount']} of $count; ${mix['unknownCount']} unspecified.',
+                        ),
+                      if (workload?['supportedTargetCount'] is num)
+                        Text(
+                          'Workload uses ${workload!['supportedTargetCount']} street-supported mapped targets.',
+                        ),
+                      const Text(
+                        'Mapped features are not verified households, entrances, delivery stops or a material quantity.',
+                      ),
+                      if (regional != null) ...[
+                        const Text(
+                          'Regional property context — analyzed nearby section, not facts about each target',
+                        ),
+                        for (final signal in signals)
+                          Text(
+                            '${signal['label']}: ${signal['value']}${signal['source'] == null ? '' : ' · ${signal['source']}'}',
+                          ),
+                        if (regional['partial'] == true)
+                          const Text('Partial property-source coverage.'),
+                        if (regional['source'] is Map)
+                          Text(
+                            'Property context source: ${regional['source']['source'] ?? regional['source']['name'] ?? 'Not recorded'} · Source date: ${regional['source']['dataUpdatedAt'] ?? regional['source']['dataTimestamp'] ?? 'Not supplied'} · Retrieved/analyzed: ${regional['source']['generatedAt'] ?? regional['source']['fetchedAt'] ?? 'Not recorded'}',
+                          ),
+                      ] else
+                        const Text(
+                          'Nearby property era and other detailed context unavailable.',
+                        ),
+                      if (source != null) ...[
+                        Text(
+                          'Map source: ${source['name'] ?? 'OpenStreetMap'}',
+                        ),
+                        Text(
+                          'Source snapshot: ${source['dataTimestamp'] ?? source['snapshotAt'] ?? 'Not supplied'}',
+                        ),
+                        Text(
+                          'Retrieved: ${source['fetchedAt'] ?? source['retrievedAt'] ?? 'Not recorded'}',
+                        ),
+                        Text(
+                          'Freshness: ${source['freshness'] ?? 'Not recorded'}',
+                        ),
+                      ],
+                      if (data['workloadComponents'] is Map) ...[
+                        Text(
+                          'Target handling: ${(data['workloadComponents']['targetHandlingMinutes'] as num).toStringAsFixed(1)} min',
+                        ),
+                        Text(
+                          'Advisory walking component: ${(data['workloadComponents']['walkingMinutes'] as num).toStringAsFixed(1)} min',
+                        ),
+                        Text(
+                          data['workloadComponents']['completeAreaWorkload'] ==
+                                  true
+                              ? 'Supported person-work: ${data['workloadComponents']['totalPersonMinutes']} min · total team elapsed time not established'
+                              : 'Known-target subset: ${data['workloadComponents']['knownTargetSubtotalMinutes']} min including walking. Complete area/team workload is not established; unclassified observations are excluded.',
+                        ),
+                      ],
+                      if (workload != null)
+                        const Text(
+                          'Planning assumptions: 45 mapped targets/hour plus walking at 80 m/min over twice the supporting network length; minimum 15 minutes. The maintained model uses the same pace for flyers, door hangers and door-to-door outreach. No conversation duration is assumed. This is not a reviewed walking itinerary.',
+                        ),
+                      for (final limitation
+                          in data['limitations'] as List? ?? [])
+                        Text('• $limitation'),
+                      if (source != null)
+                        for (final key in const [
+                          'provider',
+                          'datasetVersion',
+                          'parserVersion',
+                          'geometryVersion',
+                          'bounds',
+                          'evidenceHash',
+                          'contentHash',
+                          'importedAt',
+                        ])
+                          if (source[key] != null) Text('$key: ${source[key]}'),
+                      Text('Geometry digest: ${data['geometryDigest']}'),
+                      if (comparison?['binding'] is Map)
+                        for (final entry
+                            in (comparison!['binding'] as Map).entries)
+                          Text(
+                            '${entry.key}: ${entry.value ?? 'Not recorded'}',
+                          ),
+                    ],
+                  ),
+                ),
+              ],
             ),
           ],
         ),
@@ -492,7 +613,11 @@ class _ZoneIntelligencePreviewState extends State<ZoneIntelligencePreview> {
       return const Text('Sign in to review area evidence.');
     }
     if (_data != null) {
-      return ZoneIntelligenceSummary(data: _data!, geometry: widget.geometry);
+      return ZoneIntelligenceSummary(
+        key: ValueKey('$_owner/$_revision'),
+        data: _data!,
+        geometry: widget.geometry,
+      );
     }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,

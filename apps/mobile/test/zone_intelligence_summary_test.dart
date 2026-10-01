@@ -94,7 +94,7 @@ void main() {
         findsOneWidget,
       );
       expect(
-        find.text('3 of 5 parcel records have a usable construction year'),
+        find.text('3 of 5 records have a usable construction year; 2 do not.'),
         findsOneWidget,
       );
       expect(t.takeException(), isNull);
@@ -224,7 +224,7 @@ void main() {
       expect(find.text('~32 min'), findsOneWidget);
       expect(find.text('One-Scaler planning estimate'), findsOneWidget);
       expect(find.text('Execution route not yet verified'), findsOneWidget);
-      expect(find.text('View property evidence'), findsOneWidget);
+      expect(find.text('About these estimates'), findsOneWidget);
     },
   );
   testWidgets(
@@ -250,7 +250,10 @@ void main() {
         page(ZoneIntelligenceSummary(data: evidence(), geometry: area)),
       );
       expect(find.textContaining('Source snapshot:'), findsNothing);
-      await t.tap(find.text('View property evidence'));
+      await t.tap(find.text('About these estimates'));
+      await t.pumpAndSettle();
+      await t.ensureVisible(find.text('Technical source details'));
+      await t.tap(find.text('Technical source details'));
       await t.pumpAndSettle();
       expect(find.textContaining('45 mapped targets/hour'), findsOneWidget);
       expect(find.textContaining('No conversation duration'), findsOneWidget);
@@ -393,8 +396,8 @@ void main() {
         ),
       );
       expect(t.takeException(), isNull);
-      await t.ensureVisible(find.text('View property evidence'));
-      await t.tap(find.text('View property evidence'));
+      await t.ensureVisible(find.text('About these estimates'));
+      await t.tap(find.text('About these estimates'));
       await t.pumpAndSettle();
       expect(t.takeException(), isNull);
     },

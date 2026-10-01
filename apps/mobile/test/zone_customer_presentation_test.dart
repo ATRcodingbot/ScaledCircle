@@ -85,7 +85,9 @@ void main() {
         expect(t.getTopLeft(time).dy, lessThan(t.getTopLeft(streets).dy));
         expect(
           find.textContaining(
-            i == 0 ? 'Predominantly 1960–1979' : 'Predominantly 1940–1959',
+            i == 0
+                ? 'Nearby housing era: 1960–1979'
+                : 'Nearby housing era: 1940–1959',
           ),
           findsOneWidget,
         );
@@ -93,15 +95,18 @@ void main() {
         expect(find.text('Execution route not yet verified'), findsOneWidget);
         expect(find.textContaining('records or housing units'), findsNothing);
         expect(find.textContaining('Source snapshot:'), findsNothing);
-        await t.ensureVisible(find.text('View property evidence'));
-        await t.tap(find.text('View property evidence'));
+        await t.ensureVisible(find.text('About these estimates'));
+        await t.tap(find.text('About these estimates'));
+        await t.pumpAndSettle();
+        await t.ensureVisible(find.text('Technical source details'));
+        await t.tap(find.text('Technical source details'));
         await t.pumpAndSettle();
         expect(find.textContaining('records or housing units'), findsOneWidget);
         expect(
           find.textContaining('not facts about each target'),
           findsOneWidget,
         );
-        expect(find.textContaining('Source snapshot:'), findsOneWidget);
+        expect(find.textContaining('Source snapshot:'), findsNWidgets(2));
         await t.pumpWidget(const SizedBox());
       }
     },
@@ -127,7 +132,7 @@ void main() {
     t,
   ) async {
     await t.pumpWidget(page(card(initial[0], 1)));
-    await t.ensureVisible(find.text('View property evidence'));
+    await t.ensureVisible(find.text('About these estimates'));
     await t.sendKeyEvent(LogicalKeyboardKey.tab);
     await t.sendKeyEvent(LogicalKeyboardKey.enter);
     await t.pumpAndSettle();
@@ -294,8 +299,8 @@ void main() {
         });
       }
       if (narrow) {
-        await t.ensureVisible(find.text('View property evidence'));
-        await t.tap(find.text('View property evidence'));
+        await t.ensureVisible(find.text('About these estimates'));
+        await t.tap(find.text('About these estimates'));
         await t.pumpAndSettle();
         expect(find.textContaining('Source snapshot:'), findsOneWidget);
         expect(t.takeException(), isNull);

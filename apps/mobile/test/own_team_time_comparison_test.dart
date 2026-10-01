@@ -44,6 +44,36 @@ Map<String, dynamic> comparison() => {
       },
   ],
 };
+void bindComparison(Map data) {
+  final binding = {
+    'geometryDigest': data['geometryDigest'],
+    'comparisonVersion': data['version'],
+    'targetSetDigest': 'fixture-targets',
+    'evidenceDigest': 'fixture-evidence',
+    'sourceEvidenceVersion': 'fixture-source',
+    'workloadModelVersion': 'fixture-model',
+  };
+  data['binding'] = binding;
+  for (final row in data['rows'] as List) {
+    row['stayTogether'] = {
+      ...row['stayTogether'] as Map,
+      'binding': {
+        ...binding,
+        'marketerCount': row['marketerCount'],
+        'coveragePattern': 'stay_together',
+      },
+    };
+    row['splitUp'] = {
+      ...row['splitUp'] as Map,
+      'binding': {
+        ...binding,
+        'marketerCount': row['marketerCount'],
+        'coveragePattern': 'split_streets',
+      },
+    };
+  }
+}
+
 Widget page(Widget child, {double scale = 1}) => MaterialApp(
   home: MediaQuery(
     data: MediaQueryData(textScaler: TextScaler.linear(scale)),
@@ -63,6 +93,9 @@ void main() {
           scale: scale,
         ),
       );
+      await t.ensureVisible(find.text('Compare crew sizes'));
+      await t.tap(find.text('Compare crew sizes'));
+      await t.pumpAndSettle();
       expect(find.text('1 marketer'), findsOneWidget);
       for (final n in [2, 3, 4]) {
         expect(find.text('$n marketers'), findsOneWidget);
@@ -73,9 +106,12 @@ void main() {
       }
       expect(
         find.textContaining('With 15-minute planning minimum'),
-        findsNWidgets(4),
+        findsNWidgets(3),
       );
-      expect(find.text('Current setting: Stay together'), findsOneWidget);
+      expect(
+        find.text('Current setting: 2 marketers · Stay together'),
+        findsOneWidget,
+      );
       expect(
         find.textContaining('7 unclassified mapped features'),
         findsOneWidget,
@@ -87,7 +123,7 @@ void main() {
         findsOneWidget,
       );
       expect(
-        find.textContaining('4.4 min walking + 16.0 min handling'),
+        find.text('One-person baseline: 4.4 min walking + 16.0 min handling'),
         findsOneWidget,
       );
       await t.ensureVisible(
@@ -126,6 +162,9 @@ void main() {
       await t.pumpWidget(
         page(OwnTeamTimeComparison(data: data, geometry: geometry)),
       );
+      await t.ensureVisible(find.text('Compare crew sizes'));
+      await t.tap(find.text('Compare crew sizes'));
+      await t.pumpAndSettle();
       expect(find.text('Split up: ~21 min'), findsNWidgets(4));
       expect(
         find.textContaining(
@@ -155,7 +194,12 @@ void main() {
         find.text('Estimated time for 12 supported targets'),
         findsOneWidget,
       );
-      expect(find.text('Not established'), findsOneWidget);
+      expect(find.text('Estimated field time'), findsNothing);
+      expect(find.byKey(const ValueKey('selected-team-time')), findsOneWidget);
+      expect(
+        find.textContaining('Full area completion time: Not established'),
+        findsOneWidget,
+      );
       expect(find.text('Save'), findsNothing);
       expect(find.text('Assign'), findsNothing);
       expect(t.takeException(), isNull);
@@ -202,12 +246,16 @@ void main() {
           row['splitUp']['allocatedPersonWorkMinutes'] = 518.236;
           row['splitUp']['allocations'][0]['localSection'] = 1;
         }
+        bindComparison(data);
         await t.pumpWidget(
           page(
             OwnTeamTimeComparison(data: data, geometry: geometry),
             scale: scale,
           ),
         );
+        await t.ensureVisible(find.text('Compare crew sizes'));
+        await t.tap(find.text('Compare crew sizes'));
+        await t.pumpAndSettle();
         expect(find.textContaining('12 disconnected sections'), findsOneWidget);
         expect(
           find.textContaining('overall completion time remains unknown'),
@@ -237,7 +285,7 @@ void main() {
         await t.tap(find.text('View included work and allocation').first);
         await t.pumpAndSettle();
         expect(
-          find.textContaining('Total modeled person-work: 518.2 min'),
+          find.textContaining('Combined work across all marketers: 518.2 min'),
           findsOneWidget,
         );
         expect(
@@ -262,6 +310,13 @@ void main() {
       await t.pumpWidget(
         page(OwnTeamTimeComparison(data: data, geometry: geometry)),
       );
+      expect(
+        find.textContaining('A crew allocation could not be established'),
+        findsOneWidget,
+      );
+      await t.ensureVisible(find.text('Compare crew sizes'));
+      await t.tap(find.text('Compare crew sizes'));
+      await t.pumpAndSettle();
       expect(
         find.textContaining('bounded allocation-work budget'),
         findsOneWidget,
